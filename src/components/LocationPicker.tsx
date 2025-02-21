@@ -169,14 +169,17 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
 
   // Initialize map when component is mounted and visible
   useEffect(() => {
-    if (!mapRef.current || !isOpen) return;
+    if (!mapRef.current || !isOpen) {
+      cleanupMap();
+      return;
+    }
 
     // Clean up existing instances
     cleanupMap();
 
     // Import Leaflet dynamically to avoid SSR issues
     import("leaflet").then((L) => {
-      if (!mapRef.current) return;
+      if (!mapRef.current || !isOpen) return;
 
       // Use defaultLocation if available, otherwise use selectedLocation or fall back to Chicago
       const initialLocation = defaultLocation || selectedLocation || CHICAGO_LOCATION;
@@ -209,8 +212,10 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
     });
 
     // Cleanup function
-    return cleanupMap;
-  }, [isOpen]);
+    return () => {
+      cleanupMap();
+    };
+  }, [isOpen, defaultLocation, selectedLocation, hasLocationPermission]);
 
   const updateMarker = (L: typeof import("leaflet"), location: { lat: number; lng: number }) => {
     if (!mapInstanceRef.current) return;

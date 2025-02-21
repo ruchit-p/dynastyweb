@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore"
+import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { useAuth } from "@/context/AuthContext"
+import { uploadMedia } from "@/utils/mediaUtils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,7 +19,7 @@ import AudioRecorder from "@/components/AudioRecorder"
 import LocationPicker from "@/components/LocationPicker"
 import { useToast } from "@/components/ui/use-toast"
 import { FamilyMemberSelect } from "@/components/FamilyMemberSelect"
-import { uploadMedia } from "@/utils/mediaUtils"
+import { updateStory } from "@/utils/functionUtils"
 
 type BlockType = "text" | "image" | "video" | "audio"
 type PrivacyLevel = "family" | "personal" | "custom"
@@ -37,22 +38,27 @@ interface Location {
   address: string
 }
 
+interface StoryBlock {
+  localId: string;
+  type: BlockType;
+  data: string;
+}
+
 export default function EditStoryPage() {
   const { id } = useParams()
   const router = useRouter()
   const { user } = useAuth()
   const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
   const [title, setTitle] = useState("")
   const [subtitle, setSubtitle] = useState("")
   const [date, setDate] = useState<Date>(new Date())
-  const [location, setLocation] = useState<Location>()
-  const [privacy, setPrivacy] = useState<PrivacyLevel>("family")
+  const [location, setLocation] = useState<Location | undefined>(undefined)
+  const [privacy, setPrivacy] = useState<"family" | "personal" | "custom">("family")
   const [customAccessMembers, setCustomAccessMembers] = useState<string[]>([])
   const [taggedMembers, setTaggedMembers] = useState<string[]>([])
   const [blocks, setBlocks] = useState<Block[]>([])
   const [showLocationPicker, setShowLocationPicker] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     const fetchStory = async () => {
@@ -93,7 +99,7 @@ export default function EditStoryPage() {
         setTaggedMembers(storyData.peopleInvolved || [])
 
         // Convert story blocks to form blocks
-        const formBlocks = storyData.blocks.map((block: any) => ({
+        const formBlocks = storyData.blocks.map((block: StoryBlock) => ({
           id: block.localId,
           type: block.type,
           content: block.data
@@ -117,7 +123,7 @@ export default function EditStoryPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!title.trim() || !id) {
+    if (!title.trim()) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -126,10 +132,19 @@ export default function EditStoryPage() {
       return
     }
 
-    try {
-      setSaving(true)
+    if (!id || !user) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Missing required data"
+      })
+      return
+    }
 
-      // Process all blocks and upload new media if needed
+    try {
+      setLoading(true)
+
+      // Process all blocks and upload media if needed
       const processedBlocks = await Promise.all(
         blocks.map(async (block) => {
           if (block.type === 'text') {
@@ -140,7 +155,7 @@ export default function EditStoryPage() {
             }
           }
 
-          // For media blocks, check if content is a File (new upload) or URL (existing)
+          // For media blocks, check if the content is a File (new upload) or URL (already uploaded)
           if (block.content instanceof File) {
             try {
               const url = await uploadMedia(
@@ -165,7 +180,7 @@ export default function EditStoryPage() {
                           : b
                       )
                     )
-                    throw error
+                    throw error // Re-throw to handle in the outer catch
                   }
                 }
               )
@@ -187,32 +202,24 @@ export default function EditStoryPage() {
           }
         })
       )
-      
-      // Build the story update data
-      const storyData = {
-        blocks: processedBlocks,
-        eventDate: date ? serverTimestamp() : undefined,
-        location,
-        peopleInvolved: taggedMembers,
-        privacy: privacy === "personal" ? "privateAccess" : privacy,
+
+      // Update the story using the Cloud Function
+      await updateStory(id as string, user.uid, {
         title: title.trim(),
-        subtitle: subtitle.trim() || null,
-        updatedAt: serverTimestamp(),
-        customAccessMembers: privacy === "custom" ? customAccessMembers : null
-      }
-
-      // Remove any undefined or null fields
-      const cleanedData = Object.fromEntries(
-        Object.entries(storyData).filter(([, value]) => value != null)
-      )
-
-      await updateDoc(doc(db, "stories", id as string), cleanedData)
+        subtitle: subtitle.trim() || undefined,
+        eventDate: date,
+        location,
+        privacy: privacy === "personal" ? "privateAccess" : privacy,
+        customAccessMembers: privacy === "custom" ? customAccessMembers : undefined,
+        blocks: processedBlocks,
+        peopleInvolved: taggedMembers
+      });
       
       toast({
         title: "Success",
         description: "Story updated successfully!"
       })
-      router.push(`/story/${id}`)
+      router.push(`/story/${id}`) // Redirect to story page after successful update
     } catch (error) {
       console.error("Error updating story:", error)
       toast({
@@ -221,7 +228,7 @@ export default function EditStoryPage() {
         description: "Failed to update story. Please try again."
       })
     } finally {
-      setSaving(false)
+      setLoading(false)
     }
   }
 
@@ -475,12 +482,11 @@ export default function EditStoryPage() {
             type="button"
             variant="outline"
             onClick={() => router.back()}
-            disabled={saving}
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={saving}>
-            {saving ? "Saving..." : "Save Changes"}
+          <Button type="submit">
+            Save Changes
           </Button>
         </div>
       </form>

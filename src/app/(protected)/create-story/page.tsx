@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { addDoc, collection, serverTimestamp, Timestamp, FieldValue, doc, getDoc } from "firebase/firestore"
+import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { useAuth } from "@/context/AuthContext"
 import { uploadMedia } from "@/utils/mediaUtils"
@@ -19,9 +19,9 @@ import AudioRecorder from "@/components/AudioRecorder"
 import LocationPicker from "@/components/LocationPicker"
 import { useToast } from "@/components/ui/use-toast"
 import { FamilyMemberSelect } from "@/components/FamilyMemberSelect"
+import { createStory } from "@/utils/functionUtils"
 
 type BlockType = "text" | "image" | "video" | "audio"
-type PrivacyLevel = "family" | "personal" | "custom"
 
 interface Block {
   id: string
@@ -37,43 +37,21 @@ interface Location {
   address: string
 }
 
-interface StorageBlock {
-  data: string
-  localId: string
-  type: BlockType
-}
-
-interface StoryData {
-  authorID: string | undefined
-  blocks: StorageBlock[]
-  createdAt: FieldValue | Timestamp
-  eventDate?: FieldValue | Timestamp
-  familyTreeId: string | null
-  isDeleted: boolean
-  location?: Location
-  peopleInvolved: string[]
-  privacy: "family" | "privateAccess" | "custom"
-  subtitle?: string
-  title: string
-  updatedAt: FieldValue | Timestamp
-  customAccessMembers?: string[]
-}
-
 export default function CreateStoryPage() {
   const router = useRouter()
   const { user } = useAuth()
   const { toast } = useToast()
+  const [loading, setLoading] = useState(false)
   const [title, setTitle] = useState("")
   const [subtitle, setSubtitle] = useState("")
   const [date, setDate] = useState<Date>(new Date())
-  const [location, setLocation] = useState<Location>()
-  const [privacy, setPrivacy] = useState<PrivacyLevel>("family")
+  const [location, setLocation] = useState<Location | undefined>(undefined)
+  const [privacy, setPrivacy] = useState<"family" | "personal" | "custom">("family")
   const [customAccessMembers, setCustomAccessMembers] = useState<string[]>([])
   const [taggedMembers, setTaggedMembers] = useState<string[]>([])
   const [blocks, setBlocks] = useState<Block[]>([])
-  const [showLocationPicker, setShowLocationPicker] = useState(false)
-  const [loading, setLoading] = useState(false)
   const [familyTreeId, setFamilyTreeId] = useState<string | null>(null)
+  const [showLocationPicker, setShowLocationPicker] = useState(false)
   const [userLocation, setUserLocation] = useState<Location | null>(null)
 
   // Request location permission on page load
@@ -111,31 +89,17 @@ export default function CreateStoryPage() {
       if (!user?.uid) return;
 
       try {
-        const userDocRef = doc(db, "users", user.uid);
-        const userDoc = await getDoc(userDocRef);
-        
+        const userDoc = await getDoc(doc(db, "users", user.uid));
         if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setFamilyTreeId(userData.familyTreeId);
-        } else {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "User data not found"
-          });
+          setFamilyTreeId(userDoc.data().familyTreeId);
         }
       } catch (error) {
         console.error("Error fetching family tree ID:", error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch family tree ID"
-        });
       }
     };
 
     fetchFamilyTreeId();
-  }, [user?.uid, toast]);
+  }, [user?.uid]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -172,7 +136,7 @@ export default function CreateStoryPage() {
               data: block.content as string,
               localId: block.id,
               type: block.type
-            } satisfies StorageBlock
+            }
           }
 
           // For media blocks, check if the content is a File (new upload) or URL (already uploaded)
@@ -208,7 +172,7 @@ export default function CreateStoryPage() {
                 data: url,
                 localId: block.id,
                 type: block.type
-              } satisfies StorageBlock
+              }
             } catch (error) {
               console.error(`Error uploading ${block.type}:`, error)
               throw error
@@ -219,44 +183,23 @@ export default function CreateStoryPage() {
             data: block.content as string,
             localId: block.id,
             type: block.type
-          } satisfies StorageBlock
+          }
         })
       )
-      
-      // Build the story data object
-      const storyData: StoryData = {
-        authorID: user?.uid,
-        blocks: processedBlocks,
-        createdAt: serverTimestamp(),
-        eventDate: date ? serverTimestamp() : undefined,
-        familyTreeId: familyTreeId,
-        isDeleted: false,
-        peopleInvolved: taggedMembers,
-        privacy: privacy === "personal" ? "privateAccess" : privacy,
+
+      // Create the story using the Cloud Function
+      await createStory({
+        authorID: user!.uid,
         title: title.trim(),
-        updatedAt: serverTimestamp()
-      }
-
-      // Only add optional fields if they have values
-      if (subtitle?.trim()) {
-        storyData.subtitle = subtitle.trim()
-      }
-
-      if (location) {
-        storyData.location = location
-      }
-
-      // Add custom access members if privacy is custom
-      if (privacy === "custom" && customAccessMembers.length > 0) {
-        storyData.customAccessMembers = customAccessMembers
-      }
-
-      // Remove any undefined fields
-      const cleanedData = Object.fromEntries(
-        Object.entries(storyData).filter(([, value]) => value !== undefined)
-      )
-
-      await addDoc(collection(db, "stories"), cleanedData)
+        subtitle: subtitle.trim() || undefined,
+        eventDate: date,
+        location: location || undefined,
+        privacy: privacy === "personal" ? "privateAccess" : privacy,
+        customAccessMembers: privacy === "custom" ? customAccessMembers : undefined,
+        blocks: processedBlocks,
+        familyTreeId,
+        peopleInvolved: taggedMembers
+      });
       
       toast({
         title: "Success",
@@ -401,7 +344,7 @@ export default function CreateStoryPage() {
           <Label htmlFor="privacy">Privacy</Label>
           <Select 
             value={privacy} 
-            onValueChange={(value: PrivacyLevel) => setPrivacy(value)}
+            onValueChange={(value: "family" | "personal" | "custom") => setPrivacy(value)}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select privacy setting" />

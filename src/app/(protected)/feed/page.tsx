@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useAuth } from "@/context/AuthContext"
-import { fetchAccessibleStories, type Story } from "@/utils/storyUtils"
+import { type Story } from "@/utils/storyUtils"
 import { Button } from "@/components/ui/button"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { PenSquare, BookOpen } from "lucide-react"
 import { StoryCard } from "@/components/Story"
+import { getAccessibleStories } from "@/utils/functionUtils"
 
 interface StoryWithAuthor extends Story {
   authorName?: string;
@@ -54,7 +55,7 @@ export default function FeedPage() {
         }
 
         // Fetch all accessible stories
-        const accessibleStories = await fetchAccessibleStories(user.uid, familyTreeId)
+        const { stories: accessibleStories } = await getAccessibleStories(user.uid, familyTreeId)
         
         // Fetch author information for each story
         const storiesWithAuthors = await Promise.all(

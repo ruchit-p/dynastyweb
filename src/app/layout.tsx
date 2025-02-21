@@ -7,6 +7,10 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata = {
   title: 'Dynasty',
   description: 'Dynasty - Family Tree Application',
+  icons: {
+    icon: '/dynasty.png',
+    apple: '/dynasty.png',
+  },
 }
 
 export default function RootLayout({

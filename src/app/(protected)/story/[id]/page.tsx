@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { doc, getDoc, deleteDoc } from "firebase/firestore"
+import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { useAuth } from "@/context/AuthContext"
 import { Button } from "@/components/ui/button"
@@ -23,6 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { deleteStory } from "@/utils/functionUtils"
 
 interface StoryData {
   title: string
@@ -85,7 +86,7 @@ export default function StoryDetailsPage() {
     
     try {
       setDeleting(true);
-      await deleteDoc(doc(db, "stories", id as string));
+      await deleteStory(id as string, user.uid);
       toast({
         title: "Success",
         description: "Story deleted successfully",

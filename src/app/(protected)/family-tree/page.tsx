@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import calcTree from 'relatives-tree';
-import type { ExtNode, Node, Gender, RelType, Connector } from 'relatives-tree/lib/types';
+import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/components/ui/use-toast';
+import calcTree from "relatives-tree";
+import type { Node, ExtNode, Connector } from 'relatives-tree/lib/types';
+import { getFamilyTreeData } from "@/utils/functionUtils";
 import FamilyNode from '@/components/FamilyNode';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import { useAuth } from '@/context/AuthContext';
-import { doc, getDoc, collection, writeBatch, serverTimestamp, FieldValue, DocumentData, arrayUnion } from 'firebase/firestore';
+import { doc, collection, writeBatch, serverTimestamp, FieldValue, DocumentData, arrayUnion } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
@@ -26,7 +28,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useToast } from '@/components/ui/use-toast';
 import { removeMemberFromTree } from '@/utils/familyTreeUtils';
 import { Minus, Plus } from 'lucide-react';
 import {
@@ -65,6 +66,8 @@ interface CustomNode extends Omit<Node, 'placeholder'> {
     profilePicture?: string;
     familyTreeId: string;
     isBloodRelated: boolean;
+    status?: string;
+    treeOwnerId?: string;
   };
 }
 
@@ -126,151 +129,9 @@ export default function FamilyTreePage() {
     if (!user) return;
 
     try {
-      // Get the user document which contains the familyTreeId
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      if (!userDoc.exists()) {
-        toast({
-          title: "Error",
-          description: "User document not found",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const userData = userDoc.data();
-      const familyTreeId = userData.familyTreeId;
-
-      // Get the family tree document
-      const treeDoc = await getDoc(doc(db, 'familyTrees', familyTreeId));
-      if (!treeDoc.exists()) {
-        toast({
-          title: "Error",
-          description: "Family tree not found",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Fetch all users in the family tree
-      const usersRef = collection(db, 'users');
-      const userDocs = await Promise.all(
-        treeDoc.data().memberUserIds.map((userId: string) => 
-          getDoc(doc(usersRef, userId))
-        )
-      );
-
-      // Filter out null or non-existent documents before processing
-      const validUserDocs = userDocs.filter(doc => doc && doc.exists());
-
-      // Transform user data into relatives-tree Node format
-      const treeNodes = validUserDocs.map(userDoc => {
-        const data = userDoc.data();
-        
-        // Find siblings by looking for users with the same parents
-        const siblings = Object.freeze(validUserDocs
-          .filter(otherDoc => 
-            otherDoc.id !== userDoc.id && 
-            ((data.parentIds?.length > 0 && // Check if parentIds exists and has items
-              data.parentIds.some((parentId: string) => 
-                otherDoc.data().parentIds?.includes(parentId)
-              )) ||
-            // Also check if this user is listed in the other user's parentIds
-            (otherDoc.data().parentIds?.some((parentId: string) =>
-              data.parentIds?.includes(parentId)
-            )))
-          )
-          .map(sibling => Object.freeze({ 
-            id: sibling.id, 
-            type: 'blood' as RelType
-          })));
-
-        // Ensure all IDs exist before creating relationships
-        const parents = Object.freeze((data.parentIds || [])
-          .filter((id: string) => validUserDocs.some(doc => doc.id === id))
-          .map((id: string) => Object.freeze({ id, type: 'blood' as RelType })));
-
-        // Find all children (both direct and those who list this user as parent)
-        const childrenIds = new Set([
-          ...(data.childrenIds || []),
-          ...validUserDocs
-            .filter(doc => doc.data().parentIds?.includes(userDoc.id))
-            .map(doc => doc.id)
-        ]);
-
-        const children = Object.freeze(Array.from(childrenIds)
-          .filter((id: string) => validUserDocs.some(doc => doc.id === id))
-          .map((id: string) => Object.freeze({ id, type: 'blood' as RelType })));
-
-        // Find all spouses (both direct and those who list this user as spouse)
-        const spouseIds = new Set([
-          ...(data.spouseIds || []),
-          ...validUserDocs
-            .filter(doc => doc.data().spouseIds?.includes(userDoc.id))
-            .map(doc => doc.id)
-        ]);
-
-        const spouses = Object.freeze(Array.from(spouseIds)
-          .filter((id: string) => validUserDocs.some(doc => doc.id === id))
-          .map((id: string) => Object.freeze({ id, type: 'married' as RelType })));
-
-        const gender = (data.gender || 'other').toLowerCase();
-        const validGender: Gender = gender === 'male' || gender === 'female' ? gender : 'other';
-
-        // Helper function to determine if a member is blood-related to the current user
-        function isBloodRelated(memberId: string, currentUserId: string, docs: DocumentData[]): boolean {
-          if (memberId === currentUserId) return true;
-          
-          const visited = new Set<string>();
-          
-          function traverse(id: string): boolean {
-            if (visited.has(id)) return false;
-            visited.add(id);
-            
-            const doc = docs.find(d => d.exists() && d.id === id);
-            if (!doc) return false;
-            
-            const data = doc.data();
-            
-            // Check if this is the target member
-            if (id === memberId) return true;
-            
-            // Check parents (blood relations)
-            for (const parentId of data.parentIds || []) {
-              if (traverse(parentId)) return true;
-            }
-            
-            // Check children (blood relations)
-            for (const childId of data.childrenIds || []) {
-              if (traverse(childId)) return true;
-            }
-            
-            return false;
-          }
-          
-          return traverse(currentUserId);
-        }
-
-        // Create node with parent-child relationships and attributes
-        const node: CustomNode = {
-          id: userDoc.id,
-          gender: validGender,
-          parents,
-          children,
-          siblings,
-          spouses,
-          attributes: {
-            displayName: data.displayName || `${data.firstName} ${data.lastName}`.trim(),
-            profilePicture: data.profilePicture,
-            familyTreeId: data.familyTreeId,
-            isBloodRelated: isBloodRelated(userDoc.id, user.uid, validUserDocs)
-          }
-        };
-
-        return node;
-      });
-
-      setTreeData(Object.freeze(treeNodes) as Node[]);
-
+      setLoading(true);
+      const { treeNodes } = await getFamilyTreeData(user.uid);
+      setTreeData([...treeNodes]); // Convert readonly array to mutable array
     } catch {
       toast({
         title: "Error",
@@ -533,9 +394,43 @@ export default function FamilyTreePage() {
   const canDeleteMember = (node: ExtNode): boolean => {
     // Can't delete self
     if (node.id === user?.uid) return false;
+
+    const isLeafMember = (member: Node): boolean => {
+      // If this member has no children, they are a leaf
+      if (!member.children || member.children.length === 0) return true;
+
+      // Check if all children are also leaves
+      return member.children.every(child => {
+        const childNode = treeData.find(n => n.id === child.id);
+        return childNode ? isLeafMember(childNode) : true;
+      });
+    };
+
+    // Find the full node data from treeData
+    const fullNode = treeData.find(n => n.id === node.id);
+    if (!fullNode) return false;
+
+    // Check if the node is a leaf in the tree
+    const isLeaf = isLeafMember(fullNode);
     
-    // Can't delete if node has children
-    if (node.children && node.children.length > 0) return false;
+    // If the member has an account (status !== 'pending'), only tree owner can delete
+    const memberData = (fullNode as CustomNode).attributes;
+    const hasAccount = memberData?.status && memberData.status !== 'pending';
+    const isOwner = user?.uid === memberData?.treeOwnerId;
+
+    if (hasAccount && !isOwner) {
+      setDeleteError(
+        "Cannot delete members with active accounts. Only the tree owner can remove members with accounts."
+      );
+      return false;
+    }
+
+    if (!isLeaf) {
+      setDeleteError(
+        "This member has descendants in the family tree. Please remove all descendants first."
+      );
+      return false;
+    }
 
     return true;
   };

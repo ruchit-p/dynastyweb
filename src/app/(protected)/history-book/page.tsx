@@ -5,10 +5,11 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { PenSquare, Book } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
-import { fetchUserStories, type Story } from "@/utils/storyUtils"
+import { type Story } from "@/utils/storyUtils"
 import { StoryCard } from "@/components/Story"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
+import { getUserStories } from "@/utils/functionUtils"
 
 interface UserData {
   displayName: string;
@@ -54,7 +55,7 @@ export default function HistoryBookPage() {
         setLoading(true)
         setError(null)
         console.log('Fetching stories for user:', user.uid)
-        const userStories = await fetchUserStories(user.uid)
+        const { stories: userStories } = await getUserStories(user.uid)
         console.log('Fetched stories:', userStories)
         if (mounted) {
           setStories(userStories)

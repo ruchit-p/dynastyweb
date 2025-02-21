@@ -1,0 +1,103 @@
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { app } from '@/lib/firebase';
+import type { Node } from 'relatives-tree/lib/types';
+import type { Story } from './storyUtils';
+
+// Initialize Firebase Functions
+const functions = getFunctions(app);
+
+// MARK: - Family Tree Functions
+
+export const getFamilyTreeData = async (userId: string) => {
+  const functionRef = httpsCallable(functions, 'getFamilyTreeData');
+  const result = await functionRef({ userId });
+  return result.data as { treeNodes: Node[] };
+};
+
+export const updateFamilyRelationships = async (
+  userId: string,
+  updates: {
+    addParents?: string[];
+    removeParents?: string[];
+    addChildren?: string[];
+    removeChildren?: string[];
+    addSpouses?: string[];
+    removeSpouses?: string[];
+  }
+) => {
+  const functionRef = httpsCallable(functions, 'updateFamilyRelationships');
+  const result = await functionRef({ userId, updates });
+  return result.data as { success: boolean };
+};
+
+// MARK: - Stories Functions
+
+export const getAccessibleStories = async (userId: string, familyTreeId: string) => {
+  const functionRef = httpsCallable(functions, 'getAccessibleStories');
+  const result = await functionRef({ userId, familyTreeId });
+  return result.data as { stories: Story[] };
+};
+
+export const getUserStories = async (userId: string) => {
+  const functionRef = httpsCallable(functions, 'getUserStories');
+  const result = await functionRef({ userId });
+  return result.data as { stories: Story[] };
+};
+
+export const createStory = async (storyData: {
+  authorID: string;
+  title: string;
+  subtitle?: string;
+  eventDate?: Date;
+  location?: {
+    lat: number;
+    lng: number;
+    address: string;
+  };
+  privacy: 'family' | 'privateAccess' | 'custom';
+  customAccessMembers?: string[];
+  blocks: Array<{
+    type: 'text' | 'image' | 'video' | 'audio';
+    data: string;
+    localId: string;
+  }>;
+  familyTreeId: string;
+  peopleInvolved: string[];
+}) => {
+  const functionRef = httpsCallable(functions, 'createStory');
+  const result = await functionRef(storyData);
+  return result.data as { id: string };
+};
+
+export const updateStory = async (
+  storyId: string,
+  userId: string,
+  updates: Partial<{
+    title: string;
+    subtitle: string;
+    eventDate: Date;
+    location: {
+      lat: number;
+      lng: number;
+      address: string;
+    };
+    privacy: 'family' | 'privateAccess' | 'custom';
+    customAccessMembers: string[];
+    blocks: Array<{
+      type: 'text' | 'image' | 'video' | 'audio';
+      data: string;
+      localId: string;
+    }>;
+    peopleInvolved: string[];
+  }>
+) => {
+  const functionRef = httpsCallable(functions, 'updateStory');
+  const result = await functionRef({ storyId, userId, updates });
+  return result.data as { success: boolean };
+};
+
+export const deleteStory = async (storyId: string, userId: string) => {
+  const functionRef = httpsCallable(functions, 'deleteStory');
+  const result = await functionRef({ storyId, userId });
+  return result.data as { success: boolean };
+}; 

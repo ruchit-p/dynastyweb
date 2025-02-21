@@ -6,8 +6,35 @@ import { ScrollArea, ScrollBar } from "./ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 import type { Story } from "@/utils/storyUtils"
 import { useEffect, useState } from "react"
-import { doc, getDoc } from "firebase/firestore"
+import { doc, getDoc, Timestamp } from "firebase/firestore"
 import { db } from "@/lib/firebase"
+
+// Helper function to safely format date
+const formatEventDate = (eventDate: Date | Timestamp | string | undefined | null): string | null => {
+  try {
+    if (!eventDate) return null;
+    
+    // Handle Date object
+    if (eventDate instanceof Date) {
+      return format(eventDate, 'MMMM d, yyyy');
+    }
+    
+    // Handle Firestore Timestamp
+    if (eventDate instanceof Timestamp || (typeof eventDate === 'object' && 'seconds' in eventDate)) {
+      return format(new Date(eventDate.seconds * 1000), 'MMMM d, yyyy');
+    }
+    
+    // Handle ISO string
+    if (typeof eventDate === 'string') {
+      return format(new Date(eventDate), 'MMMM d, yyyy');
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return null;
+  }
+};
 
 interface StoryProps {
   story: Story
@@ -79,7 +106,7 @@ export function StoryCard({ story, currentUserId, authorName, authorProfilePic }
           <p className="font-medium leading-none">{authorName}</p>
           {story.eventDate && (
             <p className="text-sm text-gray-500">
-              {format(story.eventDate.toDate(), 'MMMM d, yyyy')}
+              {formatEventDate(story.eventDate) || 'Date not available'}
             </p>
           )}
         </div>
