@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { auth } from "@/lib/firebase"
+import { auth, db } from "@/lib/firebase"
 import { signOut } from "firebase/auth"
+import { doc, getDoc } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -29,7 +30,26 @@ interface NavbarProps {
 export default function Navbar({ user }: NavbarProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false)
+  const [profilePicture, setProfilePicture] = useState<string | null>(null)
   const router = useRouter()
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (!user) return
+
+      try {
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser?.uid || ""))
+        if (userDoc.exists()) {
+          const data = userDoc.data()
+          setProfilePicture(data.profilePicture || null)
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error)
+      }
+    }
+
+    void fetchUserData()
+  }, [user])
 
   const handleSignOut = async () => {
     try {
@@ -109,7 +129,7 @@ export default function Navbar({ user }: NavbarProps) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="relative h-8 w-8 rounded-full">
                 <Image
-                  src={user.photoURL || "/avatar.svg?height=32&width=32"}
+                  src={profilePicture || "/avatar.svg"}
                   alt="Profile picture"
                   className="rounded-full object-cover"
                   width={32}
@@ -121,7 +141,7 @@ export default function Navbar({ user }: NavbarProps) {
               <div className="flex items-center gap-2 p-2">
                 <div className="flex items-center gap-2 rounded-md p-1">
                   <Image
-                    src={user.photoURL || "/avatar.svg?height=40&width=40"}
+                    src={profilePicture || "/avatar.svg"}
                     alt="Profile picture"
                     className="rounded-full object-cover"
                     width={40}
@@ -135,7 +155,7 @@ export default function Navbar({ user }: NavbarProps) {
               </div>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link href="/account" className="flex items-center gap-2 cursor-pointer">
+                <Link href="/account-settings" className="flex items-center gap-2 cursor-pointer">
                   <Settings className="h-4 w-4" />
                   <span>Account Settings</span>
                 </Link>

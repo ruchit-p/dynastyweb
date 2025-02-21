@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import calcTree from 'relatives-tree';
 import type { ExtNode, Node, Gender, RelType, Connector } from 'relatives-tree/lib/types';
 import FamilyNode from '@/components/FamilyNode';
@@ -62,7 +62,7 @@ interface AddMemberFormData {
 interface CustomNode extends Omit<Node, 'placeholder'> {
   attributes?: {
     displayName: string;
-    imageUrl?: string;
+    profilePicture?: string;
     familyTreeId: string;
     isBloodRelated: boolean;
   };
@@ -91,6 +91,7 @@ interface UserData {
   updatedAt: FieldValue;
   phone?: string;
   email?: string;
+  profilePicture?: string;
 }
 
 export default function FamilyTreePage() {
@@ -115,13 +116,11 @@ export default function FamilyTreePage() {
   });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [rootNode, setRootNode] = useState<string>(user?.uid || '');
-  const [hasMoved, setHasMoved] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const treeContainerRef = useRef<HTMLDivElement>(null);
+  const DEBUG_MODE = false; // Debug flag - set to true to enable debug features
 
   const fetchFamilyTreeData = async () => {
     if (!user) return;
@@ -261,7 +260,7 @@ export default function FamilyTreePage() {
           spouses,
           attributes: {
             displayName: data.displayName || `${data.firstName} ${data.lastName}`.trim(),
-            imageUrl: data.imageUrl,
+            profilePicture: data.profilePicture,
             familyTreeId: data.familyTreeId,
             isBloodRelated: isBloodRelated(userDoc.id, user.uid, validUserDocs)
           }
@@ -287,38 +286,243 @@ export default function FamilyTreePage() {
     void fetchFamilyTreeData();
   }, [user]);
 
+  // Calculate optimal zoom level to fit the entire tree
+  const calculateOptimalZoom = useCallback(() => {
+    if (treeData.length === 0) return 1;
+
+    const headerHeight = 80;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight - headerHeight;
+
+    const layout = calcTree(treeData, {
+      rootId: rootNode,
+      placeholders: false
+    });
+
+    // Calculate the total tree dimensions
+    const treeWidth = layout.canvas.width * WIDTH;
+    const treeHeight = layout.canvas.height * HEIGHT;
+
+    // Calculate scale needed for both width and height
+    const scaleX = (viewportWidth * 0.9) / treeWidth; // 90% of viewport width
+    const scaleY = (viewportHeight * 0.9) / treeHeight; // 90% of viewport height
+
+    // Use the smaller scale to ensure the entire tree fits
+    const optimalScale = Math.min(scaleX, scaleY);
+
+    // Clamp the scale between 0.1 and 1
+    return Math.min(Math.max(optimalScale, 0.1), 1);
+  }, [treeData, rootNode]);
+
+  // Effect to set initial zoom and center tree when data is loaded
+  useEffect(() => {
+    if (treeData.length > 0) {
+      const optimalScale = calculateOptimalZoom();
+      setScale(optimalScale);
+
+      const headerHeight = 80;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight - headerHeight;
+
+      const layout = calcTree(treeData, {
+        rootId: rootNode,
+        placeholders: false
+      });
+
+      const treeWidth = layout.canvas.width * WIDTH;
+      const treeHeight = layout.canvas.height * HEIGHT;
+
+      const x = (viewportWidth - treeWidth * optimalScale) / 2;
+      const y = (viewportHeight - treeHeight * optimalScale) / 2;
+
+      if (DEBUG_MODE) {
+        console.log('Initial centering debug:', {
+          viewport: { width: viewportWidth, height: viewportHeight },
+          tree: { 
+            width: treeWidth, 
+            height: treeHeight,
+            scaledWidth: treeWidth * optimalScale,
+            scaledHeight: treeHeight * optimalScale,
+            scale: optimalScale
+          },
+          position: { x, y },
+          layout: {
+            canvasWidth: layout.canvas.width,
+            canvasHeight: layout.canvas.height,
+            nodeCount: layout.nodes.length
+          }
+        });
+      }
+
+      setPosition({ x, y });
+    }
+  }, [treeData]);
+
+  // Function to center the tree or a specific node
+  const centerTree = useCallback((nodeId?: string) => {
+    if (treeData.length === 0) return;
+
+    const headerHeight = 80;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight - headerHeight;
+    const minTopMargin = 100; // Minimum distance from top of viewport
+
+    const layout = calcTree(treeData, {
+      rootId: nodeId || rootNode,
+      placeholders: false
+    });
+
+    if (nodeId) {
+      // Find the specific node to center
+      const targetNode = layout.nodes.find(n => n.id === nodeId);
+      if (targetNode) {
+        // Calculate the absolute position of the node in the tree
+        const nodeX = targetNode.left * WIDTH;
+        const nodeY = targetNode.top * HEIGHT;
+
+        // Center horizontally
+        const x = viewportWidth / 2 - nodeX * scale;
+        
+        // For vertical positioning, ensure the node isn't too close to the top
+        let y = viewportHeight / 2 - nodeY * scale;
+        
+        // If the node would be positioned above minTopMargin, adjust y to maintain minimum margin
+        const nodeScreenY = nodeY * scale + y;
+        if (nodeScreenY < minTopMargin) {
+          y += (minTopMargin - nodeScreenY);
+        }
+
+        setPosition({ x, y });
+      }
+    } else {
+      // For initial tree centering, calculate the center point of the tree
+      const treeWidth = layout.canvas.width * WIDTH * scale;
+      const treeHeight = layout.canvas.height * HEIGHT * scale;
+
+      // Position the tree in the center of the viewport
+      const x = (viewportWidth - treeWidth) / 2;
+      let y = (viewportHeight - treeHeight) / 2;
+
+      // Ensure the top of the tree isn't too close to the top of the viewport
+      if (y < minTopMargin) {
+        y = minTopMargin;
+      }
+
+      setPosition({ x, y });
+    }
+  }, [treeData, rootNode, scale]);
+
+  // Effect to center tree on initial load and when tree data changes
+  useEffect(() => {
+    centerTree();
+  }, [treeData, scale]);
+
+  // Effect to handle centering when root node changes
+  useEffect(() => {
+    if (!rootNode || treeData.length === 0) return;
+
+    const layout = calcTree(treeData, {
+      rootId: rootNode,
+      placeholders: false
+    });
+
+    const targetNode = layout.nodes.find(n => n.id === rootNode);
+    if (!targetNode) return;
+
+    const headerHeight = 80;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight - headerHeight;
+    const viewportCenterX = viewportWidth / 2;
+    const viewportCenterY = viewportHeight / 2;
+
+    const nodeX = targetNode.left * WIDTH;
+    const nodeY = targetNode.top * HEIGHT;
+
+    const x = viewportCenterX - (nodeX * scale);
+    const y = viewportCenterY - (nodeY * scale);
+
+    if (DEBUG_MODE) {
+      console.log('Node centering debug:', {
+        node: {
+          id: rootNode,
+          left: targetNode.left,
+          top: targetNode.top,
+          absoluteX: nodeX,
+          absoluteY: nodeY,
+          screenX: nodeX * scale + x,
+          screenY: nodeY * scale + y
+        },
+        viewport: {
+          width: viewportWidth,
+          height: viewportHeight,
+          centerX: viewportCenterX,
+          centerY: viewportCenterY
+        },
+        scale,
+        position: { x, y },
+        layout: {
+          canvasWidth: layout.canvas.width,
+          canvasHeight: layout.canvas.height,
+          nodeCount: layout.nodes.length
+        }
+      });
+    }
+
+    setPosition({ x, y });
+  }, [rootNode, treeData, scale]);
+
+  // Add debug info for tree wrapper dimensions
+  const getTreeWrapperDebugInfo = () => {
+    if (!treeData.length) return null;
+
+    const layout = calcTree(treeData, {
+      rootId: rootNode,
+      placeholders: false
+    });
+
+    return {
+      wrapperWidth: Math.max(layout.canvas.width * WIDTH, window.innerWidth),
+      wrapperHeight: Math.max(layout.canvas.height * HEIGHT, window.innerHeight),
+      transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+      layout: {
+        canvasWidth: layout.canvas.width,
+        canvasHeight: layout.canvas.height,
+        nodeCount: layout.nodes.length
+      }
+    };
+  };
+
+  // Log wrapper debug info whenever position or scale changes
+  useEffect(() => {
+    if (DEBUG_MODE) {
+      const debugInfo = getTreeWrapperDebugInfo();
+      if (debugInfo) {
+        console.log('Tree wrapper debug:', debugInfo);
+      }
+    }
+  }, [position, scale]);
+
   const handleNodeClick = (node: ExtNode, isClick: boolean) => {
-    // If it's not a real click (e.g. from drag), ignore node selection
     if (!isClick) return;
 
-    // Toggle selection without changing root
     if (selectedNode?.id === node.id) {
       setSelectedNode(null);
       return;
     }
     
+    if (DEBUG_MODE) {
+      console.log('Node click debug:', {
+        clickedNode: {
+          id: node.id,
+          position: node.left && node.top ? { left: node.left * WIDTH, top: node.top * HEIGHT } : null
+        },
+        currentScale: scale,
+        currentPosition: position
+      });
+    }
+    
     setSelectedNode(node);
     setRootNode(node.id);
-
-    // Calculate the new tree layout
-    const newLayout = calcTree(treeData, {
-      rootId: node.id,
-      placeholders: false
-    });
-
-    // Get viewport dimensions (accounting for padding and header)
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight - 80; // Subtract header height
-
-    // Get tree dimensions
-    const treeWidth = newLayout.canvas.width * WIDTH;
-    const treeHeight = newLayout.canvas.height * HEIGHT;
-
-    // Calculate the position that will center the entire tree
-    const x = (viewportWidth - treeWidth) / 40;
-    const y = (viewportHeight - treeHeight) / 3;
-
-    setPosition({ x, y });
   };
 
   const handleAddMember = (type: RelationType) => {
@@ -381,6 +585,43 @@ export default function FamilyTreePage() {
     if (!selectedNode || !user || !relationType) return;
     const node = selectedNode as CustomNode;
 
+    // Validate required fields
+    if (!formData.firstName.trim()) {
+      toast({
+        title: "Error",
+        description: "First name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.lastName.trim()) {
+      toast({
+        title: "Error",
+        description: "Last name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.gender) {
+      toast({
+        title: "Error",
+        description: "Gender is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!node.attributes?.familyTreeId) {
+      toast({
+        title: "Error",
+        description: "Family tree ID not found. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setSaving(true);
       const batch = writeBatch(db);
@@ -397,26 +638,26 @@ export default function FamilyTreePage() {
       // Create user data object without null fields
       const userData: UserData = {
         id: newUserId,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        displayName: `${formData.firstName} ${formData.lastName}`,
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        displayName: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
         dateOfBirth: formData.dateOfBirth || new Date(),
         gender: formData.gender,
         status: 'pending',
         parentIds: relationType === 'child' ? [node.id] : [],
         childrenIds: relationType === 'parent' ? [node.id] : childrenToConnect,
         spouseIds: relationType === 'spouse' ? [node.id] : [],
-        familyTreeId: node.attributes?.familyTreeId || '',
+        familyTreeId: node.attributes.familyTreeId,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       };
 
       // Only add optional fields if they have values
-      if (formData.phone) {
-        userData.phone = formData.phone;
+      if (formData.phone?.trim()) {
+        userData.phone = formData.phone.trim();
       }
-      if (formData.email) {
-        userData.email = formData.email;
+      if (formData.email?.trim()) {
+        userData.email = formData.email.trim();
       }
 
       // If adding a child and the selected node has a spouse, add the spouse as a parent too
@@ -477,13 +718,11 @@ export default function FamilyTreePage() {
       }
 
       // Add new user to family tree members
-      if (node.attributes?.familyTreeId) {
-        const treeRef = doc(db, 'familyTrees', node.attributes.familyTreeId);
-        batch.update(treeRef, {
-          memberUserIds: [...treeData.map(n => n.id), newUserId],
-          updatedAt: serverTimestamp()
-        });
-      }
+      const treeRef = doc(db, 'familyTrees', node.attributes.familyTreeId);
+      batch.update(treeRef, {
+        memberUserIds: arrayUnion(newUserId),
+        updatedAt: serverTimestamp()
+      });
 
       await batch.commit();
       
@@ -510,7 +749,8 @@ export default function FamilyTreePage() {
       setSelectedNode(null);
       setRelationType(null);
       setIsSheetOpen(false);
-    } catch {
+    } catch (error) {
+      console.error("Error adding family member:", error);
       toast({
         title: "Error",
         description: "Failed to add family member. Please try again.",
@@ -521,38 +761,20 @@ export default function FamilyTreePage() {
     }
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    setHasMoved(false);
-    setDragStartPos({ x: e.clientX, y: e.clientY });
-    setDragStart({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y
-    });
-  };
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!treeContainerRef.current) return;
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    
-    // Calculate total movement distance
-    const dx = e.clientX - dragStartPos.x;
-    const dy = e.clientY - dragStartPos.y;
-    const movementDistance = Math.sqrt(dx * dx + dy * dy);
-    
-    // Only set hasMoved if movement is significant (more than 5 pixels)
-    if (movementDistance > 5) {
-      setHasMoved(true);
-    }
-    
-    setPosition({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y
-    });
-  };
+    // Get the current scroll position
+    const currentX = position.x;
+    const currentY = position.y;
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
-    setHasMoved(false);
+    // Calculate new position based on wheel movement
+    // For diagonal scrolling support, we use both deltaX and deltaY
+    const newX = currentX - e.deltaX;
+    const newY = currentY - e.deltaY;
+
+    // Update position
+    setPosition({ x: newX, y: newY });
   };
 
   const handleZoomIn = () => {
@@ -560,15 +782,8 @@ export default function FamilyTreePage() {
   };
 
   const handleZoomOut = () => {
-    setScale(prev => Math.max(prev - 0.1, 0.5));
+    setScale(prev => Math.max(prev - 0.1, 0.1));
   };
-
-  useEffect(() => {
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, []);
 
   if (loading) {
     return (
@@ -598,6 +813,19 @@ export default function FamilyTreePage() {
   return (
     <ProtectedRoute>
       <main className="family-tree-container w-screen min-h-screen pt-20 flex items-center justify-center overflow-hidden relative">
+        {/* Debug center point */}
+        {DEBUG_MODE && (
+          <div 
+            className="fixed w-4 h-4 bg-red-500 rounded-full z-50"
+            style={{ 
+              left: '50%', 
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              pointerEvents: 'none'
+            }} 
+          />
+        )}
+        
         {/* Zoom Controls */}
         <div className="fixed bottom-8 right-8 flex flex-col gap-2 z-20">
           <Button
@@ -882,109 +1110,114 @@ export default function FamilyTreePage() {
           </div>
         ) : (
           <div 
-            className="tree-wrapper mx-auto relative cursor-grab active:cursor-grabbing"
-            style={{
-              width: calcTree(treeData, {
-                rootId: rootNode,
-                placeholders: false
-              }).canvas.width * WIDTH,
-              height: calcTree(treeData, {
-                rootId: rootNode,
-                placeholders: false
-              }).canvas.height * HEIGHT,
-              transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-              transition: isDragging ? 'none' : 'transform 0.2s ease-out',
-            }}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
+            ref={treeContainerRef}
+            className="absolute inset-0 overflow-hidden"
+            onWheel={handleWheel}
           >
-            {/* Render connectors first so they appear behind nodes */}
-            {calcTree(treeData, {
-              rootId: rootNode,
-              placeholders: false
-            }).connectors.map((connector: Connector, index: number) => {
-              const [x1, y1, x2, y2] = connector;
-              const key = `connector-${index}`;
+            <div 
+              className="tree-wrapper absolute"
+              style={{
+                width: `${calcTree(treeData, {
+                  rootId: rootNode,
+                  placeholders: false
+                }).canvas.width * WIDTH}px`,
+                height: `${calcTree(treeData, {
+                  rootId: rootNode,
+                  placeholders: false
+                }).canvas.height * HEIGHT}px`,
+                transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                transition: 'transform 0.2s ease-out',
+                transformOrigin: '0 0',
+                left: 0,
+                top: 0
+              }}
+            >
+              {/* Render connectors first so they appear behind nodes */}
+              {calcTree(treeData, {
+                rootId: rootNode,
+                placeholders: false
+              }).connectors.map((connector: Connector, index: number) => {
+                const [x1, y1, x2, y2] = connector;
+                const key = `connector-${index}`;
 
-              // Calculate centered coordinates
-              const startX = x1 * WIDTH - (WIDTH / 2);
-              const startY = y1 * HEIGHT - (HEIGHT / 2.5);
-              const endX = x2 * WIDTH - (WIDTH / 2);
-              const endY = y2 * HEIGHT - (HEIGHT / 2.5);
+                // Calculate centered coordinates
+                const startX = x1 * WIDTH - (WIDTH / 2);
+                const startY = y1 * HEIGHT - (HEIGHT / 2.5);
+                const endX = x2 * WIDTH - (WIDTH / 2);
+                const endY = y2 * HEIGHT - (HEIGHT / 2.5);
 
-              return (
-                <div
-                  key={key}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    overflow: 'visible',
-                  }}
-                >
-                  <svg
+                return (
+                  <div
+                    key={key}
                     style={{
                       position: 'absolute',
+                      top: 0,
+                      left: 0,
                       width: '100%',
                       height: '100%',
                       overflow: 'visible',
-                      pointerEvents: 'none',
                     }}
                   >
-                    <path
-                      d={`M ${startX} ${startY} L ${endX} ${endY}`}
-                      stroke="#94a3b8"
-                      strokeWidth="1"
-                      fill="none"
-                    />
-                  </svg>
-                </div>
-              );
-            })}
+                    <svg
+                      style={{
+                        position: 'absolute',
+                        width: '100%',
+                        height: '100%',
+                        overflow: 'visible',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      <path
+                        d={`M ${startX} ${startY} L ${endX} ${endY}`}
+                        stroke="#94a3b8"
+                        strokeWidth="1"
+                        fill="none"
+                      />
+                    </svg>
+                  </div>
+                );
+              })}
 
-            {/* Render nodes on top of connectors */}
-            {calcTree(treeData, {
-              rootId: rootNode,
-              placeholders: false
-            }).nodes.map((node: ExtNode) => (
-              <div
-                key={node.id}
-                onMouseDown={(e) => {
-                  handleMouseDown(e);
-                  e.stopPropagation();
-                }}
-                onMouseUp={(e) => {
-                  // Only handle as a click if movement was minimal
-                  if (!hasMoved) {
+              {/* Render nodes on top of connectors */}
+              {calcTree(treeData, {
+                rootId: rootNode,
+                placeholders: false
+              }).nodes.map((node: ExtNode) => (
+                <div
+                  key={node.id}
+                  onMouseDown={(e) => {
                     handleNodeClick(node, true);
-                  }
-                  handleMouseUp();
-                  e.stopPropagation();
-                }}
-                onMouseMove={handleMouseMove}
-                className="cursor-pointer absolute"
-                style={{
-                  left: node.left * WIDTH,
-                  top: node.top * HEIGHT,
-                  width: WIDTH,
-                  height: HEIGHT,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                <FamilyNode
-                  node={node}
-                  isSelected={selectedNode?.id === node.id}
-                  style={{
-                    width: WIDTH - 20,
-                    height: HEIGHT - 40,
+                    e.stopPropagation();
                   }}
-                />
-              </div>
-            ))}
+                  onMouseUp={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onMouseMove={(e) => {
+                    handleNodeClick(node, false);
+                    e.stopPropagation();
+                  }}
+                  className="cursor-pointer absolute"
+                  style={{
+                    left: node.left * WIDTH,
+                    top: node.top * HEIGHT,
+                    width: WIDTH,
+                    height: HEIGHT,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <FamilyNode
+                    node={node}
+                    isSelected={selectedNode?.id === node.id}
+                    style={{
+                      width: WIDTH - 20,
+                      height: HEIGHT - 40,
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

@@ -9,6 +9,7 @@ interface Props {
       displayName?: string;
       imageUrl?: string;
       isBloodRelated?: boolean;
+      profilePicture?: string;
     };
   };
   style?: React.CSSProperties;
@@ -47,18 +48,23 @@ const FamilyNode: React.FC<Props> = ({ node, style, isSelected }) => {
 
   return (
     <div style={nodeStyle}>
-      {/* Non-blood relationship indicator */}
-      {node.attributes?.isBloodRelated === false && (
+      {/* Non-blood relationship or hidden subtree indicator */}
+      {(node.attributes?.isBloodRelated === false || node.hasSubTree) && (
         <div 
           className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-md"
-          title="Non-blood relationship"
+          title={node.attributes?.isBloodRelated === false ? "Non-blood relationship" : "Has hidden relatives"}
         >
           <Eye className="h-3 w-3 text-gray-500" />
         </div>
       )}
-      <Avatar className="h-12 w-12">
-        <AvatarImage src={node.attributes?.imageUrl} alt={node.attributes?.displayName || 'Member'} />
-        <AvatarFallback>{initials}</AvatarFallback>
+      <Avatar className="h-12 w-12 select-none">
+        <AvatarImage 
+          src={node.attributes?.profilePicture || "/avatar.svg"} 
+          alt={node.attributes?.displayName || 'Member'} 
+          draggable={false}
+          className="pointer-events-none"
+        />
+        <AvatarFallback className="pointer-events-none">{initials}</AvatarFallback>
       </Avatar>
       <div className="text-center">
         <div className="font-medium text-sm truncate max-w-[120px]" title={node.attributes?.displayName}>
