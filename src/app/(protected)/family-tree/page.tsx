@@ -29,6 +29,17 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { removeMemberFromTree } from '@/utils/familyTreeUtils';
 import { Minus, Plus } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { cn } from "@/lib/utils"
 
 const WIDTH = 150;
 const HEIGHT = 150;
@@ -44,6 +55,7 @@ interface AddMemberFormData {
   email?: string;
   connectToChildren?: boolean;
   connectToSpouse?: boolean;
+  connectToExistingParent?: boolean;
 }
 
 // Custom node type that extends the base Node type
@@ -99,12 +111,17 @@ export default function FamilyTreePage() {
     email: '',
     connectToChildren: true,
     connectToSpouse: true,
+    connectToExistingParent: true,
   });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [rootNode, setRootNode] = useState<string>(user?.uid || '');
+  const [hasMoved, setHasMoved] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const fetchFamilyTreeData = async () => {
     if (!user) return;
@@ -113,7 +130,11 @@ export default function FamilyTreePage() {
       // Get the user document which contains the familyTreeId
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (!userDoc.exists()) {
-        console.error('User document not found');
+        toast({
+          title: "Error",
+          description: "User document not found",
+          variant: "destructive",
+        });
         return;
       }
 
@@ -123,7 +144,11 @@ export default function FamilyTreePage() {
       // Get the family tree document
       const treeDoc = await getDoc(doc(db, 'familyTrees', familyTreeId));
       if (!treeDoc.exists()) {
-        console.error('Family tree not found');
+        toast({
+          title: "Error",
+          description: "Family tree not found",
+          variant: "destructive",
+        });
         return;
       }
 
@@ -137,18 +162,6 @@ export default function FamilyTreePage() {
 
       // Filter out null or non-existent documents before processing
       const validUserDocs = userDocs.filter(doc => doc && doc.exists());
-
-      // Debug: Log member data
-      console.log('Tree Members:', validUserDocs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          displayName: data.displayName,
-          parentIds: data.parentIds || [],
-          childrenIds: data.childrenIds || [],
-          spouseIds: data.spouseIds || []
-        };
-      }));
 
       // Transform user data into relatives-tree Node format
       const treeNodes = validUserDocs.map(userDoc => {
@@ -238,16 +251,6 @@ export default function FamilyTreePage() {
           return traverse(currentUserId);
         }
 
-        // Debug: Log relationships for this node
-        console.log('Node Relationships:', {
-          id: userDoc.id,
-          displayName: data.displayName,
-          parents: parents.map((p: { id: string }) => p.id),
-          children: children.map((c: { id: string }) => c.id),
-          siblings: siblings.map((s: { id: string }) => s.id),
-          spouses: spouses.map((s: { id: string }) => s.id)
-        });
-
         // Create node with parent-child relationships and attributes
         const node: CustomNode = {
           id: userDoc.id,
@@ -267,20 +270,9 @@ export default function FamilyTreePage() {
         return node;
       });
 
-      // Debug: Log final tree data
-      console.log('Final Tree Data:', treeNodes);
-
       setTreeData(Object.freeze(treeNodes) as Node[]);
 
-      // Debug: Log tree calculation output
-      const treeLayout = calcTree(treeNodes, {
-        rootId: user.uid,
-        placeholders: true
-      });
-      console.log('Tree Calc Output:', treeLayout);
-
-    } catch (error) {
-      console.error('Error fetching family tree:', error);
+    } catch {
       toast({
         title: "Error",
         description: "Failed to load family tree. Please try again.",
@@ -334,9 +326,24 @@ export default function FamilyTreePage() {
     setIsSheetOpen(true);
   };
 
+  const canDeleteMember = (node: ExtNode): boolean => {
+    // Can't delete self
+    if (node.id === user?.uid) return false;
+    
+    // Can't delete if node has children
+    if (node.children && node.children.length > 0) return false;
+
+    return true;
+  };
+
   const handleDeleteMember = async () => {
     if (!selectedNode || !user || selectedNode.id === user.uid) return;
     const node = selectedNode as CustomNode;
+
+    if (!canDeleteMember(selectedNode)) {
+      setDeleteError("Cannot delete members who have children. Please remove all children first.");
+      return;
+    }
 
     try {
       setSaving(true);
@@ -356,8 +363,8 @@ export default function FamilyTreePage() {
         description: "The family member has been removed from the tree.",
       });
       await fetchFamilyTreeData();
-    } catch (error) {
-      console.error('Error deleting member:', error);
+      setShowDeleteDialog(false);
+    } catch {
       toast({
         title: "Error",
         description: "Failed to delete family member. Please try again.",
@@ -366,6 +373,7 @@ export default function FamilyTreePage() {
     } finally {
       setSaving(false);
       setSelectedNode(null);
+      setDeleteError(null);
     }
   };
 
@@ -416,6 +424,11 @@ export default function FamilyTreePage() {
         userData.parentIds = [...userData.parentIds, node.spouses[0].id];
       }
 
+      // If adding a parent and the selected node has existing parents, connect as spouse
+      if (relationType === 'parent' && formData.connectToExistingParent && node.parents?.length > 0) {
+        userData.spouseIds = [node.parents[0].id];
+      }
+
       batch.set(newUserRef, userData);
 
       // Update selected node's document
@@ -433,6 +446,15 @@ export default function FamilyTreePage() {
       }
 
       batch.update(selectedUserRef, updateData);
+
+      // If adding a parent and connecting to existing parent, update the existing parent's document
+      if (relationType === 'parent' && formData.connectToExistingParent && node.parents?.length > 0) {
+        const existingParentRef = doc(db, 'users', node.parents[0].id);
+        batch.update(existingParentRef, {
+          spouseIds: arrayUnion(newUserId),
+          updatedAt: serverTimestamp()
+        });
+      }
 
       // Update spouse's document to add the new child
       if (relationType === 'child' && formData.connectToSpouse && node.spouses?.length > 0) {
@@ -483,12 +505,12 @@ export default function FamilyTreePage() {
         email: '',
         connectToChildren: true,
         connectToSpouse: true,
+        connectToExistingParent: true,
       });
       setSelectedNode(null);
       setRelationType(null);
       setIsSheetOpen(false);
-    } catch (error) {
-      console.error('Error adding family member:', error);
+    } catch {
       toast({
         title: "Error",
         description: "Failed to add family member. Please try again.",
@@ -501,6 +523,8 @@ export default function FamilyTreePage() {
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
+    setHasMoved(false);
+    setDragStartPos({ x: e.clientX, y: e.clientY });
     setDragStart({
       x: e.clientX - position.x,
       y: e.clientY - position.y
@@ -510,6 +534,16 @@ export default function FamilyTreePage() {
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging) return;
     
+    // Calculate total movement distance
+    const dx = e.clientX - dragStartPos.x;
+    const dy = e.clientY - dragStartPos.y;
+    const movementDistance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Only set hasMoved if movement is significant (more than 5 pixels)
+    if (movementDistance > 5) {
+      setHasMoved(true);
+    }
+    
     setPosition({
       x: e.clientX - dragStart.x,
       y: e.clientY - dragStart.y
@@ -518,6 +552,7 @@ export default function FamilyTreePage() {
 
   const handleMouseUp = () => {
     setIsDragging(false);
+    setHasMoved(false);
   };
 
   const handleZoomIn = () => {
@@ -601,8 +636,22 @@ export default function FamilyTreePage() {
                 </DropdownMenuItem>
                 {selectedNode.id !== user?.uid && (
                   <DropdownMenuItem
-                    className="text-red-600"
-                    onSelect={handleDeleteMember}
+                    className={cn(
+                      "text-red-600",
+                      !canDeleteMember(selectedNode) && "opacity-50 cursor-not-allowed"
+                    )}
+                    onSelect={() => {
+                      if (canDeleteMember(selectedNode)) {
+                        setShowDeleteDialog(true);
+                      } else {
+                        setDeleteError("Cannot delete members who have children. Please remove all children first.");
+                        toast({
+                          variant: "destructive",
+                          title: "Cannot Delete Member",
+                          description: "Members with children cannot be deleted. Please remove all children first."
+                        });
+                      }
+                    }}
                   >
                     Delete Member
                   </DropdownMenuItem>
@@ -790,6 +839,25 @@ export default function FamilyTreePage() {
                   </div>
                 </div>
               )}
+              {relationType === 'parent' && (selectedNode?.parents?.length ?? 0) > 0 && (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="connectToExistingParent" className="text-right">
+                    Connect Parents
+                  </Label>
+                  <div className="col-span-3 flex items-center">
+                    <input
+                      type="checkbox"
+                      id="connectToExistingParent"
+                      className="mr-2"
+                      checked={formData.connectToExistingParent}
+                      onChange={(e) => setFormData(prev => ({ ...prev, connectToExistingParent: e.target.checked }))}
+                    />
+                    <Label htmlFor="connectToExistingParent">
+                      Connect as spouse to existing parent
+                    </Label>
+                  </div>
+                </div>
+              )}
             </div>
             <SheetFooter>
               <Button
@@ -883,13 +951,19 @@ export default function FamilyTreePage() {
             }).nodes.map((node: ExtNode) => (
               <div
                 key={node.id}
-                onClick={(e) => {
-                  // Only treat as a click if not dragging
-                  if (!isDragging) {
-                    handleNodeClick(node, true);
-                  }
+                onMouseDown={(e) => {
+                  handleMouseDown(e);
                   e.stopPropagation();
                 }}
+                onMouseUp={(e) => {
+                  // Only handle as a click if movement was minimal
+                  if (!hasMoved) {
+                    handleNodeClick(node, true);
+                  }
+                  handleMouseUp();
+                  e.stopPropagation();
+                }}
+                onMouseMove={handleMouseMove}
                 className="cursor-pointer absolute"
                 style={{
                   left: node.left * WIDTH,
@@ -913,6 +987,36 @@ export default function FamilyTreePage() {
             ))}
           </div>
         )}
+
+        <AlertDialog 
+          open={showDeleteDialog} 
+          onOpenChange={(open) => {
+            setShowDeleteDialog(open);
+            if (!open) setDeleteError(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure you want to remove this family member?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently remove this member from your family tree.
+                {deleteError && (
+                  <p className="mt-2 text-red-600">{deleteError}</p>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteMember}
+                disabled={saving || !!deleteError}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {saving ? "Removing..." : "Remove Member"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     </ProtectedRoute>
   );

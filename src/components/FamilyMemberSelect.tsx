@@ -1,10 +1,18 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Check, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { familyNames } from "@/data/familyData"
+import { collection, doc, getDoc, getDocs } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
+import { useAuth } from '@/context/AuthContext'
+import { Spinner } from '@/components/ui/spinner'
+
+interface FamilyMember {
+  id: string;
+  displayName: string;
+}
 
 interface FamilyMemberSelectProps {
   selectedMembers: string[]
@@ -19,12 +27,63 @@ export function FamilyMemberSelect({
   placeholder = "Select family members",
   className
 }: FamilyMemberSelectProps) {
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
+  const { user } = useAuth()
 
-  const familyMembersList = Object.entries(familyNames).map(([id, name]) => ({
-    value: id,
-    label: name
-  }))
+  useEffect(() => {
+    const fetchFamilyMembers = async () => {
+      if (!user?.uid) return;
+
+      try {
+        setLoading(true);
+        // First get the user's family tree ID
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (!userDoc.exists()) {
+          console.error('User document not found');
+          return;
+        }
+
+        const userData = userDoc.data();
+        const familyTreeId = userData.familyTreeId;
+
+        // Get the family tree document
+        const treeDoc = await getDoc(doc(db, 'familyTrees', familyTreeId));
+        if (!treeDoc.exists()) {
+          console.error('Family tree not found');
+          return;
+        }
+
+        // Fetch all users in the family tree
+        const usersRef = collection(db, 'users');
+        const userDocs = await Promise.all(
+          treeDoc.data().memberUserIds.map((userId: string) => 
+            getDoc(doc(usersRef, userId))
+          )
+        );
+
+        // Transform user data into FamilyMember format
+        const members = userDocs
+          .filter(doc => doc.exists())
+          .map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              displayName: data.displayName || `${data.firstName} ${data.lastName}`.trim()
+            };
+          });
+
+        setFamilyMembers(members);
+      } catch (error) {
+        console.error('Error fetching family members:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchFamilyMembers();
+  }, [user?.uid]);
 
   const toggleMember = (value: string) => {
     const newSelection = selectedMembers.includes(value)
@@ -54,21 +113,27 @@ export function FamilyMemberSelect({
           <CommandList>
             <CommandEmpty>No family member found.</CommandEmpty>
             <CommandGroup>
-              {familyMembersList.map((member) => (
-                <CommandItem
-                  key={member.value}
-                  value={member.value}
-                  onSelect={() => toggleMember(member.value)}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      selectedMembers.includes(member.value) ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  {member.label}
-                </CommandItem>
-              ))}
+              {loading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Spinner className="h-4 w-4" />
+                </div>
+              ) : (
+                familyMembers.map((member) => (
+                  <CommandItem
+                    key={member.id}
+                    value={member.id}
+                    onSelect={() => toggleMember(member.id)}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        selectedMembers.includes(member.id) ? "opacity-100" : "opacity-0"
+                      )}
+                    />
+                    {member.displayName}
+                  </CommandItem>
+                ))
+              )}
             </CommandGroup>
           </CommandList>
         </Command>

@@ -1,24 +1,24 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { addDoc, collection, serverTimestamp, Timestamp, FieldValue, doc, getDoc } from "firebase/firestore"
+import { useParams, useRouter } from "next/navigation"
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { useAuth } from "@/context/AuthContext"
-import { uploadMedia } from "@/utils/mediaUtils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CalendarIcon, Type, Image as ImageIcon, Video, Mic, GripVertical, X, Plus } from "lucide-react"
+import { CalendarIcon, Type, Image as ImageIcon, Video, Mic, GripVertical, X } from "lucide-react"
 import { format } from "date-fns"
 import MediaUpload from "@/components/MediaUpload"
 import AudioRecorder from "@/components/AudioRecorder"
 import LocationPicker from "@/components/LocationPicker"
 import { useToast } from "@/components/ui/use-toast"
 import { FamilyMemberSelect } from "@/components/FamilyMemberSelect"
+import { uploadMedia } from "@/utils/mediaUtils"
 
 type BlockType = "text" | "image" | "video" | "audio"
 type PrivacyLevel = "family" | "personal" | "custom"
@@ -37,29 +37,8 @@ interface Location {
   address: string
 }
 
-interface StorageBlock {
-  data: string
-  localId: string
-  type: BlockType
-}
-
-interface StoryData {
-  authorID: string | undefined
-  blocks: StorageBlock[]
-  createdAt: FieldValue | Timestamp
-  eventDate?: FieldValue | Timestamp
-  familyTreeId: string | null
-  isDeleted: boolean
-  location?: Location
-  peopleInvolved: string[]
-  privacy: "family" | "privateAccess" | "custom"
-  subtitle?: string
-  title: string
-  updatedAt: FieldValue | Timestamp
-  customAccessMembers?: string[]
-}
-
-export default function CreateStoryPage() {
+export default function EditStoryPage() {
+  const { id } = useParams()
   const router = useRouter()
   const { user } = useAuth()
   const { toast } = useToast()
@@ -72,75 +51,73 @@ export default function CreateStoryPage() {
   const [taggedMembers, setTaggedMembers] = useState<string[]>([])
   const [blocks, setBlocks] = useState<Block[]>([])
   const [showLocationPicker, setShowLocationPicker] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [familyTreeId, setFamilyTreeId] = useState<string | null>(null)
-  const [userLocation, setUserLocation] = useState<Location | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
-  // Request location permission on page load
   useEffect(() => {
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          // Successfully got permission and location
-          console.log("Location permission granted");
-          try {
-            // Reverse geocode to get the address
-            const response = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`
-            );
-            const data = await response.json();
-            setUserLocation({
-              lat: position.coords.latitude,
-              lng: position.coords.longitude,
-              address: data.display_name
-            });
-          } catch (error) {
-            console.error("Error getting location address:", error);
-          }
-        },
-        (error) => {
-          console.log("Location permission denied or error:", error);
-        }
-      );
-    }
-  }, []);
-
-  // Fetch user's family tree ID from Firestore
-  useEffect(() => {
-    const fetchFamilyTreeId = async () => {
-      if (!user?.uid) return;
+    const fetchStory = async () => {
+      if (!id || !user) return
 
       try {
-        const userDocRef = doc(db, "users", user.uid);
-        const userDoc = await getDoc(userDocRef);
-        
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setFamilyTreeId(userData.familyTreeId);
-        } else {
+        const storyDoc = await getDoc(doc(db, "stories", id as string))
+        if (!storyDoc.exists()) {
           toast({
             variant: "destructive",
             title: "Error",
-            description: "User data not found"
-          });
+            description: "Story not found",
+          })
+          router.push("/feed")
+          return
         }
+
+        const storyData = storyDoc.data()
+        
+        // Verify ownership
+        if (storyData.authorID !== user.uid) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "You don't have permission to edit this story",
+          })
+          router.push("/feed")
+          return
+        }
+
+        // Set form data
+        setTitle(storyData.title)
+        setSubtitle(storyData.subtitle || "")
+        setDate(storyData.eventDate ? new Date(storyData.eventDate.seconds * 1000) : new Date())
+        setLocation(storyData.location)
+        setPrivacy(storyData.privacy === "privateAccess" ? "personal" : storyData.privacy)
+        setCustomAccessMembers(storyData.customAccessMembers || [])
+        setTaggedMembers(storyData.peopleInvolved || [])
+
+        // Convert story blocks to form blocks
+        const formBlocks = storyData.blocks.map((block: any) => ({
+          id: block.localId,
+          type: block.type,
+          content: block.data
+        }))
+        setBlocks(formBlocks)
       } catch (error) {
-        console.error("Error fetching family tree ID:", error);
+        console.error("Error fetching story:", error)
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to fetch family tree ID"
-        });
+          description: "Failed to load story",
+        })
+      } finally {
+        setLoading(false)
       }
-    };
+    }
 
-    fetchFamilyTreeId();
-  }, [user?.uid, toast]);
+    fetchStory()
+  }, [id, user, router, toast])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!title.trim()) {
+    if (!title.trim() || !id) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -149,22 +126,10 @@ export default function CreateStoryPage() {
       return
     }
 
-    if (!familyTreeId) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Family tree ID not found"
-      })
-      return
-    }
-
     try {
-      setLoading(true)
+      setSaving(true)
 
-      // First, create a temporary story ID for media uploads
-      const storyId = Math.random().toString(36).substr(2, 9)
-
-      // Process all blocks and upload media if needed
+      // Process all blocks and upload new media if needed
       const processedBlocks = await Promise.all(
         blocks.map(async (block) => {
           if (block.type === 'text') {
@@ -172,15 +137,15 @@ export default function CreateStoryPage() {
               data: block.content as string,
               localId: block.id,
               type: block.type
-            } satisfies StorageBlock
+            }
           }
 
-          // For media blocks, check if the content is a File (new upload) or URL (already uploaded)
+          // For media blocks, check if content is a File (new upload) or URL (existing)
           if (block.content instanceof File) {
             try {
               const url = await uploadMedia(
                 block.content,
-                storyId,
+                id as string,
                 block.type,
                 {
                   onProgress: (progress) => {
@@ -200,7 +165,7 @@ export default function CreateStoryPage() {
                           : b
                       )
                     )
-                    throw error // Re-throw to handle in the outer catch
+                    throw error
                   }
                 }
               )
@@ -208,7 +173,7 @@ export default function CreateStoryPage() {
                 data: url,
                 localId: block.id,
                 type: block.type
-              } satisfies StorageBlock
+              }
             } catch (error) {
               console.error(`Error uploading ${block.type}:`, error)
               throw error
@@ -219,59 +184,44 @@ export default function CreateStoryPage() {
             data: block.content as string,
             localId: block.id,
             type: block.type
-          } satisfies StorageBlock
+          }
         })
       )
       
-      // Build the story data object
-      const storyData: StoryData = {
-        authorID: user?.uid,
+      // Build the story update data
+      const storyData = {
         blocks: processedBlocks,
-        createdAt: serverTimestamp(),
         eventDate: date ? serverTimestamp() : undefined,
-        familyTreeId: familyTreeId,
-        isDeleted: false,
+        location,
         peopleInvolved: taggedMembers,
         privacy: privacy === "personal" ? "privateAccess" : privacy,
         title: title.trim(),
-        updatedAt: serverTimestamp()
+        subtitle: subtitle.trim() || null,
+        updatedAt: serverTimestamp(),
+        customAccessMembers: privacy === "custom" ? customAccessMembers : null
       }
 
-      // Only add optional fields if they have values
-      if (subtitle?.trim()) {
-        storyData.subtitle = subtitle.trim()
-      }
-
-      if (location) {
-        storyData.location = location
-      }
-
-      // Add custom access members if privacy is custom
-      if (privacy === "custom" && customAccessMembers.length > 0) {
-        storyData.customAccessMembers = customAccessMembers
-      }
-
-      // Remove any undefined fields
+      // Remove any undefined or null fields
       const cleanedData = Object.fromEntries(
-        Object.entries(storyData).filter(([, value]) => value !== undefined)
+        Object.entries(storyData).filter(([, value]) => value != null)
       )
 
-      await addDoc(collection(db, "stories"), cleanedData)
+      await updateDoc(doc(db, "stories", id as string), cleanedData)
       
       toast({
         title: "Success",
-        description: "Story created successfully!"
+        description: "Story updated successfully!"
       })
-      router.push("/feed") // Redirect to feed page after successful creation
+      router.push(`/story/${id}`)
     } catch (error) {
-      console.error("Error creating story:", error)
+      console.error("Error updating story:", error)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create story. Please try again."
+        description: "Failed to update story. Please try again."
       })
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
 
@@ -295,13 +245,10 @@ export default function CreateStoryPage() {
   }
 
   const handleFileSelect = async (id: string, file: File) => {
-    // Store the file object directly in the block content
-    // It will be uploaded when the form is submitted
     updateBlock(id, file)
   }
 
   const handleAudioRecord = async (id: string, blob: Blob) => {
-    // Convert blob to File for consistent handling
     const file = new File([blob], `audio_${Date.now()}.wav`, { type: 'audio/wav' })
     updateBlock(id, file)
   }
@@ -317,9 +264,17 @@ export default function CreateStoryPage() {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A5C36]"></div>
+      </div>
+    )
+  }
+
   return (
     <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4 my-6">Create New Story</h1>
+      <h1 className="text-2xl font-bold mb-4 my-6">Edit Story</h1>
       <form onSubmit={handleSubmit} className="space-y-6 max-w-3xl mx-auto">
         <div className="space-y-2">
           <Label htmlFor="title">
@@ -387,7 +342,7 @@ export default function CreateStoryPage() {
                 <div className="absolute z-10 mt-1 w-[600px] bg-white rounded-lg shadow-lg border p-4">
                   <LocationPicker
                     onLocationSelect={handleLocationSelect}
-                    defaultLocation={userLocation || location}
+                    defaultLocation={location}
                     isOpen={showLocationPicker}
                     onClose={() => setShowLocationPicker(false)}
                   />
@@ -457,79 +412,62 @@ export default function CreateStoryPage() {
             </div>
           </div>
 
-          {blocks.length === 0 ? (
-            <div className="text-center py-12 border-2 border-dashed rounded-lg">
-              <Plus className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-              <p className="text-sm text-gray-600">Add a block to start creating your story</p>
-              <div className="flex justify-center gap-2 mt-4">
-                <Button variant="outline" size="sm" onClick={() => addBlock("text")}>
-                  <Type className="h-4 w-4 mr-2" />
-                  Add Text
+          <div className="space-y-4">
+            {blocks.map((block) => (
+              <div key={block.id} className="group relative border rounded-lg p-4">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute -right-2 -top-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => removeBlock(block.id)}
+                >
+                  <X className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => addBlock("image")}>
-                  <ImageIcon className="h-4 w-4 mr-2" />
-                  Add Image
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {blocks.map((block) => (
-                <div key={block.id} className="group relative border rounded-lg p-4">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute -right-2 -top-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => removeBlock(block.id)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                  <div className="absolute left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-move">
-                    <GripVertical className="h-4 w-4 text-gray-400" />
-                  </div>
-                  {block.type === "text" && (
-                    <textarea
-                      value={block.content as string}
-                      onChange={(e) => updateBlock(block.id, e.target.value as string)}
-                      placeholder="Start writing..."
-                      className="w-full min-h-[100px] p-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-[#0A5C36] focus:border-transparent"
-                    />
-                  )}
-                  {(block.type === "image" || block.type === "video" || block.type === "audio") && (
-                    <div className="space-y-2">
-                      <MediaUpload
-                        type={block.type}
-                        onFileSelect={(file) => handleFileSelect(block.id, file)}
-                        value={block.content instanceof File ? '' : block.content as string}
-                        onRemove={() => updateBlock(block.id, "")}
-                      />
-                      {block.uploadProgress !== undefined && block.uploadProgress < 100 && (
-                        <div className="w-full bg-gray-200 rounded-full h-2.5">
-                          <div
-                            className="bg-[#0A5C36] h-2.5 rounded-full transition-all duration-300"
-                            style={{ width: `${block.uploadProgress}%` }}
-                          />
-                        </div>
-                      )}
-                      {block.error && (
-                        <div className="text-sm text-red-500 mt-1">
-                          {block.error}
-                        </div>
-                      )}
-                      {block.type === "audio" && (
-                        <>
-                          <div className="text-sm text-gray-500 text-center">or</div>
-                          <AudioRecorder
-                            onRecordingComplete={(blob) => handleAudioRecord(block.id, blob)}
-                          />
-                        </>
-                      )}
-                    </div>
-                  )}
+                <div className="absolute left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-move">
+                  <GripVertical className="h-4 w-4 text-gray-400" />
                 </div>
-              ))}
-            </div>
-          )}
+                {block.type === "text" && (
+                  <textarea
+                    value={block.content as string}
+                    onChange={(e) => updateBlock(block.id, e.target.value)}
+                    placeholder="Start writing..."
+                    className="w-full min-h-[100px] p-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-[#0A5C36] focus:border-transparent"
+                  />
+                )}
+                {(block.type === "image" || block.type === "video" || block.type === "audio") && (
+                  <div className="space-y-2">
+                    <MediaUpload
+                      type={block.type}
+                      onFileSelect={(file) => handleFileSelect(block.id, file)}
+                      value={block.content instanceof File ? '' : block.content as string}
+                      onRemove={() => updateBlock(block.id, "")}
+                    />
+                    {block.uploadProgress !== undefined && block.uploadProgress < 100 && (
+                      <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div
+                          className="bg-[#0A5C36] h-2.5 rounded-full transition-all duration-300"
+                          style={{ width: `${block.uploadProgress}%` }}
+                        />
+                      </div>
+                    )}
+                    {block.error && (
+                      <div className="text-sm text-red-500 mt-1">
+                        {block.error}
+                      </div>
+                    )}
+                    {block.type === "audio" && (
+                      <>
+                        <div className="text-sm text-gray-500 text-center">or</div>
+                        <AudioRecorder
+                          onRecordingComplete={(blob) => handleAudioRecord(block.id, blob)}
+                        />
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="flex justify-end gap-4">
@@ -537,12 +475,12 @@ export default function CreateStoryPage() {
             type="button"
             variant="outline"
             onClick={() => router.back()}
-            disabled={loading}
+            disabled={saving}
           >
             Cancel
           </Button>
-          <Button type="submit" className="mb-4" disabled={loading}>
-            {loading ? "Creating..." : "Create Story"}
+          <Button type="submit" disabled={saving}>
+            {saving ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </form>

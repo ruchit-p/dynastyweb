@@ -25,7 +25,7 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("")
   const [phone, setPhone] = useState("")
   const [date, setDate] = useState<Date>()
-  const [gender, setGender] = useState("other")
+  const [gender, setGender] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -171,8 +171,6 @@ export default function SignUpPage() {
               <SelectContent>
                 <SelectItem value="male">Male</SelectItem>
                 <SelectItem value="female">Female</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
-                <SelectItem value="preferNotToSay">Prefer not to say</SelectItem>
               </SelectContent>
             </Select>
           </div>

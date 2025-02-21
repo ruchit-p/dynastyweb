@@ -20,7 +20,7 @@ export interface Story {
     data: string;
     localId: string;
   }>;
-  familyTreeID: string;
+  familyTreeId: string;
   peopleInvolved: string[];
   isDeleted: boolean;
 }
@@ -56,12 +56,19 @@ export const fetchAccessibleStories = async (
   familyTreeId: string
 ): Promise<Story[]> => {
   try {
+    if (!userId) {
+      throw new Error('User ID is required');
+    }
+    if (!familyTreeId) {
+      throw new Error('Family tree ID is required');
+    }
+
     const storiesRef = collection(db, 'stories');
     
     // Get all non-deleted stories from the user's family tree
     const familyStoriesQuery = query(
       storiesRef,
-      where('familyTreeID', '==', familyTreeId),
+      where('familyTreeId', '==', familyTreeId),
       where('isDeleted', '==', false),
       orderBy('createdAt', 'desc')
     );
@@ -70,11 +77,21 @@ export const fetchAccessibleStories = async (
     
     // Filter stories based on privacy settings
     const accessibleStories = querySnapshot.docs
-      .map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
-      .filter((story: Story) => {
+      .map(doc => {
+        const data = doc.data();
+        // Validate required fields
+        if (!data.title || !data.authorID || !data.createdAt || !data.privacy) {
+          console.warn(`Story ${doc.id} is missing required fields:`, data);
+          return null;
+        }
+        return {
+          id: doc.id,
+          ...data
+        } as Story;
+      })
+      .filter((story): story is Story => {
+        if (!story) return false;
+        
         // User can always see their own stories
         if (story.authorID === userId) return true;
 
@@ -94,9 +111,11 @@ export const fetchAccessibleStories = async (
         return false;
       });
 
-    return accessibleStories as Story[];
+    return accessibleStories;
   } catch (error) {
     console.error('Error fetching accessible stories:', error);
-    throw error;
+    throw error instanceof Error 
+      ? error 
+      : new Error('Failed to fetch accessible stories');
   }
 }; 

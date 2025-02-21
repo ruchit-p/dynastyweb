@@ -48,6 +48,59 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
   const markerRef = useRef<Marker | null>(null)
   const dragPinRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [hasLocationPermission, setHasLocationPermission] = useState<boolean | null>(null)
+  const mapInstanceRef = useRef<LeafletMap | null>(null)
+
+  // Cleanup function to properly remove map and marker instances
+  const cleanupMap = () => {
+    if (markerRef.current) {
+      markerRef.current.remove();
+      markerRef.current = null;
+    }
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+      setMap(null);
+    }
+  };
+
+  // Update selected location when defaultLocation changes
+  useEffect(() => {
+    if (!defaultLocation || !mapInstanceRef.current) return;
+    
+    setSelectedLocation(defaultLocation);
+    mapInstanceRef.current.setView([defaultLocation.lat, defaultLocation.lng], 13);
+    
+    if (markerRef.current) {
+      markerRef.current.setLatLng([defaultLocation.lat, defaultLocation.lng]);
+    } else {
+      import("leaflet").then((L) => {
+        if (mapInstanceRef.current) {
+          markerRef.current = L.marker([defaultLocation.lat, defaultLocation.lng], { icon: customIcon })
+            .addTo(mapInstanceRef.current);
+        }
+      });
+    }
+  }, [defaultLocation]);
+
+  // Check location permission status
+  useEffect(() => {
+    if ("permissions" in navigator) {
+      navigator.permissions.query({ name: "geolocation" }).then((result) => {
+        setHasLocationPermission(result.state === "granted");
+        
+        // If permission is already granted, get location immediately
+        if (result.state === "granted" && !selectedLocation) {
+          getUserLocation();
+        }
+        
+        // Listen for permission changes
+        result.addEventListener("change", () => {
+          setHasLocationPermission(result.state === "granted");
+        });
+      });
+    }
+  }, [selectedLocation]);
 
   // Get user's location or fall back to Chicago
   const getUserLocation = () => {
@@ -114,61 +167,62 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
     }
   }, [isOpen, onClose])
 
+  // Initialize map when component is mounted and visible
   useEffect(() => {
-    if (!mapRef.current || !isOpen) return
+    if (!mapRef.current || !isOpen) return;
 
-    // Clean up existing map instance
-    if (map) {
-      map.remove()
-      setMap(null)
-    }
+    // Clean up existing instances
+    cleanupMap();
 
     // Import Leaflet dynamically to avoid SSR issues
     import("leaflet").then((L) => {
-      // Start with Chicago as initial location
-      const initialLocation = selectedLocation || CHICAGO_LOCATION
-      const newMap = L.map(mapRef.current!).setView([initialLocation.lat, initialLocation.lng], 13)
+      if (!mapRef.current) return;
+
+      // Use defaultLocation if available, otherwise use selectedLocation or fall back to Chicago
+      const initialLocation = defaultLocation || selectedLocation || CHICAGO_LOCATION;
+      
+      const newMap = L.map(mapRef.current).setView([initialLocation.lat, initialLocation.lng], 13);
+      mapInstanceRef.current = newMap;
+      setMap(newMap);
       
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-      }).addTo(newMap)
+      }).addTo(newMap);
 
-      // Add marker if location is selected
-      if (selectedLocation) {
-        markerRef.current = L.marker([selectedLocation.lat, selectedLocation.lng], { icon: customIcon }).addTo(newMap)
-      }
+      // Add marker for the initial location
+      markerRef.current = L.marker([initialLocation.lat, initialLocation.lng], { icon: customIcon })
+        .addTo(newMap);
 
       // Handle map clicks
       newMap.on("click", (e: { latlng: LatLng }) => {
-        const { lat, lng } = e.latlng
-        updateMarker(L, { lat, lng })
-        reverseGeocode(lat, lng)
-      })
+        const { lat, lng } = e.latlng;
+        if (markerRef.current) {
+          markerRef.current.setLatLng([lat, lng]);
+        }
+        reverseGeocode(lat, lng);
+      });
 
-      setMap(newMap)
-
-      // Try to get user's location after map is initialized
-      if (!selectedLocation) {
-        getUserLocation()
+      // Only get user location if we don't have a default or selected location
+      if (hasLocationPermission && !defaultLocation && !selectedLocation) {
+        getUserLocation();
       }
-    })
+    });
 
     // Cleanup function
-    return () => {
-      if (map) {
-        map.remove()
-        setMap(null)
-      }
-    }
-  }, [isOpen]) // Only re-initialize when isOpen changes
+    return cleanupMap;
+  }, [isOpen]);
 
   const updateMarker = (L: typeof import("leaflet"), location: { lat: number; lng: number }) => {
-    if (markerRef.current && map) {
-      markerRef.current.remove()
-      markerRef.current = L.marker([location.lat, location.lng], { icon: customIcon }).addTo(map)
-      map.setView([location.lat, location.lng], 13)
+    if (!mapInstanceRef.current) return;
+
+    if (markerRef.current) {
+      markerRef.current.setLatLng([location.lat, location.lng]);
+    } else {
+      markerRef.current = L.marker([location.lat, location.lng], { icon: customIcon })
+        .addTo(mapInstanceRef.current);
     }
-  }
+    mapInstanceRef.current.setView([location.lat, location.lng], 13);
+  };
 
   const searchAddress = async () => {
     try {

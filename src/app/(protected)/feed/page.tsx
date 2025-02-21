@@ -1,19 +1,23 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import Image from "next/image"
 import Link from "next/link"
 import { useAuth } from "@/context/AuthContext"
 import { fetchAccessibleStories, type Story } from "@/utils/storyUtils"
 import { Button } from "@/components/ui/button"
-import { format } from "date-fns"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { PenSquare, BookOpen } from "lucide-react"
+import { StoryCard } from "@/components/Story"
+
+interface StoryWithAuthor extends Story {
+  authorName?: string;
+  authorProfilePic?: string;
+}
 
 export default function FeedPage() {
   const { user } = useAuth()
-  const [stories, setStories] = useState<Story[]>([])
+  const [stories, setStories] = useState<StoryWithAuthor[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -33,13 +37,17 @@ export default function FeedPage() {
         // First, get the user's family tree ID
         const userDoc = await getDoc(doc(db, "users", user.uid))
         if (!userDoc.exists()) {
+          setError("User document not found. Please try logging in again.")
           setStories([])
           setLoading(false)
           return
         }
 
-        const familyTreeId = userDoc.data().familyTreeID
+        const userData = userDoc.data()
+        const familyTreeId = userData.familyTreeId
+        
         if (!familyTreeId) {
+          setError("No family tree found. Please make sure you're part of a family tree.")
           setStories([])
           setLoading(false)
           return
@@ -47,13 +55,42 @@ export default function FeedPage() {
 
         // Fetch all accessible stories
         const accessibleStories = await fetchAccessibleStories(user.uid, familyTreeId)
+        
+        // Fetch author information for each story
+        const storiesWithAuthors = await Promise.all(
+          accessibleStories.map(async (story) => {
+            try {
+              const authorDoc = await getDoc(doc(db, "users", story.authorID))
+              if (authorDoc.exists()) {
+                const authorData = authorDoc.data()
+                return {
+                  ...story,
+                  authorName: authorData.displayName || `${authorData.firstName} ${authorData.lastName}`.trim(),
+                  authorProfilePic: authorData.profilePicture
+                }
+              }
+              return {
+                ...story,
+                authorName: 'Anonymous'
+              }
+            } catch (error) {
+              console.error(`Error fetching author ${story.authorID}:`, error)
+              return {
+                ...story,
+                authorName: 'Anonymous'
+              }
+            }
+          })
+        )
+
         if (mounted) {
-          setStories(accessibleStories)
+          setStories(storiesWithAuthors)
         }
       } catch (err) {
         console.error('Error loading stories:', err)
         if (mounted) {
-          setError('Failed to load stories. Please try again later.')
+          const errorMessage = err instanceof Error ? err.message : 'Failed to load stories. Please try again later.'
+          setError(`Error: ${errorMessage}`)
         }
       } finally {
         if (mounted) {
@@ -83,7 +120,11 @@ export default function FeedPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <main className="container py-6">
+      <main className="container  py-6">
+        <div className="flex justify-between my-6 items-center mb-6">
+          <h1 className="text-2xl font-bold">Feed</h1>
+        </div>
+
         {loading && (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A5C36] mx-auto"></div>
@@ -114,62 +155,13 @@ export default function FeedPage() {
         {!loading && !error && stories.length > 0 && (
           <div className="grid gap-6 my-6">
             {stories.map((story) => (
-              <div key={story.id} className="p-6 bg-white rounded-lg shadow-sm border">
-                <div className="flex items-center gap-4 mb-4">
-                  <Image
-                    src="/placeholder.svg?height=40&width=40"
-                    alt="User avatar"
-                    width={40}
-                    height={40}
-                    className="rounded-full"
-                  />
-                  <div>
-                    <h3 className="font-medium">{story.title}</h3>
-                    <p className="text-sm text-gray-500">
-                      {format(story.createdAt.toDate(), 'MMMM d, yyyy')}
-                    </p>
-                  </div>
-                </div>
-
-                {story.subtitle && (
-                  <p className="text-gray-600 mb-2">{story.subtitle}</p>
-                )}
-
-                {story.blocks.length > 0 && story.blocks[0].type === 'text' && (
-                  <p className="text-gray-600 mb-4">
-                    {story.blocks[0].data.length > 200 
-                      ? `${story.blocks[0].data.substring(0, 200)}...` 
-                      : story.blocks[0].data}
-                  </p>
-                )}
-
-                {story.blocks.length > 0 && story.blocks[0].type === 'image' && (
-                  <div className="mb-4">
-                    <Image
-                      src={story.blocks[0].data}
-                      alt="Story image"
-                      width={600}
-                      height={400}
-                      className="rounded-lg object-cover"
-                    />
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center mt-4 pt-4 border-t">
-                  <div className="flex items-center gap-2">
-                    {story.location && (
-                      <span className="text-sm text-gray-500">
-                        📍 {story.location.address}
-                      </span>
-                    )}
-                  </div>
-                  <Link href={`/story/${story.id}`}>
-                    <Button variant="link" className="text-[#0A5C36]">
-                      Read More
-                    </Button>
-                  </Link>
-                </div>
-              </div>
+              <StoryCard
+                key={story.id}
+                story={story}
+                currentUserId={user.uid}
+                authorName={story.authorName}
+                authorProfilePic={story.authorProfilePic}
+              />
             ))}
           </div>
         )}

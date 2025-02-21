@@ -75,8 +75,8 @@ export function StoryCard({ story, currentUserId, authorName, authorProfilePic }
             <User className="h-6 w-6 text-gray-400" />
           </AvatarFallback>
         </Avatar>
-        <div className="flex-1">
-          <p className="font-medium">{authorName || 'Anonymous'}</p>
+        <div className="flex-1 -space-y-4">
+          <p className="font-medium leading-none">{authorName}</p>
           {story.eventDate && (
             <p className="text-sm text-gray-500">
               {format(story.eventDate.toDate(), 'MMMM d, yyyy')}
