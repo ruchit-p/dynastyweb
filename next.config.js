@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   images: {
     remotePatterns: [
       {
@@ -15,7 +16,11 @@ const nextConfig = {
         pathname: '/**',
       },
     ],
-  }
+    domains: ['firebasestorage.googleapis.com'],
+  },
+  experimental: {
+    serverActions: true,
+  },
 }
 
 module.exports = nextConfig
