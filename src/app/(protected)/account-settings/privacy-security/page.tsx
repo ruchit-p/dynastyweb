@@ -17,55 +17,41 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Eye, Shield, Fingerprint, Key, Trash, Loader2 } from "lucide-react"
+import { Fingerprint, Key, Trash, Loader2 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
-import { doc, getDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore"
-import { db, auth } from "@/lib/firebase"
-import { deleteUser, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth"
+import { doc, deleteDoc } from "firebase/firestore"
+import { db } from "@/lib/firebase"
+import { deleteUser } from "firebase/auth"
 import ProtectedRoute from "@/components/ProtectedRoute"
-
-interface PrivacySettings {
-  privacyEnabled: boolean
-  twoFactorEnabled: boolean
-  locationEnabled: boolean
-  dataRetention: string
-  lastPasswordChange: string
-}
-
-const defaultSettings: PrivacySettings = {
-  privacyEnabled: true,
-  twoFactorEnabled: false,
-  locationEnabled: true,
-  dataRetention: "1year",
-  lastPasswordChange: new Date().toISOString().split('T')[0],
-}
+import { ChangePasswordDialog } from "@/components/ChangePasswordDialog"
+import { SettingsManager, type PrivacySettings } from "@/utils/settingsManager"
 
 export default function PrivacySecurityPage() {
   const router = useRouter()
-  const { user, logout } = useAuth()
+  const { currentUser, firestoreUser, signOut } = useAuth()
   const { toast } = useToast()
-  const [settings, setSettings] = useState<PrivacySettings>(defaultSettings)
+  const [settings, setSettings] = useState<PrivacySettings>({
+    locationEnabled: true,
+    dataRetention: "1year",
+  })
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showChangePasswordDialog, setShowChangePasswordDialog] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState("")
   const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
-    const fetchPrivacySettings = async () => {
-      if (!user?.uid) return
+    const loadSettings = async () => {
+      if (!currentUser?.uid) return
 
       try {
-        const userDoc = await getDoc(doc(db, "users", user.uid))
-        if (userDoc.exists()) {
-          const data = userDoc.data()
-          if (data.privacySettings) {
-            setSettings(data.privacySettings)
-          }
-        }
+        const settingsManager = SettingsManager.getInstance()
+        const userSettings = await settingsManager.loadSettings(currentUser.uid)
+        setSettings(userSettings.privacy)
       } catch (error) {
-        console.error("Error fetching privacy settings:", error)
+        console.error("Error loading privacy settings:", error)
         toast({
           title: "Error",
           description: "Failed to load privacy settings. Please try again.",
@@ -76,28 +62,28 @@ export default function PrivacySecurityPage() {
       }
     }
 
-    void fetchPrivacySettings()
-  }, [user?.uid, toast])
+    void loadSettings()
+  }, [currentUser?.uid, toast])
 
   const handleToggle = (key: keyof PrivacySettings) => {
-    setSettings((prev) => ({ ...prev, [key]: !prev[key] }))
+    if (key === "locationEnabled") {
+      setSettings((prev) => ({ ...prev, [key]: !prev[key] }))
+    }
   }
 
-  const handleDataRetentionChange = (value: string) => {
+  const handleDataRetentionChange = (value: PrivacySettings["dataRetention"]) => {
     setSettings((prev) => ({ ...prev, dataRetention: value }))
   }
 
   const handleSave = async () => {
-    if (!user?.uid) return
+    if (!currentUser?.uid) return
 
     try {
       setIsSaving(true)
-      const userRef = doc(db, "users", user.uid)
-      await updateDoc(userRef, {
-        privacySettings: {
-          ...settings,
-          updatedAt: serverTimestamp(),
-        },
+      const settingsManager = SettingsManager.getInstance()
+      await settingsManager.saveSettings(currentUser.uid, {
+        notifications: (await settingsManager.loadSettings(currentUser.uid)).notifications,
+        privacy: settings,
       })
 
       toast({
@@ -117,19 +103,19 @@ export default function PrivacySecurityPage() {
   }
 
   const handleDeleteAccount = async () => {
-    if (!user || !auth.currentUser) return
+    if (!currentUser || !firestoreUser) return
 
     try {
       setIsDeleting(true)
 
       // Delete user document from Firestore
-      await deleteDoc(doc(db, "users", user.uid))
+      await deleteDoc(doc(db, "users", currentUser.uid))
 
       // Delete user from Firebase Auth
-      await deleteUser(auth.currentUser)
+      await deleteUser(currentUser)
 
       // Log out the user
-      await logout()
+      await signOut()
 
       toast({
         title: "Account Deleted",
@@ -152,7 +138,7 @@ export default function PrivacySecurityPage() {
   if (isLoading) {
     return (
       <ProtectedRoute>
-        <div className="container mx-auto p-4 max-w-3xl flex justify-center items-center min-h-[calc(100vh-4rem)]">
+        <div className="flex justify-center items-center min-h-[500px]">
           <Loader2 className="h-8 w-8 animate-spin text-[#0A5C36]" />
         </div>
       </ProtectedRoute>
@@ -161,134 +147,106 @@ export default function PrivacySecurityPage() {
 
   return (
     <ProtectedRoute>
-      <div className="container mx-auto p-4 max-w-3xl">
-        <h1 className="text-3xl font-bold my-6 text-[#000000]">Privacy & Security</h1>
-
-        <div className="bg-white shadow-xl rounded-xl overflow-hidden p-6">
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Eye className="h-5 w-5 text-[#0A5C36]" />
-                <Label htmlFor="privacy-mode" className="text-lg font-semibold">
-                  Privacy Mode
-                </Label>
-              </div>
-              <Switch
-                id="privacy-mode"
-                checked={settings.privacyEnabled}
-                onCheckedChange={() => handleToggle("privacyEnabled")}
-              />
+      <div className="bg-white shadow-xl rounded-xl overflow-hidden p-6">
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <Fingerprint className="h-5 w-5 text-[#0A5C36]" />
+              <Label htmlFor="location-services" className="text-lg font-semibold">
+                Location Services
+              </Label>
             </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Shield className="h-5 w-5 text-[#0A5C36]" />
-                <Label htmlFor="two-factor" className="text-lg font-semibold">
-                  Two-Factor Authentication
-                </Label>
-              </div>
-              <Switch
-                id="two-factor"
-                checked={settings.twoFactorEnabled}
-                onCheckedChange={() => handleToggle("twoFactorEnabled")}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Fingerprint className="h-5 w-5 text-[#0A5C36]" />
-                <Label htmlFor="location-services" className="text-lg font-semibold">
-                  Location Services
-                </Label>
-              </div>
-              <Switch
-                id="location-services"
-                checked={settings.locationEnabled}
-                onCheckedChange={() => handleToggle("locationEnabled")}
-              />
-            </div>
-
-            <div className="border-t border-gray-200 pt-4">
-              <h2 className="text-xl font-semibold mb-4">Data Retention</h2>
-              <Select onValueChange={handleDataRetentionChange} value={settings.dataRetention}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select data retention period" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="30days">30 days</SelectItem>
-                  <SelectItem value="90days">90 days</SelectItem>
-                  <SelectItem value="1year">1 year</SelectItem>
-                  <SelectItem value="forever">Forever</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="border-t border-gray-200 pt-4">
-              <h2 className="text-xl font-semibold mb-4">Password</h2>
-              <p className="text-sm text-gray-600 mb-2">Last changed: {settings.lastPasswordChange}</p>
-              <Button variant="outline" onClick={() => router.push("/account-settings/change-password")}>
-                <Key className="h-4 w-4 mr-2" />
-                Change Password
-              </Button>
-            </div>
-
-            <div className="border-t border-gray-200 pt-4">
-              <h2 className="text-xl font-semibold mb-4 text-red-600">Danger Zone</h2>
-              <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
-                <Trash className="h-4 w-4 mr-2" />
-                Delete Account
-              </Button>
-            </div>
+            <Switch
+              id="location-services"
+              checked={settings.locationEnabled}
+              onCheckedChange={() => handleToggle("locationEnabled")}
+            />
           </div>
 
-          <div className="mt-6 flex justify-end">
-            <Button onClick={handleSave} disabled={isSaving}>
-              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isSaving ? "Saving..." : "Save Changes"}
+          <div className="border-t border-gray-200 pt-4">
+            <h2 className="text-xl font-semibold mb-4">Data Retention</h2>
+            <Select onValueChange={handleDataRetentionChange} value={settings.dataRetention}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select data retention period" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="30days">30 days</SelectItem>
+                <SelectItem value="90days">90 days</SelectItem>
+                <SelectItem value="1year">1 year</SelectItem>
+                <SelectItem value="forever">Forever</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="border-t border-gray-200 pt-4">
+            <h2 className="text-xl font-semibold mb-4">Password</h2>
+            <Button variant="outline" onClick={() => setShowChangePasswordDialog(true)}>
+              <Key className="h-4 w-4 mr-2" />
+              Change Password
+            </Button>
+          </div>
+
+          <div className="border-t border-gray-200 pt-4">
+            <h2 className="text-xl font-semibold mb-4 text-red-600">Danger Zone</h2>
+            <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+              <Trash className="h-4 w-4 mr-2" />
+              Delete Account
             </Button>
           </div>
         </div>
 
-        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete your account and remove your data from our
-                servers.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="my-4">
-              <Label htmlFor="delete-confirmation" className="text-sm font-medium">
-                Type "DELETE" to confirm
-              </Label>
-              <Input
-                id="delete-confirmation"
-                value={deleteConfirmation}
-                onChange={(e) => setDeleteConfirmation(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleDeleteAccount}
-                disabled={deleteConfirmation !== "DELETE" || isDeleting}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                {isDeleting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Deleting...
-                  </>
-                ) : (
-                  "Delete Account"
-                )}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <div className="mt-6 flex justify-end">
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {isSaving ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
       </div>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete your account and remove your data from our
+              servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="my-4">
+            <Label htmlFor="delete-confirmation" className="text-sm font-medium">
+              Type &quot;DELETE&quot; to confirm
+            </Label>
+            <Input
+              id="delete-confirmation"
+              value={deleteConfirmation}
+              onChange={(e) => setDeleteConfirmation(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAccount}
+              disabled={deleteConfirmation !== "DELETE" || isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Account"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <ChangePasswordDialog
+        open={showChangePasswordDialog}
+        onOpenChange={setShowChangePasswordDialog}
+      />
     </ProtectedRoute>
   )
 } 

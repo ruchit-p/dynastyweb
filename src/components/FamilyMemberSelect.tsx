@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore'
+import { collection, doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import { Spinner } from '@/components/ui/spinner'
@@ -30,16 +30,16 @@ export function FamilyMemberSelect({
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
-  const { user } = useAuth()
+  const { currentUser } = useAuth()
 
   useEffect(() => {
     const fetchFamilyMembers = async () => {
-      if (!user?.uid) return;
+      if (!currentUser) return;
 
       try {
         setLoading(true);
         // First get the user's family tree ID
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
         if (!userDoc.exists()) {
           console.error('User document not found');
           return;
@@ -83,7 +83,7 @@ export function FamilyMemberSelect({
     };
 
     void fetchFamilyMembers();
-  }, [user?.uid]);
+  }, [currentUser]);
 
   const toggleMember = (value: string) => {
     const newSelection = selectedMembers.includes(value)

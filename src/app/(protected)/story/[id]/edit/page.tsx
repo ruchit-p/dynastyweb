@@ -47,7 +47,7 @@ interface StoryBlock {
 export default function EditStoryPage() {
   const { id } = useParams()
   const router = useRouter()
-  const { user } = useAuth()
+  const { currentUser } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [title, setTitle] = useState("")
@@ -62,7 +62,7 @@ export default function EditStoryPage() {
 
   useEffect(() => {
     const fetchStory = async () => {
-      if (!id || !user) return
+      if (!id || !currentUser) return
 
       try {
         const storyDoc = await getDoc(doc(db, "stories", id as string))
@@ -79,7 +79,7 @@ export default function EditStoryPage() {
         const storyData = storyDoc.data()
         
         // Verify ownership
-        if (storyData.authorID !== user.uid) {
+        if (storyData.authorID !== currentUser.uid) {
           toast({
             variant: "destructive",
             title: "Error",
@@ -118,7 +118,7 @@ export default function EditStoryPage() {
     }
 
     fetchStory()
-  }, [id, user, router, toast])
+  }, [id, currentUser, router, toast])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -132,7 +132,7 @@ export default function EditStoryPage() {
       return
     }
 
-    if (!id || !user) {
+    if (!id || !currentUser) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -204,7 +204,7 @@ export default function EditStoryPage() {
       )
 
       // Update the story using the Cloud Function
-      await updateStory(id as string, user.uid, {
+      await updateStory(id as string, currentUser.uid, {
         title: title.trim(),
         subtitle: subtitle.trim() || undefined,
         eventDate: date,

@@ -1,0 +1,93 @@
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore"
+import { db } from "@/lib/firebase"
+
+export interface UserSettings {
+  notifications: NotificationSettings
+  privacy: PrivacySettings
+}
+
+export interface NotificationSettings {
+  pushEnabled: boolean
+  emailEnabled: boolean
+  newMessageEnabled: boolean
+  friendRequestsEnabled: boolean
+  eventRemindersEnabled: boolean
+}
+
+export interface PrivacySettings {
+  locationEnabled: boolean
+  dataRetention: "30days" | "90days" | "1year" | "forever"
+}
+
+const defaultSettings: UserSettings = {
+  notifications: {
+    pushEnabled: true,
+    emailEnabled: true,
+    newMessageEnabled: true,
+    friendRequestsEnabled: true,
+    eventRemindersEnabled: false,
+  },
+  privacy: {
+    locationEnabled: true,
+    dataRetention: "1year",
+  },
+}
+
+export class SettingsManager {
+  private static instance: SettingsManager
+  private debounceTimeout: NodeJS.Timeout | null = null
+  private readonly debounceInterval = 500 // 500ms
+
+  private constructor() {}
+
+  static getInstance(): SettingsManager {
+    if (!SettingsManager.instance) {
+      SettingsManager.instance = new SettingsManager()
+    }
+    return SettingsManager.instance
+  }
+
+  async loadSettings(userId: string): Promise<UserSettings> {
+    try {
+      const docRef = doc(db, "userSettings", userId)
+      const docSnap = await getDoc(docRef)
+
+      if (docSnap.exists()) {
+        return docSnap.data() as UserSettings
+      }
+
+      // If no settings exist, create default settings
+      await this.saveSettings(userId, defaultSettings)
+      return defaultSettings
+    } catch (error) {
+      console.error("Error loading settings:", error)
+      return defaultSettings
+    }
+  }
+
+  async saveSettings(userId: string, settings: UserSettings): Promise<void> {
+    if (this.debounceTimeout) {
+      clearTimeout(this.debounceTimeout)
+    }
+
+    return new Promise((resolve, reject) => {
+      this.debounceTimeout = setTimeout(async () => {
+        try {
+          const docRef = doc(db, "userSettings", userId)
+          await setDoc(docRef, {
+            ...settings,
+            updatedAt: serverTimestamp(),
+          })
+          resolve()
+        } catch (error) {
+          console.error("Error saving settings:", error)
+          reject(error)
+        }
+      }, this.debounceInterval)
+    })
+  }
+
+  getDefaultSettings(): UserSettings {
+    return { ...defaultSettings }
+  }
+} 

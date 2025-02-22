@@ -2,6 +2,7 @@ import React from 'react';
 import { ExtNode } from 'relatives-tree/lib/types';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Eye } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface Props {
   node: ExtNode & {
@@ -32,9 +33,11 @@ const FamilyNode: React.FC<Props> = ({ node, style, isSelected }) => {
       : '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
     transition: 'all 0.3s cubic-bezier(.25,.8,.25,1)',
     cursor: 'pointer',
-    gap: '8px',
+    gap: '6px',
     transform: isSelected ? 'scale(1.05)' : undefined,
     position: 'relative',
+    width: '100%',
+    height: '100%',
   };
 
   const initials = node.attributes?.displayName
@@ -46,10 +49,18 @@ const FamilyNode: React.FC<Props> = ({ node, style, isSelected }) => {
         .toUpperCase()
     : '?';
 
+  // Check if the node has any hidden relatives
+  const hasHiddenRelatives = node.hasSubTree && (
+    (node.children?.length > 0) || 
+    (node.parents?.length > 0) || 
+    (node.siblings?.length > 0) || 
+    (node.spouses?.length > 0)
+  );
+
   return (
     <div style={nodeStyle}>
-      {/* Non-blood relationship or hidden subtree indicator */}
-      {(node.attributes?.isBloodRelated === false || node.hasSubTree) && (
+      {/* Only show eye icon for non-blood relationships or if there are actually hidden relatives */}
+      {(node.attributes?.isBloodRelated === false || hasHiddenRelatives) && (
         <div 
           className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-md"
           title={node.attributes?.isBloodRelated === false ? "Non-blood relationship" : "Has hidden relatives"}
@@ -57,7 +68,7 @@ const FamilyNode: React.FC<Props> = ({ node, style, isSelected }) => {
           <Eye className="h-3 w-3 text-gray-500" />
         </div>
       )}
-      <Avatar className="h-12 w-12 select-none">
+      <Avatar className="h-12 w-12 select-none shrink-0">
         <AvatarImage 
           src={node.attributes?.profilePicture || "/avatar.svg"} 
           alt={node.attributes?.displayName || 'Member'} 
@@ -66,8 +77,19 @@ const FamilyNode: React.FC<Props> = ({ node, style, isSelected }) => {
         />
         <AvatarFallback className="pointer-events-none">{initials}</AvatarFallback>
       </Avatar>
-      <div className="text-center">
-        <div className="font-medium text-sm truncate max-w-[120px]" title={node.attributes?.displayName}>
+      <div className={cn(
+        "text-center w-full",
+        "min-h-[2.5rem] flex items-center justify-center"
+      )}>
+        <div 
+          className={cn(
+            "font-medium text-base leading-tight",
+            "line-clamp-2",
+            "break-words",
+            "w-full max-w-[120px]"
+          )}
+          title={node.attributes?.displayName}
+        >
           {node.attributes?.displayName || 'Unknown'}
         </div>
       </div>

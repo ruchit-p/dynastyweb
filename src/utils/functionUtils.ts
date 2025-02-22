@@ -6,6 +6,19 @@ import type { Story } from './storyUtils';
 // Initialize Firebase Functions
 const functions = getFunctions(app);
 
+// Define the enriched story type
+type EnrichedStory = Story & {
+  author: {
+    id: string;
+    displayName: string;
+    profilePicture?: string;
+  };
+  taggedPeople: Array<{
+    id: string;
+    displayName: string;
+  }>;
+};
+
 // MARK: - Family Tree Functions
 
 export const getFamilyTreeData = async (userId: string) => {
@@ -35,13 +48,13 @@ export const updateFamilyRelationships = async (
 export const getAccessibleStories = async (userId: string, familyTreeId: string) => {
   const functionRef = httpsCallable(functions, 'getAccessibleStories');
   const result = await functionRef({ userId, familyTreeId });
-  return result.data as { stories: Story[] };
+  return result.data as { stories: EnrichedStory[] };
 };
 
 export const getUserStories = async (userId: string) => {
   const functionRef = httpsCallable(functions, 'getUserStories');
   const result = await functionRef({ userId });
-  return result.data as { stories: Story[] };
+  return result.data as { stories: EnrichedStory[] };
 };
 
 export const createStory = async (storyData: {
@@ -99,5 +112,40 @@ export const updateStory = async (
 export const deleteStory = async (storyId: string, userId: string) => {
   const functionRef = httpsCallable(functions, 'deleteStory');
   const result = await functionRef({ storyId, userId });
+  return result.data as { success: boolean };
+};
+
+export const createFamilyMember = async (
+  userData: {
+    firstName: string;
+    lastName: string;
+    displayName: string;
+    dateOfBirth: Date;
+    gender: string;
+    status: string;
+    phone?: string;
+    email?: string;
+    familyTreeId: string;
+  },
+  relationType: 'parent' | 'spouse' | 'child',
+  selectedNodeId: string,
+  options: {
+    connectToChildren?: boolean;
+    connectToSpouse?: boolean;
+    connectToExistingParent?: boolean;
+  }
+) => {
+  const functionRef = httpsCallable(functions, 'createFamilyMember');
+  const result = await functionRef({ userData, relationType, selectedNodeId, options });
+  return result.data as { success: boolean; userId: string };
+};
+
+export const deleteFamilyMember = async (
+  memberId: string,
+  familyTreeId: string,
+  currentUserId: string
+) => {
+  const functionRef = httpsCallable(functions, 'deleteFamilyMember');
+  const result = await functionRef({ memberId, familyTreeId, currentUserId });
   return result.data as { success: boolean };
 }; 

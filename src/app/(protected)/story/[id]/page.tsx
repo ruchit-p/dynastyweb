@@ -25,6 +25,19 @@ import {
 } from "@/components/ui/alert-dialog"
 import { deleteStory } from "@/utils/functionUtils"
 
+// Helper function to handle both production and emulator image URLs
+const getImageUrl = (url: string) => {
+  if (!url) return "/placeholder.svg"
+  
+  // Check if we're using the emulator
+  if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
+    // Replace the emulator URL with the production URL pattern
+    return url.replace('http://127.0.0.1:9199/v0/b/dynasty-eba63.firebasestorage.app', 'https://firebasestorage.googleapis.com')
+  }
+  
+  return url
+}
+
 interface StoryData {
   title: string
   subtitle?: string
@@ -44,7 +57,7 @@ interface StoryData {
 export default function StoryDetailsPage() {
   const { id } = useParams()
   const router = useRouter()
-  const { user } = useAuth()
+  const { currentUser } = useAuth()
   const { toast } = useToast()
   const [story, setStory] = useState<StoryData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -82,11 +95,11 @@ export default function StoryDetailsPage() {
   }, [id, toast])
 
   const handleDelete = async () => {
-    if (!story || !id || !user) return;
+    if (!story || !id || !currentUser) return;
     
     try {
       setDeleting(true);
-      await deleteStory(id as string, user.uid);
+      await deleteStory(id as string, currentUser.uid);
       toast({
         title: "Success",
         description: "Story deleted successfully",
@@ -127,7 +140,7 @@ export default function StoryDetailsPage() {
             <h1 className="text-3xl font-bold mb-2">{story.title}</h1>
             {story.subtitle && <h2 className="text-xl text-gray-600">{story.subtitle}</h2>}
           </div>
-          {user?.uid === story.authorID && (
+          {currentUser?.uid === story.authorID && (
             <div className="flex gap-2">
               <Button 
                 variant="outline" 
@@ -202,11 +215,12 @@ export default function StoryDetailsPage() {
               {block.type === "text" && <p className="whitespace-pre-wrap">{block.data}</p>}
               {block.type === "image" && (
                 <Image
-                  src={block.data || "/placeholder.svg"}
+                  src={getImageUrl(block.data)}
                   alt="Story image"
                   width={600}
                   height={400}
                   className="rounded-lg object-cover w-full"
+                  unoptimized={process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true'}
                 />
               )}
               {block.type === "video" && <VideoPlayer url={block.data} />}

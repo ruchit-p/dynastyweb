@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { Map as LeafletMap, Marker, LatLng, Icon } from "leaflet"
 import "leaflet/dist/leaflet.css"
 import { Input } from "@/components/ui/input"
@@ -52,7 +52,7 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
   const mapInstanceRef = useRef<LeafletMap | null>(null)
 
   // Cleanup function to properly remove map and marker instances
-  const cleanupMap = () => {
+  const cleanupMap = useCallback(() => {
     if (markerRef.current) {
       markerRef.current.remove();
       markerRef.current = null;
@@ -62,48 +62,36 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
       mapInstanceRef.current = null;
       setMap(null);
     }
-  };
+  }, []);
 
-  // Update selected location when defaultLocation changes
-  useEffect(() => {
-    if (!defaultLocation || !mapInstanceRef.current) return;
-    
-    setSelectedLocation(defaultLocation);
-    mapInstanceRef.current.setView([defaultLocation.lat, defaultLocation.lng], 13);
-    
+  const updateMarker = useCallback((L: typeof import("leaflet"), location: { lat: number; lng: number }) => {
+    if (!mapInstanceRef.current) return;
+
     if (markerRef.current) {
-      markerRef.current.setLatLng([defaultLocation.lat, defaultLocation.lng]);
+      markerRef.current.setLatLng([location.lat, location.lng]);
     } else {
-      import("leaflet").then((L) => {
-        if (mapInstanceRef.current) {
-          markerRef.current = L.marker([defaultLocation.lat, defaultLocation.lng], { icon: customIcon })
-            .addTo(mapInstanceRef.current);
-        }
-      });
+      markerRef.current = L.marker([location.lat, location.lng], { icon: customIcon })
+        .addTo(mapInstanceRef.current);
     }
-  }, [defaultLocation]);
+    mapInstanceRef.current.setView([location.lat, location.lng], 13);
+  }, []);
 
-  // Check location permission status
-  useEffect(() => {
-    if ("permissions" in navigator) {
-      navigator.permissions.query({ name: "geolocation" }).then((result) => {
-        setHasLocationPermission(result.state === "granted");
-        
-        // If permission is already granted, get location immediately
-        if (result.state === "granted" && !selectedLocation) {
-          getUserLocation();
-        }
-        
-        // Listen for permission changes
-        result.addEventListener("change", () => {
-          setHasLocationPermission(result.state === "granted");
-        });
-      });
+  const reverseGeocode = useCallback(async (lat: number, lng: number) => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+      )
+      const data = await response.json()
+      const address = data.display_name
+      setSelectedLocation({ lat, lng, address })
+      onLocationSelect({ lat, lng, address })
+    } catch (error) {
+      console.error("Error reverse geocoding:", error)
     }
-  }, [selectedLocation]);
+  }, [onLocationSelect]);
 
   // Get user's location or fall back to Chicago
-  const getUserLocation = () => {
+  const getUserLocation = useCallback(() => {
     setIsLoadingLocation(true)
     
     if ("geolocation" in navigator) {
@@ -148,7 +136,45 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
       }
       setIsLoadingLocation(false)
     }
-  }
+  }, [map, updateMarker, reverseGeocode]);
+
+  // Update selected location when defaultLocation changes
+  useEffect(() => {
+    if (!defaultLocation || !mapInstanceRef.current) return;
+    
+    setSelectedLocation(defaultLocation);
+    mapInstanceRef.current.setView([defaultLocation.lat, defaultLocation.lng], 13);
+    
+    if (markerRef.current) {
+      markerRef.current.setLatLng([defaultLocation.lat, defaultLocation.lng]);
+    } else {
+      import("leaflet").then((L) => {
+        if (mapInstanceRef.current) {
+          markerRef.current = L.marker([defaultLocation.lat, defaultLocation.lng], { icon: customIcon })
+            .addTo(mapInstanceRef.current);
+        }
+      });
+    }
+  }, [defaultLocation]);
+
+  // Check location permission status
+  useEffect(() => {
+    if ("permissions" in navigator) {
+      navigator.permissions.query({ name: "geolocation" }).then((result) => {
+        setHasLocationPermission(result.state === "granted");
+        
+        // If permission is already granted, get location immediately
+        if (result.state === "granted" && !selectedLocation) {
+          getUserLocation();
+        }
+        
+        // Listen for permission changes
+        result.addEventListener("change", () => {
+          setHasLocationPermission(result.state === "granted");
+        });
+      });
+    }
+  }, [selectedLocation, getUserLocation]);
 
   useEffect(() => {
     // Handle clicks outside the component
@@ -164,8 +190,9 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
+      cleanupMap()
     }
-  }, [isOpen, onClose])
+  }, [isOpen, onClose, cleanupMap]);
 
   // Initialize map when component is mounted and visible
   useEffect(() => {
@@ -174,8 +201,10 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
       return;
     }
 
-    // Clean up existing instances
-    cleanupMap();
+    // Prevent multiple initializations
+    if (mapInstanceRef.current) {
+      return;
+    }
 
     // Import Leaflet dynamically to avoid SSR issues
     import("leaflet").then((L) => {
@@ -213,21 +242,26 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
 
     // Cleanup function
     return () => {
-      cleanupMap();
+      if (!isOpen) {
+        cleanupMap();
+      }
     };
-  }, [isOpen, defaultLocation, selectedLocation, hasLocationPermission]);
+  }, [isOpen, cleanupMap]);
 
-  const updateMarker = (L: typeof import("leaflet"), location: { lat: number; lng: number }) => {
-    if (!mapInstanceRef.current) return;
-
-    if (markerRef.current) {
-      markerRef.current.setLatLng([location.lat, location.lng]);
-    } else {
-      markerRef.current = L.marker([location.lat, location.lng], { icon: customIcon })
-        .addTo(mapInstanceRef.current);
+  // Add a separate effect for handling location updates
+  useEffect(() => {
+    if (defaultLocation && !selectedLocation) {
+      setSelectedLocation(defaultLocation);
     }
-    mapInstanceRef.current.setView([location.lat, location.lng], 13);
-  };
+
+    if (!selectedLocation && hasLocationPermission) {
+      getUserLocation();
+    }
+
+    if (selectedLocation) {
+      reverseGeocode(selectedLocation.lat, selectedLocation.lng);
+    }
+  }, [defaultLocation, selectedLocation, hasLocationPermission, getUserLocation, reverseGeocode]);
 
   const searchAddress = async () => {
     try {
@@ -238,20 +272,6 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
       setSearchResults(data)
     } catch (error) {
       console.error("Error searching address:", error)
-    }
-  }
-
-  const reverseGeocode = async (lat: number, lng: number) => {
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
-      )
-      const data = await response.json()
-      const address = data.display_name
-      setSelectedLocation({ lat, lng, address })
-      onLocationSelect({ lat, lng, address })
-    } catch (error) {
-      console.error("Error reverse geocoding:", error)
     }
   }
 

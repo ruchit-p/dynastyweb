@@ -1,16 +1,19 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
+import { format } from "date-fns"
+import { Calendar as CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
 import { Loader2 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
-import { signupFormSchema, type SignupFormData, validateFormData } from "@/lib/validation"
+import { invitedSignupFormSchema, type InvitedSignupFormData, validateFormData } from "@/lib/validation"
+import { cn } from "@/lib/utils"
 import {
   Select,
   SelectContent,
@@ -18,18 +21,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { format } from "date-fns"
-import { Calendar as CalendarIcon } from "lucide-react"
 import { EnhancedCalendar } from "@/components/ui/enhanced-calendar"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
 
-export default function SignupPage() {
-  const [formData, setFormData] = useState<SignupFormData>({
+interface PrefillData {
+  firstName: string;
+  lastName: string;
+  dateOfBirth?: Date;
+  gender?: string;
+  phoneNumber?: string;
+  relationship?: string;
+}
+
+export default function InvitedSignupPage() {
+  const [formData, setFormData] = useState<InvitedSignupFormData>({
     email: "",
     password: "",
     confirmPassword: "",
@@ -38,12 +47,62 @@ export default function SignupPage() {
     phone: "",
     dateOfBirth: new Date(),
     gender: "other",
+    invitationId: "",
+    token: "",
   })
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const [isLoading, setIsLoading] = useState(false)
+  const [prefillData, setPrefillData] = useState<PrefillData | null>(null)
   const router = useRouter()
-  const { signUp } = useAuth()
+  const searchParams = useSearchParams()
+  const { signUpWithInvitation, verifyInvitation } = useAuth()
   const { toast } = useToast()
+
+  useEffect(() => {
+    const token = searchParams.get("token")
+    const id = searchParams.get("id")
+
+    if (token && id) {
+      setFormData(prev => ({ ...prev, token, invitationId: id }))
+      verifyInvitation(token, id)
+        .then((data: {
+          prefillData: {
+            firstName: string;
+            lastName: string;
+            dateOfBirth?: Date;
+            gender?: string;
+            phoneNumber?: string;
+            relationship?: string;
+          };
+          inviteeEmail: string;
+        }) => {
+          if (data.prefillData) {
+            setPrefillData(data.prefillData)
+            setFormData(prev => ({
+              ...prev,
+              firstName: data.prefillData.firstName || "",
+              lastName: data.prefillData.lastName || "",
+              dateOfBirth: data.prefillData.dateOfBirth ? new Date(data.prefillData.dateOfBirth) : new Date(),
+              gender: (data.prefillData.gender === "male" || data.prefillData.gender === "female" || data.prefillData.gender === "other") 
+                ? data.prefillData.gender 
+                : "other",
+              phone: data.prefillData.phoneNumber || "",
+              email: data.inviteeEmail || "",
+            }))
+          }
+        })
+        .catch((error: unknown) => {
+          toast({
+            title: "Error",
+            description: error instanceof Error ? error.message : "Invalid invitation link",
+            variant: "destructive",
+          })
+          router.push("/signup")
+        })
+    } else {
+      router.push("/signup")
+    }
+  }, [searchParams, router, toast, verifyInvitation])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -76,11 +135,17 @@ export default function SignupPage() {
     setErrors({})
 
     // Validate form data
-    const validation = validateFormData(signupFormSchema, formData)
+    const validation = validateFormData(invitedSignupFormSchema, formData)
     if (!validation.success) {
       const newErrors: { [key: string]: string } = {}
       validation.errors?.forEach((error) => {
         newErrors[error.field] = error.message
+        // Show the error in a toast for better visibility
+        toast({
+          title: "Validation Error",
+          description: error.message,
+          variant: "destructive",
+        })
       })
       setErrors(newErrors)
       setIsLoading(false)
@@ -88,85 +153,20 @@ export default function SignupPage() {
     }
 
     try {
-      await signUp(
-        formData.email,
-        formData.password,
-        formData.confirmPassword,
-        formData.firstName,
-        formData.lastName,
-        formData.phone || "",
-        formData.dateOfBirth,
-        formData.gender
-      )
+      await signUpWithInvitation(formData)
       toast({
         title: "Account created!",
         description: "Please check your email to verify your account.",
       })
+      // Ensure we redirect to verify-email page
       router.push("/verify-email")
     } catch (error) {
       console.error("Signup error:", error)
-      
-      // Handle specific validation errors
-      if (error instanceof Error) {
-        const errorMessage = error.message.toLowerCase()
-        
-        if (errorMessage.includes("passwords do not match")) {
-          setErrors(prev => ({
-            ...prev,
-            confirmPassword: "Passwords do not match",
-            password: "Passwords do not match"
-          }))
-          toast({
-            title: "Password Error",
-            description: "The passwords you entered do not match. Please try again.",
-            variant: "destructive",
-          })
-        } else if (errorMessage.includes("email already exists")) {
-          setErrors(prev => ({
-            ...prev,
-            email: "An account with this email already exists"
-          }))
-          toast({
-            title: "Email Error",
-            description: "An account with this email already exists. Please use a different email or sign in.",
-            variant: "destructive",
-          })
-        } else if (errorMessage.includes("invalid email")) {
-          setErrors(prev => ({
-            ...prev,
-            email: "Please enter a valid email address"
-          }))
-          toast({
-            title: "Email Error",
-            description: "Please enter a valid email address.",
-            variant: "destructive",
-          })
-        } else if (errorMessage.includes("password") && errorMessage.includes("least")) {
-          setErrors(prev => ({
-            ...prev,
-            password: "Password must meet all requirements"
-          }))
-          toast({
-            title: "Password Error",
-            description: error.message,
-            variant: "destructive",
-          })
-        } else {
-          // Generic error handling
-          toast({
-            title: "Error",
-            description: error.message,
-            variant: "destructive",
-          })
-        }
-      } else {
-        // Fallback error message
-        toast({
-          title: "Error",
-          description: "An unexpected error occurred. Please try again.",
-          variant: "destructive",
-        })
-      }
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create account",
+        variant: "destructive",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -183,7 +183,7 @@ export default function SignupPage() {
           className="mx-auto"
         />
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Create your account
+          Complete your account setup
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Already have an account?{" "}
@@ -211,6 +211,7 @@ export default function SignupPage() {
                   value={formData.email}
                   onChange={handleChange}
                   className={errors.email ? "border-red-500" : ""}
+                  disabled={!!prefillData}
                 />
                 {errors.email && (
                   <p className="mt-1 text-xs text-red-500">{errors.email}</p>
@@ -399,7 +400,7 @@ export default function SignupPage() {
                 {isLoading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Create account
+                Complete signup
               </Button>
             </div>
           </form>

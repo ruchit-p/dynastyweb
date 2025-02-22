@@ -3,16 +3,27 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/components/ui/use-toast';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { currentUser, loading } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
+    if (!loading) {
+      if (!currentUser) {
+        router.push('/login');
+      } else if (!currentUser.emailVerified) {
+        toast({
+          title: "Email verification required",
+          description: "Please verify your email address to access this page.",
+          variant: "destructive",
+        });
+        router.push('/verify-email');
+      }
     }
-  }, [user, loading, router]);
+  }, [currentUser, loading, router, toast]);
 
   if (loading) {
     return (
@@ -22,5 +33,5 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     );
   }
 
-  return user ? <>{children}</> : null;
+  return currentUser && currentUser.emailVerified ? <>{children}</> : null;
 } 

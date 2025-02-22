@@ -137,7 +137,7 @@ export default function Navbar({ user }: NavbarProps) {
                 />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-60">
               <div className="flex items-center gap-2 p-2">
                 <div className="flex items-center gap-2 rounded-md p-1">
                   <Image

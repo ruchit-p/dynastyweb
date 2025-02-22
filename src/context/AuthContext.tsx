@@ -3,35 +3,145 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import {
   User,
-  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signOut,
+  signOut as firebaseSignOut,
   onAuthStateChanged,
-  sendPasswordResetEmail,
   updateProfile,
 } from 'firebase/auth';
-import { auth, db } from '@/lib/firebase';
-import { doc, setDoc, collection, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { auth, functions, db } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { doc, getDoc } from 'firebase/firestore';
+import type { InvitedSignupFormData } from "@/lib/validation";
 
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  signUp: (email: string, password: string, firstName: string, lastName: string, phone: string, dateOfBirth: Date, gender: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  resetPassword: (email: string) => Promise<void>;
-  updateUserProfile: (displayName: string) => Promise<void>;
+// MARK: - Types
+interface FirestoreUser {
+  id: string;
+  displayName: string;
+  email: string;
+  dateOfBirth: Date;
+  firstName: string;
+  lastName: string;
+  phoneNumber: string | null;
+  parentIds: string[];
+  childrenIds: string[];
+  spouseIds: string[];
+  isAdmin: boolean;
+  canAddMembers: boolean;
+  canEdit: boolean;
+  isPendingSignUp: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  gender: string;
+  familyTreeId?: string;
+  historyBookId?: string;
+  emailVerified?: boolean;
+  dataRetentionPeriod: "forever" | "year" | "month" | "week";
+  profilePicture?: string;
 }
 
-const AuthContext = createContext<AuthContextType>({} as AuthContextType);
+interface SignUpRequest {
+  email: string;
+  password: string;
+  confirmPassword: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  dateOfBirth: Date;
+  gender: string;
+}
 
+interface SignUpResult {
+  success: boolean;
+  userId: string;
+  familyTreeId: string;
+  historyBookId: string;
+}
+
+interface AuthContextType {
+  currentUser: User | null;
+  firestoreUser: FirestoreUser | null;
+  loading: boolean;
+  signUp: (email: string, password: string, confirmPassword: string, firstName: string, lastName: string, phone: string, dateOfBirth: Date, gender: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  updateEmail: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
+  sendVerificationEmail: () => Promise<void>;
+  signUpWithInvitation: (data: InvitedSignupFormData) => Promise<{ success: boolean; userId: string; familyTreeId: string }>;
+  verifyInvitation: (token: string, invitationId: string) => Promise<{
+    prefillData: {
+      firstName: string;
+      lastName: string;
+      dateOfBirth?: Date;
+      gender?: string;
+      phoneNumber?: string;
+      relationship?: string;
+    };
+    inviteeEmail: string;
+  }>;
+  refreshFirestoreUser: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType>({
+  currentUser: null,
+  firestoreUser: null,
+  loading: false,
+  signUp: async () => {},
+  signIn: async () => {},
+  signOut: async () => {},
+  resetPassword: async () => {},
+  updateEmail: async () => {},
+  updatePassword: async () => {},
+  sendVerificationEmail: async () => {},
+  signUpWithInvitation: async () => ({ success: false, userId: '', familyTreeId: '' }),
+  verifyInvitation: async () => ({
+    prefillData: {
+      firstName: '',
+      lastName: '',
+    },
+    inviteeEmail: '',
+  }),
+  refreshFirestoreUser: async () => {},
+});
+
+// MARK: - Helper Functions
+const fetchFirestoreUser = async (userId: string): Promise<FirestoreUser | null> => {
+  try {
+    const userDoc = await getDoc(doc(db, "users", userId));
+    if (!userDoc.exists()) {
+      console.warn(`[Auth] No Firestore document found for user ${userId}`);
+      return null;
+    }
+    return userDoc.data() as FirestoreUser;
+  } catch (error) {
+    console.error("[Auth] Error fetching Firestore user:", error);
+    return null;
+  }
+};
+
+// MARK: - Provider Component
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [firestoreUser, setFirestoreUser] = useState<FirestoreUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const refreshFirestoreUser = async () => {
+    if (user?.uid) {
+      const userData = await fetchFirestoreUser(user.uid);
+      setFirestoreUser(userData);
+    }
+  };
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
+      if (user) {
+        const userData = await fetchFirestoreUser(user.uid);
+        setFirestoreUser(userData);
+      } else {
+        setFirestoreUser(null);
+      }
       setLoading(false);
     });
 
@@ -39,80 +149,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const signUp = async (
-    email: string, 
-    password: string, 
-    firstName: string, 
-    lastName: string, 
-    phone: string, 
+    email: string,
+    password: string,
+    confirmPassword: string,
+    firstName: string,
+    lastName: string,
+    phone: string,
     dateOfBirth: Date,
     gender: string
-  ) => {
+  ): Promise<void> => {
     try {
-      // Create Firebase Auth user
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      const userId = result.user.uid;
-      
-      // Create a batch for Firestore operations
-      const batch = writeBatch(db);
-      
-      // Create family tree document
-      const familyTreeRef = doc(collection(db, 'familyTrees'));
-      const familyTreeId = familyTreeRef.id;
-      batch.set(familyTreeRef, {
-        id: familyTreeId,
-        ownerUserId: userId,
-        memberUserIds: [userId],
-        adminUserIds: [userId],
-        treeName: `${firstName}'s Family Tree`,
-        memberCount: 1,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        isPrivate: true
-      });
-
-      // Create history book document
-      const historyBookRef = doc(collection(db, 'historyBooks'));
-      const historyBookId = historyBookRef.id;
-      batch.set(historyBookRef, {
-        id: historyBookId,
-        ownerUserId: userId,
-        familyTreeId: familyTreeId,
-        title: `${firstName}'s History Book`,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-
-      // Create user document
-      const userRef = doc(db, 'users', userId);
-      batch.set(userRef, {
-        id: userId,
-        displayName: `${firstName} ${lastName}`.trim(),
+      const handleSignUp = httpsCallable<SignUpRequest, SignUpResult>(functions, 'handleSignUp');
+      await handleSignUp({
         email,
-        dateOfBirth,
+        password,
+        confirmPassword,
         firstName,
         lastName,
-        phoneNumber: phone,
+        phone,
+        dateOfBirth,
         gender,
-        familyTreeId,
-        historyBookId,
-        parentIds: [],
-        childrenIds: [],
-        spouseIds: [],
-        isAdmin: true,
-        canAddMembers: true,
-        canEdit: true,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
       });
 
-      // Commit the batch
-      await batch.commit();
-
-      // Update user profile in Firebase Auth
-      await updateProfile(result.user, {
-        displayName: `${firstName} ${lastName}`.trim()
-      });
-
+      // Sign in the user after successful signup
+      await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
       throw error;
     }
@@ -128,7 +188,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = async () => {
     try {
-      await signOut(auth);
+      await firebaseSignOut(auth);
     } catch (error) {
       throw error;
     }
@@ -136,7 +196,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const resetPassword = async (email: string) => {
     try {
-      await sendPasswordResetEmail(auth, email);
+      const initiatePasswordReset = httpsCallable(functions, 'initiatePasswordReset');
+      await initiatePasswordReset({ email });
     } catch (error) {
       throw error;
     }
@@ -152,14 +213,72 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  const sendVerificationEmail = async () => {
+    try {
+      if (auth.currentUser) {
+        const handleVerificationEmail = httpsCallable(functions, 'sendVerificationEmail');
+        await handleVerificationEmail({
+          userId: auth.currentUser.uid,
+          email: auth.currentUser.email!,
+          displayName: auth.currentUser.displayName || 'User'
+        });
+      } else {
+        throw new Error('No user is currently signed in');
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const signUpWithInvitation = async (data: InvitedSignupFormData) => {
+    const handleInvitedSignUp = httpsCallable<InvitedSignupFormData, { success: boolean; userId: string; familyTreeId: string }>(
+      functions,
+      "handleInvitedSignUp"
+    );
+    const result = await handleInvitedSignUp(data);
+    
+    // Sign in the user after successful signup and wait for auth state to update
+    await signInWithEmailAndPassword(auth, data.email, data.password);
+    
+    // Return the result so the UI can handle the response
+    return result.data;
+  };
+
+  const verifyInvitation = async (token: string, invitationId: string) => {
+    const verifyInvitationToken = httpsCallable<
+      { token: string; invitationId: string },
+      {
+        prefillData: {
+          firstName: string;
+          lastName: string;
+          dateOfBirth?: Date;
+          gender?: string;
+          phoneNumber?: string;
+          relationship?: string;
+        };
+        inviteeEmail: string;
+      }
+    >(functions, "verifyInvitationToken");
+
+    const result = await verifyInvitationToken({ token, invitationId });
+    return result.data;
+  };
+
   const value = {
-    user,
+    currentUser: user,
+    firestoreUser,
     loading,
     signUp,
     signIn,
-    logout,
+    signOut: logout,
     resetPassword,
     updateUserProfile,
+    updateEmail: async () => {},
+    updatePassword: async () => {},
+    sendVerificationEmail,
+    signUpWithInvitation,
+    verifyInvitation,
+    refreshFirestoreUser,
   };
 
   return (

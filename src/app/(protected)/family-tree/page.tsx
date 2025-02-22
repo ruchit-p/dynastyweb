@@ -5,11 +5,9 @@ import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import calcTree from "relatives-tree";
 import type { Node, ExtNode, Connector } from 'relatives-tree/lib/types';
-import { getFamilyTreeData } from "@/utils/functionUtils";
+import { getFamilyTreeData, createFamilyMember, deleteFamilyMember } from "@/utils/functionUtils";
 import FamilyNode from '@/components/FamilyNode';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import { doc, collection, writeBatch, serverTimestamp, FieldValue, DocumentData, arrayUnion } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,7 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { removeMemberFromTree } from '@/utils/familyTreeUtils';
 import { Minus, Plus } from 'lucide-react';
 import {
   AlertDialog,
@@ -71,34 +68,8 @@ interface CustomNode extends Omit<Node, 'placeholder'> {
   };
 }
 
-interface UpdateData extends DocumentData {
-  parentIds?: string[];
-  childrenIds?: string[];
-  spouseIds?: string[];
-  updatedAt: FieldValue;
-}
-
-interface UserData {
-  id: string;
-  firstName: string;
-  lastName: string;
-  displayName: string;
-  dateOfBirth: Date;
-  gender: string;
-  status: string;
-  parentIds: string[];
-  childrenIds: string[];
-  spouseIds: string[];
-  familyTreeId: string;
-  createdAt: FieldValue;
-  updatedAt: FieldValue;
-  phone?: string;
-  email?: string;
-  profilePicture?: string;
-}
-
 export default function FamilyTreePage() {
-  const { user } = useAuth();
+  const { currentUser } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -119,18 +90,18 @@ export default function FamilyTreePage() {
   });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [rootNode, setRootNode] = useState<string>(user?.uid || '');
+  const [rootNode, setRootNode] = useState<string>(currentUser?.uid || '');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const treeContainerRef = useRef<HTMLDivElement>(null);
   const DEBUG_MODE = false; // Debug flag - set to true to enable debug features
 
-  const fetchFamilyTreeData = async () => {
-    if (!user) return;
+  const fetchFamilyTreeData = useCallback(async () => {
+    if (!currentUser) return;
 
     try {
       setLoading(true);
-      const { treeNodes } = await getFamilyTreeData(user.uid);
+      const { treeNodes } = await getFamilyTreeData(currentUser.uid);
       setTreeData([...treeNodes]); // Convert readonly array to mutable array
     } catch {
       toast({
@@ -141,11 +112,11 @@ export default function FamilyTreePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser, toast]);
 
   useEffect(() => {
     void fetchFamilyTreeData();
-  }, [user]);
+  }, [fetchFamilyTreeData]);
 
   // Calculate optimal zoom level to fit the entire tree
   const calculateOptimalZoom = useCallback(() => {
@@ -217,7 +188,7 @@ export default function FamilyTreePage() {
 
       setPosition({ x, y });
     }
-  }, [treeData]);
+  }, [treeData, calculateOptimalZoom, rootNode, DEBUG_MODE]);
 
   // Function to center the tree or a specific node
   const centerTree = useCallback((nodeId?: string) => {
@@ -276,7 +247,7 @@ export default function FamilyTreePage() {
   // Effect to center tree on initial load and when tree data changes
   useEffect(() => {
     centerTree();
-  }, [treeData, scale]);
+  }, [treeData, scale, centerTree]);
 
   // Effect to handle centering when root node changes
   useEffect(() => {
@@ -330,10 +301,10 @@ export default function FamilyTreePage() {
     }
 
     setPosition({ x, y });
-  }, [rootNode, treeData, scale]);
+  }, [rootNode, treeData, scale, DEBUG_MODE]);
 
   // Add debug info for tree wrapper dimensions
-  const getTreeWrapperDebugInfo = () => {
+  const getTreeWrapperDebugInfo = useCallback(() => {
     if (!treeData.length) return null;
 
     const layout = calcTree(treeData, {
@@ -351,7 +322,7 @@ export default function FamilyTreePage() {
         nodeCount: layout.nodes.length
       }
     };
-  };
+  }, [treeData, rootNode, position.x, position.y, scale]);
 
   // Log wrapper debug info whenever position or scale changes
   useEffect(() => {
@@ -361,7 +332,7 @@ export default function FamilyTreePage() {
         console.log('Tree wrapper debug:', debugInfo);
       }
     }
-  }, [position, scale]);
+  }, [DEBUG_MODE, getTreeWrapperDebugInfo]);
 
   const handleNodeClick = (node: ExtNode, isClick: boolean) => {
     if (!isClick) return;
@@ -393,7 +364,7 @@ export default function FamilyTreePage() {
 
   const canDeleteMember = (node: ExtNode): boolean => {
     // Can't delete self
-    if (node.id === user?.uid) return false;
+    if (node.id === currentUser?.uid) return false;
 
     const isLeafMember = (member: Node): boolean => {
       // If this member has no children, they are a leaf
@@ -416,7 +387,7 @@ export default function FamilyTreePage() {
     // If the member has an account (status !== 'pending'), only tree owner can delete
     const memberData = (fullNode as CustomNode).attributes;
     const hasAccount = memberData?.status && memberData.status !== 'pending';
-    const isOwner = user?.uid === memberData?.treeOwnerId;
+    const isOwner = currentUser?.uid === memberData?.treeOwnerId;
 
     if (hasAccount && !isOwner) {
       setDeleteError(
@@ -436,7 +407,7 @@ export default function FamilyTreePage() {
   };
 
   const handleDeleteMember = async () => {
-    if (!selectedNode || !user || selectedNode.id === user.uid) return;
+    if (!selectedNode || !currentUser || selectedNode.id === currentUser.uid) return;
     const node = selectedNode as CustomNode;
 
     if (!canDeleteMember(selectedNode)) {
@@ -451,10 +422,10 @@ export default function FamilyTreePage() {
         throw new Error('Family tree ID not found');
       }
 
-      await removeMemberFromTree(
-        node.attributes.familyTreeId,
+      await deleteFamilyMember(
         node.id,
-        user.uid
+        node.attributes.familyTreeId,
+        currentUser.uid
       );
 
       toast({
@@ -463,10 +434,11 @@ export default function FamilyTreePage() {
       });
       await fetchFamilyTreeData();
       setShowDeleteDialog(false);
-    } catch {
+    } catch (error) {
+      console.error("Error deleting family member:", error);
       toast({
         title: "Error",
-        description: "Failed to delete family member. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to delete family member. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -477,7 +449,7 @@ export default function FamilyTreePage() {
   };
 
   const handleSave = async () => {
-    if (!selectedNode || !user || !relationType) return;
+    if (!selectedNode || !currentUser || !relationType) return;
     const node = selectedNode as CustomNode;
 
     // Validate required fields
@@ -519,108 +491,31 @@ export default function FamilyTreePage() {
 
     try {
       setSaving(true);
-      const batch = writeBatch(db);
 
-      // Create new user document
-      const newUserRef = doc(collection(db, 'users'));
-      const newUserId = newUserRef.id;
-
-      // Get existing children IDs if connecting to spouse's children
-      const childrenToConnect = (relationType === 'spouse' && formData.connectToChildren)
-        ? node.children?.map(child => child.id) || []
-        : [];
-
-      // Create user data object without null fields
-      const userData: UserData = {
-        id: newUserId,
+      // Create the new family member using the Cloud Function
+      const userData = {
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         displayName: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
         dateOfBirth: formData.dateOfBirth || new Date(),
         gender: formData.gender,
         status: 'pending',
-        parentIds: relationType === 'child' ? [node.id] : [],
-        childrenIds: relationType === 'parent' ? [node.id] : childrenToConnect,
-        spouseIds: relationType === 'spouse' ? [node.id] : [],
         familyTreeId: node.attributes.familyTreeId,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        phone: formData.phone?.trim(),
+        email: formData.email?.trim(),
       };
 
-      // Only add optional fields if they have values
-      if (formData.phone?.trim()) {
-        userData.phone = formData.phone.trim();
-      }
-      if (formData.email?.trim()) {
-        userData.email = formData.email.trim();
-      }
-
-      // If adding a child and the selected node has a spouse, add the spouse as a parent too
-      if (relationType === 'child' && formData.connectToSpouse && node.spouses?.length > 0) {
-        userData.parentIds = [...userData.parentIds, node.spouses[0].id];
-      }
-
-      // If adding a parent and the selected node has existing parents, connect as spouse
-      if (relationType === 'parent' && formData.connectToExistingParent && node.parents?.length > 0) {
-        userData.spouseIds = [node.parents[0].id];
-      }
-
-      batch.set(newUserRef, userData);
-
-      // Update selected node's document
-      const selectedUserRef = doc(db, 'users', node.id);
-      const updateData: UpdateData = {
-        updatedAt: serverTimestamp()
-      };
-      
-      if (relationType === 'parent') {
-        updateData.parentIds = [...(node.parents?.map(p => p.id) || []), newUserId];
-      } else if (relationType === 'child') {
-        updateData.childrenIds = [...(node.children?.map(c => c.id) || []), newUserId];
-      } else if (relationType === 'spouse') {
-        updateData.spouseIds = [...(node.spouses?.map(s => s.id) || []), newUserId];
-      }
-
-      batch.update(selectedUserRef, updateData);
-
-      // If adding a parent and connecting to existing parent, update the existing parent's document
-      if (relationType === 'parent' && formData.connectToExistingParent && node.parents?.length > 0) {
-        const existingParentRef = doc(db, 'users', node.parents[0].id);
-        batch.update(existingParentRef, {
-          spouseIds: arrayUnion(newUserId),
-          updatedAt: serverTimestamp()
-        });
-      }
-
-      // Update spouse's document to add the new child
-      if (relationType === 'child' && formData.connectToSpouse && node.spouses?.length > 0) {
-        const spouseRef = doc(db, 'users', node.spouses[0].id);
-        batch.update(spouseRef, {
-          childrenIds: arrayUnion(newUserId),
-          updatedAt: serverTimestamp()
-        });
-      }
-
-      // Update children documents to add the new spouse as a parent
-      if (relationType === 'spouse' && formData.connectToChildren) {
-        for (const childId of childrenToConnect) {
-          const childRef = doc(db, 'users', childId);
-          batch.update(childRef, {
-            parentIds: arrayUnion(newUserId),
-            updatedAt: serverTimestamp()
-          });
+      await createFamilyMember(
+        userData,
+        relationType,
+        node.id,
+        {
+          connectToChildren: formData.connectToChildren,
+          connectToSpouse: formData.connectToSpouse,
+          connectToExistingParent: formData.connectToExistingParent,
         }
-      }
+      );
 
-      // Add new user to family tree members
-      const treeRef = doc(db, 'familyTrees', node.attributes.familyTreeId);
-      batch.update(treeRef, {
-        memberUserIds: arrayUnion(newUserId),
-        updatedAt: serverTimestamp()
-      });
-
-      await batch.commit();
-      
       // Fetch updated tree data before closing the sheet
       await fetchFamilyTreeData();
       
@@ -692,7 +587,7 @@ export default function FamilyTreePage() {
     );
   }
 
-  if (!user) {
+  if (!currentUser) {
     return (
       <ProtectedRoute>
         <main className="family-tree-container w-screen">
@@ -757,7 +652,7 @@ export default function FamilyTreePage() {
                 <DropdownMenuItem onSelect={() => handleAddMember('child')}>
                   Add Child
                 </DropdownMenuItem>
-                {selectedNode.id !== user?.uid && (
+                {selectedNode.id !== currentUser?.uid && (
                   <DropdownMenuItem
                     className={cn(
                       "text-red-600",

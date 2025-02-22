@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { doc, getDoc } from "firebase/firestore"
-import { db } from "@/lib/firebase"
 import { useAuth } from "@/context/AuthContext"
 import { uploadMedia } from "@/utils/mediaUtils"
 import { Button } from "@/components/ui/button"
@@ -39,7 +37,7 @@ interface Location {
 
 export default function CreateStoryPage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { currentUser, firestoreUser } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [title, setTitle] = useState("")
@@ -50,7 +48,6 @@ export default function CreateStoryPage() {
   const [customAccessMembers, setCustomAccessMembers] = useState<string[]>([])
   const [taggedMembers, setTaggedMembers] = useState<string[]>([])
   const [blocks, setBlocks] = useState<Block[]>([])
-  const [familyTreeId, setFamilyTreeId] = useState<string | null>(null)
   const [showLocationPicker, setShowLocationPicker] = useState(false)
   const [userLocation, setUserLocation] = useState<Location | null>(null)
 
@@ -83,23 +80,29 @@ export default function CreateStoryPage() {
     }
   }, []);
 
-  // Fetch user's family tree ID from Firestore
+  // Check if user has a family tree ID
   useEffect(() => {
-    const fetchFamilyTreeId = async () => {
-      if (!user?.uid) return;
+    if (!currentUser?.uid) {
+      console.log("No user ID available");
+      return;
+    }
 
-      try {
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) {
-          setFamilyTreeId(userDoc.data().familyTreeId);
-        }
-      } catch (error) {
-        console.error("Error fetching family tree ID:", error);
-      }
-    };
+    if (!firestoreUser) {
+      console.log("No Firestore user data available");
+      return;
+    }
 
-    fetchFamilyTreeId();
-  }, [user?.uid]);
+    console.log("Firestore user data:", firestoreUser);
+    if (!firestoreUser.familyTreeId) {
+      console.error("No family tree ID found in user document");
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "You need to be part of a family tree to create stories. Please create or join a family tree first."
+      });
+      router.push("/family-tree");
+    }
+  }, [currentUser?.uid, firestoreUser, router, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -113,12 +116,13 @@ export default function CreateStoryPage() {
       return
     }
 
-    if (!familyTreeId) {
+    if (!firestoreUser?.familyTreeId) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Family tree ID not found"
+        description: "You need to be part of a family tree to create stories"
       })
+      router.push("/family-tree")
       return
     }
 
@@ -189,7 +193,7 @@ export default function CreateStoryPage() {
 
       // Create the story using the Cloud Function
       await createStory({
-        authorID: user!.uid,
+        authorID: currentUser!.uid,
         title: title.trim(),
         subtitle: subtitle.trim() || undefined,
         eventDate: date,
@@ -197,7 +201,7 @@ export default function CreateStoryPage() {
         privacy: privacy === "personal" ? "privateAccess" : privacy,
         customAccessMembers: privacy === "custom" ? customAccessMembers : undefined,
         blocks: processedBlocks,
-        familyTreeId,
+        familyTreeId: firestoreUser!.familyTreeId,
         peopleInvolved: taggedMembers
       });
       
