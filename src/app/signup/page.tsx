@@ -1,16 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useToast } from "@/components/ui/use-toast"
 import { Loader2 } from "lucide-react"
-import { useAuth } from "@/context/AuthContext"
 import { signupFormSchema, type SignupFormData, validateFormData } from "@/lib/validation"
+import { useAuth } from "@/lib/client/hooks/useAuth"
 import {
   Select,
   SelectContent,
@@ -41,9 +39,7 @@ export default function SignupPage() {
   })
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
   const { signUp } = useAuth()
-  const { toast } = useToast()
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -79,7 +75,7 @@ export default function SignupPage() {
     const validation = validateFormData(signupFormSchema, formData)
     if (!validation.success) {
       const newErrors: { [key: string]: string } = {}
-      validation.errors?.forEach((error) => {
+      validation.errors.forEach((error) => {
         newErrors[error.field] = error.message
       })
       setErrors(newErrors)
@@ -88,85 +84,8 @@ export default function SignupPage() {
     }
 
     try {
-      await signUp(
-        formData.email,
-        formData.password,
-        formData.confirmPassword,
-        formData.firstName,
-        formData.lastName,
-        formData.phone || "",
-        formData.dateOfBirth,
-        formData.gender
-      )
-      toast({
-        title: "Account created!",
-        description: "Please check your email to verify your account.",
-      })
-      router.push("/verify-email")
-    } catch (error) {
-      console.error("Signup error:", error)
-      
-      // Handle specific validation errors
-      if (error instanceof Error) {
-        const errorMessage = error.message.toLowerCase()
-        
-        if (errorMessage.includes("passwords do not match")) {
-          setErrors(prev => ({
-            ...prev,
-            confirmPassword: "Passwords do not match",
-            password: "Passwords do not match"
-          }))
-          toast({
-            title: "Password Error",
-            description: "The passwords you entered do not match. Please try again.",
-            variant: "destructive",
-          })
-        } else if (errorMessage.includes("email already exists")) {
-          setErrors(prev => ({
-            ...prev,
-            email: "An account with this email already exists"
-          }))
-          toast({
-            title: "Email Error",
-            description: "An account with this email already exists. Please use a different email or sign in.",
-            variant: "destructive",
-          })
-        } else if (errorMessage.includes("invalid email")) {
-          setErrors(prev => ({
-            ...prev,
-            email: "Please enter a valid email address"
-          }))
-          toast({
-            title: "Email Error",
-            description: "Please enter a valid email address.",
-            variant: "destructive",
-          })
-        } else if (errorMessage.includes("password") && errorMessage.includes("least")) {
-          setErrors(prev => ({
-            ...prev,
-            password: "Password must meet all requirements"
-          }))
-          toast({
-            title: "Password Error",
-            description: error.message,
-            variant: "destructive",
-          })
-        } else {
-          // Generic error handling
-          toast({
-            title: "Error",
-            description: error.message,
-            variant: "destructive",
-          })
-        }
-      } else {
-        // Fallback error message
-        toast({
-          title: "Error",
-          description: "An unexpected error occurred. Please try again.",
-          variant: "destructive",
-        })
-      }
+      await signUp(formData)
+      // Navigation and toast notifications are handled by AuthContext
     } finally {
       setIsLoading(false)
     }
@@ -210,144 +129,10 @@ export default function SignupPage() {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className={errors.email ? "border-red-500" : ""}
+                  error={errors.email}
                 />
                 {errors.email && (
-                  <p className="mt-1 text-xs text-red-500">{errors.email}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="firstName">First name</Label>
-                <div className="mt-1">
-                  <Input
-                    id="firstName"
-                    name="firstName"
-                    type="text"
-                    autoComplete="given-name"
-                    required
-                    value={formData.firstName}
-                    onChange={handleChange}
-                    className={errors.firstName ? "border-red-500" : ""}
-                  />
-                  {errors.firstName && (
-                    <p className="mt-1 text-xs text-red-500">{errors.firstName}</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="lastName">Last name</Label>
-                <div className="mt-1">
-                  <Input
-                    id="lastName"
-                    name="lastName"
-                    type="text"
-                    autoComplete="family-name"
-                    required
-                    value={formData.lastName}
-                    onChange={handleChange}
-                    className={errors.lastName ? "border-red-500" : ""}
-                  />
-                  {errors.lastName && (
-                    <p className="mt-1 text-xs text-red-500">{errors.lastName}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="phone">Phone number</Label>
-              <div className="mt-1">
-                <Input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  autoComplete="tel"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className={errors.phone ? "border-red-500" : ""}
-                />
-                {errors.phone && (
-                  <p className="mt-1 text-xs text-red-500">{errors.phone}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="dateOfBirth">Date of birth</Label>
-              <div className="mt-1">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant={"outline"}
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !formData.dateOfBirth && "text-muted-foreground",
-                        errors.dateOfBirth && "border-red-500"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {formData.dateOfBirth ? (
-                        format(formData.dateOfBirth, "PPP")
-                      ) : (
-                        <span>Pick a date</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <EnhancedCalendar
-                      mode="single"
-                      selected={formData.dateOfBirth}
-                      onSelect={handleDateChange}
-                      initialFocus
-                      disabled={(date) => {
-                        const today = new Date();
-                        const birthDate = new Date(date);
-                        
-                        let age = today.getFullYear() - birthDate.getFullYear();
-                        const monthDiff = today.getMonth() - birthDate.getMonth();
-                        
-                        // Adjust age if birthday hasn't occurred this year
-                        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-                          age--;
-                        }
-                        
-                        return age < 13;
-                      }}
-                      fromYear={1900}
-                      toYear={new Date().getFullYear()}
-                    />
-                  </PopoverContent>
-                </Popover>
-                {errors.dateOfBirth && (
-                  <p className="mt-1 text-xs text-red-500">{errors.dateOfBirth}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="gender">Gender</Label>
-              <div className="mt-1">
-                <Select
-                  value={formData.gender}
-                  onValueChange={handleGenderChange}
-                >
-                  <SelectTrigger
-                    className={errors.gender ? "border-red-500" : ""}
-                  >
-                    <SelectValue placeholder="Select gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                {errors.gender && (
-                  <p className="mt-1 text-xs text-red-500">{errors.gender}</p>
+                  <p className="mt-1 text-sm text-red-600">{errors.email}</p>
                 )}
               </div>
             </div>
@@ -363,10 +148,10 @@ export default function SignupPage() {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  className={errors.password ? "border-red-500" : ""}
+                  error={errors.password}
                 />
                 {errors.password && (
-                  <p className="mt-1 text-xs text-red-500">{errors.password}</p>
+                  <p className="mt-1 text-sm text-red-600">{errors.password}</p>
                 )}
               </div>
             </div>
@@ -382,10 +167,123 @@ export default function SignupPage() {
                   required
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className={errors.confirmPassword ? "border-red-500" : ""}
+                  error={errors.confirmPassword}
                 />
                 {errors.confirmPassword && (
-                  <p className="mt-1 text-xs text-red-500">{errors.confirmPassword}</p>
+                  <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="firstName">First name</Label>
+              <div className="mt-1">
+                <Input
+                  id="firstName"
+                  name="firstName"
+                  type="text"
+                  autoComplete="given-name"
+                  required
+                  value={formData.firstName}
+                  onChange={handleChange}
+                  error={errors.firstName}
+                />
+                {errors.firstName && (
+                  <p className="mt-1 text-sm text-red-600">{errors.firstName}</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="lastName">Last name</Label>
+              <div className="mt-1">
+                <Input
+                  id="lastName"
+                  name="lastName"
+                  type="text"
+                  autoComplete="family-name"
+                  required
+                  value={formData.lastName}
+                  onChange={handleChange}
+                  error={errors.lastName}
+                />
+                {errors.lastName && (
+                  <p className="mt-1 text-sm text-red-600">{errors.lastName}</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="phone">Phone number (optional)</Label>
+              <div className="mt-1">
+                <Input
+                  id="phone"
+                  name="phone"
+                  type="tel"
+                  autoComplete="tel"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  error={errors.phone}
+                />
+                {errors.phone && (
+                  <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label>Date of birth</Label>
+              <div className="mt-1">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !formData.dateOfBirth && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formData.dateOfBirth ? (
+                        format(formData.dateOfBirth, "PPP")
+                      ) : (
+                        <span>Pick a date</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <EnhancedCalendar
+                      mode="single"
+                      selected={formData.dateOfBirth}
+                      onSelect={handleDateChange}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                {errors.dateOfBirth && (
+                  <p className="mt-1 text-sm text-red-600">{errors.dateOfBirth}</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label>Gender</Label>
+              <div className="mt-1">
+                <Select
+                  value={formData.gender}
+                  onValueChange={handleGenderChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.gender && (
+                  <p className="mt-1 text-sm text-red-600">{errors.gender}</p>
                 )}
               </div>
             </div>
@@ -397,9 +295,13 @@ export default function SignupPage() {
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-                Create account
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating account...
+                  </>
+                ) : (
+                  "Create account"
+                )}
               </Button>
             </div>
           </form>

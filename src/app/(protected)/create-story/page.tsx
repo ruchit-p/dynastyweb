@@ -18,6 +18,7 @@ import LocationPicker from "@/components/LocationPicker"
 import { useToast } from "@/components/ui/use-toast"
 import { FamilyMemberSelect } from "@/components/FamilyMemberSelect"
 import { createStory } from "@/utils/functionUtils"
+import { supabase } from "@/lib/supabase"
 
 type BlockType = "text" | "image" | "video" | "audio"
 
@@ -37,7 +38,7 @@ interface Location {
 
 export default function CreateStoryPage() {
   const router = useRouter()
-  const { currentUser, firestoreUser } = useAuth()
+  const { user } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [title, setTitle] = useState("")
@@ -82,27 +83,31 @@ export default function CreateStoryPage() {
 
   // Check if user has a family tree ID
   useEffect(() => {
-    if (!currentUser?.uid) {
+    if (!user?.id) {
       console.log("No user ID available");
       return;
     }
 
-    if (!firestoreUser) {
-      console.log("No Firestore user data available");
-      return;
+    const checkFamilyTree = async () => {
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('family_tree_id')
+        .eq('id', user.id)
+        .single()
+
+      if (error || !userData?.family_tree_id) {
+        console.error("No family tree ID found in user document");
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "You need to be part of a family tree to create stories. Please create or join a family tree first."
+        });
+        router.push("/family-tree");
+      }
     }
 
-    console.log("Firestore user data:", firestoreUser);
-    if (!firestoreUser.familyTreeId) {
-      console.error("No family tree ID found in user document");
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "You need to be part of a family tree to create stories. Please create or join a family tree first."
-      });
-      router.push("/family-tree");
-    }
-  }, [currentUser?.uid, firestoreUser, router, toast]);
+    checkFamilyTree();
+  }, [user?.id, router, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -116,7 +121,13 @@ export default function CreateStoryPage() {
       return
     }
 
-    if (!firestoreUser?.familyTreeId) {
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('family_tree_id')
+      .eq('id', user?.id)
+      .single()
+
+    if (userError || !userData?.family_tree_id) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -193,7 +204,7 @@ export default function CreateStoryPage() {
 
       // Create the story using the Cloud Function
       await createStory({
-        authorID: currentUser!.uid,
+        authorID: user!.id,
         title: title.trim(),
         subtitle: subtitle.trim() || undefined,
         eventDate: date,
@@ -201,7 +212,7 @@ export default function CreateStoryPage() {
         privacy: privacy === "personal" ? "privateAccess" : privacy,
         customAccessMembers: privacy === "custom" ? customAccessMembers : undefined,
         blocks: processedBlocks,
-        familyTreeId: firestoreUser!.familyTreeId,
+        familyTreeId: userData.family_tree_id,
         peopleInvolved: taggedMembers
       });
       

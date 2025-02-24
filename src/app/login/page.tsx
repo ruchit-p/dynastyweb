@@ -1,16 +1,14 @@
 "use client"
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useToast } from '@/components/ui/use-toast';
 import { Loader2 } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
-import { loginFormSchema, type LoginFormData, validateFormData } from '@/lib/validation';
+import { validateFormData, loginFormSchema, type LoginFormData } from '@/lib/validation';
+import { useAuth } from '@/lib/client/hooks/useAuth';
 
 export default function LoginPage() {
   const [formData, setFormData] = useState<LoginFormData>({
@@ -19,24 +17,7 @@ export default function LoginPage() {
   });
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
-  const { signIn, currentUser } = useAuth();
-  const { toast } = useToast();
-
-  // Add effect to handle post-login navigation
-  useEffect(() => {
-    if (currentUser) {
-      if (!currentUser.emailVerified) {
-        toast({
-          title: "Email verification required",
-          description: "Please verify your email address to continue.",
-        });
-        router.push('/verify-email');
-      } else {
-        router.push('/family-tree');
-      }
-    }
-  }, [currentUser, router, toast]);
+  const { login } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -56,7 +37,7 @@ export default function LoginPage() {
     const validation = validateFormData(loginFormSchema, formData);
     if (!validation.success) {
       const newErrors: { [key: string]: string } = {};
-      validation.errors?.forEach((error) => {
+      validation.errors.forEach((error) => {
         newErrors[error.field] = error.message;
       });
       setErrors(newErrors);
@@ -65,18 +46,8 @@ export default function LoginPage() {
     }
 
     try {
-      await signIn(formData.email, formData.password);
-      toast({
-        title: "Welcome back!",
-        description: "You have successfully logged in.",
-      });
-    } catch (error) {
-      console.error("Login error:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to log in",
-        variant: "destructive",
-      });
+      await login(formData);
+      // Navigation and toast notifications are handled by AuthContext
     } finally {
       setIsLoading(false);
     }
@@ -120,10 +91,10 @@ export default function LoginPage() {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className={errors.email ? "border-red-500" : ""}
+                  error={errors.email}
                 />
                 {errors.email && (
-                  <p className="mt-1 text-xs text-red-500">{errors.email}</p>
+                  <p className="mt-1 text-sm text-red-600">{errors.email}</p>
                 )}
               </div>
             </div>
@@ -139,10 +110,10 @@ export default function LoginPage() {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  className={errors.password ? "border-red-500" : ""}
+                  error={errors.password}
                 />
                 {errors.password && (
-                  <p className="mt-1 text-xs text-red-500">{errors.password}</p>
+                  <p className="mt-1 text-sm text-red-600">{errors.password}</p>
                 )}
               </div>
             </div>
@@ -165,9 +136,13 @@ export default function LoginPage() {
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-                Sign in
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign in"
+                )}
               </Button>
             </div>
           </form>

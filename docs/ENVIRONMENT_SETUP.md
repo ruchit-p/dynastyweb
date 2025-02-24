@@ -1,13 +1,12 @@
-# Firebase Environment Setup Guide
+# Supabase Environment Setup Guide
 
 ## Overview
-This document outlines the setup and usage of development and production environments for the Dynasty web application. The system uses Firebase Emulators for local development and real Firebase services for production.
+This document outlines the setup and usage of development and production environments for the Dynasty web application. The system uses Supabase for both local development and production environments.
 
 ## Table of Contents
 - [Environment Configuration](#environment-configuration)
 - [Development Environment](#development-environment)
 - [Production Environment](#production-environment)
-- [Firebase Emulators](#firebase-emulators)
 - [Available Scripts](#available-scripts)
 - [Best Practices](#best-practices)
 - [Troubleshooting](#troubleshooting)
@@ -16,21 +15,19 @@ This document outlines the setup and usage of development and production environ
 
 ### Development (.env.development)
 ```env
-NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true
-# Firebase Development Configuration
-NEXT_PUBLIC_FIREBASE_API_KEY=your-dev-api-key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-dev-auth-domain
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=dynasty-eba63
+# Supabase Development Configuration
+NEXT_PUBLIC_SUPABASE_URL=your-dev-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-dev-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-dev-service-role-key
 # ... additional configuration
 ```
 
 ### Production (.env.production)
 ```env
-NEXT_PUBLIC_USE_FIREBASE_EMULATOR=false
-# Firebase Production Configuration
-NEXT_PUBLIC_FIREBASE_API_KEY=your-prod-api-key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-prod-auth-domain
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=dynasty-eba63
+# Supabase Production Configuration
+NEXT_PUBLIC_SUPABASE_URL=your-prod-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-prod-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-prod-service-role-key
 # ... additional configuration
 ```
 
@@ -42,27 +39,24 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=dynasty-eba63
    cp .env.development .env.local
    ```
 
-2. Update `.env.local` with your Firebase development configuration
+2. Update `.env.local` with your Supabase development configuration
 
 3. Start the development environment:
    ```bash
-   npm run dev:emulator
+   npm run dev
    ```
 
 ### Features
-- Local Firebase emulators for:
-  - Authentication (Port: 9099)
-  - Firestore (Port: 8080)
-  - Storage (Port: 9199)
-  - Functions (Port: 5001)
-- Automatic data persistence between sessions
-- Hot reloading with Next.js development server
-- Emulator UI available at http://127.0.0.1:4000
+- Local Next.js development server
+- Hot reloading
+- Connection to Supabase development project
+- Database migrations and seeding
+- Edge Functions development
 
 ## Production Environment
 
 ### Setup
-1. Ensure `.env.production` is configured with production Firebase credentials
+1. Ensure `.env.production` is configured with production Supabase credentials
 2. Build the application:
    ```bash
    npm run build
@@ -73,123 +67,95 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=dynasty-eba63
    ```
 
 ### Features
-- Connects to real Firebase services
+- Connects to production Supabase project
 - Production-optimized build
-- No emulator connections
 - Analytics enabled
-
-## Firebase Emulators
-
-### Available Emulators
-- **Authentication**: User authentication and management
-  - Port: 9099
-  - URL: http://127.0.0.1:9099
-
-- **Firestore**: Database emulation
-  - Port: 8080
-  - URL: http://127.0.0.1:8080
-
-- **Storage**: File storage emulation
-  - Port: 9199
-  - URL: http://127.0.0.1:9199
-
-- **Functions**: Cloud Functions emulation
-  - Port: 5001
-  - URL: http://127.0.0.1:5001
-
-### Data Persistence
-- Emulator data is automatically saved to `./emulator-data/`
-- Data is imported on startup and exported on shutdown
-- Manual export available via `npm run emulator:export`
+- Edge Functions deployment
 
 ## Available Scripts
 
 ### Development
 - `npm run dev`: Start Next.js development server
-- `npm run dev:emulator`: Start emulators and development server
-- `npm run emulator:start`: Start emulators only
-- `npm run emulator:export`: Export emulator data
+- `npm run db:migrate`: Run database migrations
+- `npm run db:seed`: Seed the database with test data
+- `npm run edge:dev`: Start Edge Functions development server
 
 ### Production
 - `npm run build`: Create production build
 - `npm run start`: Start production server
 - `npm run lint`: Run linting checks
+- `npm run edge:deploy`: Deploy Edge Functions
 
 ## Best Practices
 
 ### Version Control
 - Add `.env.local`, `.env.development`, and `.env.production` to `.gitignore`
 - Maintain an `.env.example` file in version control
-- Never commit actual Firebase credentials
+- Never commit actual Supabase credentials
 
 ### Development Workflow
-1. Always use emulators for local development
-2. Export emulator data regularly
-3. Test thoroughly in emulators before deploying
-4. Use different Firebase projects for development and production
+1. Use a development Supabase project for local work
+2. Run migrations before starting development
+3. Test thoroughly in development before deploying
+4. Use different Supabase projects for development and production
 
 ### Security
 - Keep production credentials secure
 - Don't share development credentials unnecessarily
 - Regularly rotate API keys
-- Use appropriate Firebase security rules
+- Use appropriate Row Level Security (RLS) policies
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Emulators Won't Start**
-   ```bash
-   # Check if ports are in use
-   lsof -i :9099  # Auth
-   lsof -i :8080  # Firestore
-   lsof -i :9199  # Storage
-   lsof -i :5001  # Functions
-   ```
-
-2. **Firebase Connection Issues**
+1. **Database Connection Issues**
    - Verify environment variables are set correctly
    - Check console for connection errors
-   - Ensure emulators are running (for development)
+   - Ensure your IP is allowed in Supabase dashboard
 
-3. **Data Persistence Issues**
-   - Check write permissions for `./emulator-data/`
-   - Verify emulator shutdown was clean
-   - Try clearing emulator data and starting fresh
+2. **Authentication Problems**
+   - Verify Supabase URL and anon key
+   - Check email provider settings in Supabase dashboard
+   - Review authentication logs in Supabase dashboard
+
+3. **Edge Functions Issues**
+   - Verify Edge Functions are deployed
+   - Check function logs in Supabase dashboard
+   - Ensure correct environment variables are set
 
 ### Debug Mode
-Enable debug logging in Firebase by adding to your code:
-```javascript
+Enable debug logging by adding to your code:
+```typescript
 if (process.env.NODE_ENV === 'development') {
-  console.log('Firebase Config:', firebaseConfig);
-  console.log('Emulator Mode:', process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR);
+  console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+  console.log('Environment:', process.env.NODE_ENV);
 }
 ```
 
-## Firebase Configuration
+## Supabase Configuration
 
 ### Service Integration
-The application automatically connects to the appropriate Firebase services based on the environment:
+The application automatically connects to Supabase services:
 
 ```typescript
-// src/lib/firebase.ts
-if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099');
-  connectFirestoreEmulator(db, '127.0.0.1', 8080);
-  connectStorageEmulator(storage, '127.0.0.1', 9199);
-  connectFunctionsEmulator(functions, '127.0.0.1', 5001);
-}
+// src/lib/supabase.ts
+import { createClient } from '@supabase/supabase-js'
+
+export const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  }
+)
 ```
 
 ### Analytics
-Analytics is only enabled in production and when supported by the browser:
+Analytics is handled through Supabase's built-in analytics features:
 ```typescript
-let analytics = null;
-if (typeof window !== 'undefined') {
-  isSupported().then(supported => {
-    if (supported) {
-      analytics = getAnalytics(app);
-    }
-  });
-}
+// No additional setup required - analytics are available in the Supabase dashboard
 ``` 

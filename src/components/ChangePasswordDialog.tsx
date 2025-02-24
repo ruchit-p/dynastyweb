@@ -13,7 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth"
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import type { Database } from '@/lib/shared/types/supabase'
 
 interface ChangePasswordDialogProps {
   open: boolean
@@ -21,13 +22,14 @@ interface ChangePasswordDialogProps {
 }
 
 export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialogProps) {
-  const { currentUser } = useAuth()
+  const { user } = useAuth()
   const { toast } = useToast()
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [isChanging, setIsChanging] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const supabase = createClientComponentClient<Database>()
 
   const resetForm = () => {
     setCurrentPassword("")
@@ -66,16 +68,26 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
     try {
       setIsChanging(true)
 
-      if (!currentUser?.email) {
+      if (!user?.email) {
         throw new Error("No user email found")
       }
 
-      // Re-authenticate user
-      const credential = EmailAuthProvider.credential(currentUser.email, currentPassword)
-      await reauthenticateWithCredential(currentUser, credential)
+      // First verify the current password by signing in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      })
+
+      if (signInError) {
+        throw new Error("Current password is incorrect")
+      }
 
       // Update password
-      await updatePassword(currentUser, newPassword)
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      })
+
+      if (updateError) throw updateError
 
       toast({
         title: "Success",

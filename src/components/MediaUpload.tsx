@@ -1,45 +1,63 @@
 "use client"
 
-import { useState, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Upload, X } from "lucide-react"
-import Image from "next/image"
+import { useRef, useState } from 'react'
+import { toast } from '@/components/ui/use-toast'
+import { uploadFile } from '@/app/actions/storage'
+import { StorageBucket } from '@/lib/shared/types/storage'
 
-interface MediaUploadProps {
-  type: "image" | "video" | "audio"
-  onFileSelect: (file: File) => void
+// MARK: - Types
+export type MediaUploadProps = {
+  type: 'image' | 'video' | 'audio'
+  onFileSelect: (url: string) => void
   value?: string
   onRemove?: () => void
+  bucket?: StorageBucket
 }
 
-export default function MediaUpload({ type, onFileSelect, value, onRemove }: MediaUploadProps) {
+const MEDIA_CONFIG = {
+  image: {
+    accept: '.png,.jpg,.jpeg,.gif,.webp',
+    bucket: 'stories' as StorageBucket,
+    maxSize: '10MB'
+  },
+  video: {
+    accept: '.mp4,.webm,.mov,.avi',
+    bucket: 'stories' as StorageBucket,
+    maxSize: '100MB'
+  },
+  audio: {
+    accept: '.mp3,.wav,.m4a,.aac',
+    bucket: 'stories' as StorageBucket,
+    maxSize: '50MB'
+  }
+}
+
+export default function MediaUpload({ 
+  type, 
+  onFileSelect, 
+  value, 
+  onRemove,
+  bucket 
+}: MediaUploadProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [preview, setPreview] = useState<string | null>(value || null)
+  const [isUploading, setIsUploading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const acceptedTypes = {
-    image: ".png,.jpg,.jpeg,.gif,.webp",
-    video: ".mp4,.webm,.mov,.avi",
-    audio: ".mp3,.wav,.m4a,.aac",
-  }
-
-  const maxSizes = {
-    image: "10MB",
-    video: "100MB",
-    audio: "50MB"
-  }
+  const config = MEDIA_CONFIG[type]
+  const targetBucket = bucket || config.bucket
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (e.type === "dragenter" || e.type === "dragover") {
+    if (e.type === 'dragenter' || e.type === 'dragover') {
       setIsDragging(true)
-    } else if (e.type === "dragleave") {
+    } else if (e.type === 'dragleave') {
       setIsDragging(false)
     }
   }
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
@@ -47,26 +65,53 @@ export default function MediaUpload({ type, onFileSelect, value, onRemove }: Med
     const files = Array.from(e.dataTransfer.files)
     const file = files[0]
     
-    // Check if the file extension matches any of the accepted types
-    const fileExtension = file.name.split('.').pop()?.toLowerCase()
-    const isAcceptedVideo = type === 'video' && 
-      ['mp4', 'webm', 'mov', 'avi'].includes(fileExtension || '')
-    
-    if (file && (file.type.startsWith(type) || isAcceptedVideo)) {
-      handleFile(file)
+    if (file) {
+      await handleFile(file)
     }
   }
 
-  const handleFile = (file: File) => {
-    onFileSelect(file)
-    if (type === "image") {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setPreview(reader.result as string)
+  const handleFile = async (file: File) => {
+    try {
+      setIsUploading(true)
+
+      // Check file type
+      const fileExtension = file.name.split('.').pop()?.toLowerCase()
+      const isAcceptedType = config.accept
+        .split(',')
+        .some(ext => ext.includes(fileExtension || ''))
+
+      if (!isAcceptedType) {
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'File type not supported'
+        })
+        return
       }
-      reader.readAsDataURL(file)
-    } else {
-      setPreview(URL.createObjectURL(file))
+
+      // Upload file
+      const { url, error } = await uploadFile(file, targetBucket)
+
+      if (error) {
+        throw new Error(error)
+      }
+
+      // Update preview
+      if (type === 'image') {
+        setPreview(url)
+      } else {
+        setPreview(URL.createObjectURL(file))
+      }
+
+      onFileSelect(url)
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Upload Error',
+        description: error.message || 'Failed to upload file'
+      })
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -81,62 +126,97 @@ export default function MediaUpload({ type, onFileSelect, value, onRemove }: Med
 
   return (
     <div
-      className={`relative border-2 border-dashed rounded-lg p-4 transition-colors ${
-        isDragging ? "border-[#0A5C36] bg-[#0A5C36]/5" : "border-gray-300"
-      }`}
+      className={`relative border-2 border-dashed rounded-lg p-4 text-center cursor-pointer
+        ${isDragging ? 'border-primary bg-primary/10' : 'border-gray-300'}
+        ${isUploading ? 'opacity-50 cursor-wait' : ''}`}
       onDragEnter={handleDrag}
       onDragLeave={handleDrag}
       onDragOver={handleDrag}
       onDrop={handleDrop}
+      onClick={handleClick}
     >
       <input
         ref={inputRef}
         type="file"
-        accept={acceptedTypes[type]}
+        accept={config.accept}
         className="hidden"
         onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+        disabled={isUploading}
       />
 
       {preview ? (
         <div className="relative">
-          {type === "image" && (
-            <Image
+          {type === 'image' && (
+            <img
               src={preview}
               alt="Preview"
-              width={400}
-              height={300}
-              className="rounded-lg object-cover"
+              className="max-w-full h-auto rounded"
             />
           )}
-          {type === "video" && (
-            <video src={preview} controls className="w-full rounded-lg" />
+          {type === 'video' && (
+            <video
+              src={preview}
+              controls
+              className="max-w-full h-auto rounded"
+            />
           )}
-          {type === "audio" && (
-            <audio src={preview} controls className="w-full" />
+          {type === 'audio' && (
+            <audio
+              src={preview}
+              controls
+              className="max-w-full"
+            />
           )}
-          <Button
-            variant="destructive"
-            size="icon"
-            className="absolute top-2 right-2"
-            onClick={handleRemove}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleRemove()
+            }}
+            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1
+              hover:bg-red-600 transition-colors"
           >
-            <X className="h-4 w-4" />
-          </Button>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
         </div>
       ) : (
-        <div
-          className="flex flex-col items-center justify-center py-8 cursor-pointer"
-          onClick={handleClick}
-        >
-          <Upload className="h-8 w-8 text-gray-400 mb-2" />
-          <p className="text-sm text-gray-600">
-            Click to upload or drag and drop
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            {type === "image" && `PNG, JPG up to ${maxSizes.image}`}
-            {type === "video" && `MP4, WebM, MOV, AVI up to ${maxSizes.video}`}
-            {type === "audio" && `MP3, WAV up to ${maxSizes.audio}`}
-          </p>
+        <div className="space-y-2">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="mx-auto h-12 w-12 text-gray-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+            />
+          </svg>
+          <div className="text-sm text-gray-600">
+            {isUploading ? (
+              'Uploading...'
+            ) : (
+              <>
+                <span className="font-semibold">Click to upload</span> or drag and drop
+                <p className="text-xs text-gray-500">
+                  {type.toUpperCase()} (max {config.maxSize})
+                </p>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

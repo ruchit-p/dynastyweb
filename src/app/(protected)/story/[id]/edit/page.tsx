@@ -2,24 +2,24 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { doc, getDoc } from "firebase/firestore"
-import { db } from "@/lib/firebase"
 import { useAuth } from "@/context/AuthContext"
-import { uploadMedia } from "@/utils/mediaUtils"
-import { Button } from "@/components/ui/button"
+import { useToast } from "@/components/ui/use-toast"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CalendarIcon, Type, Image as ImageIcon, Video, Mic, GripVertical, X } from "lucide-react"
-import { format } from "date-fns"
-import MediaUpload from "@/components/MediaUpload"
-import AudioRecorder from "@/components/AudioRecorder"
-import LocationPicker from "@/components/LocationPicker"
-import { useToast } from "@/components/ui/use-toast"
+import { Button } from "@/components/ui/button"
+import { X, GripVertical } from "lucide-react"
 import { FamilyMemberSelect } from "@/components/FamilyMemberSelect"
-import { updateStory } from "@/utils/functionUtils"
+import { DatePicker } from "@/components/ui/date-picker"
+import { LocationPicker } from "@/components/LocationPicker"
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import type { Database } from '@/lib/shared/types/supabase'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 type BlockType = "text" | "image" | "video" | "audio"
 type PrivacyLevel = "family" | "personal" | "custom"
@@ -39,7 +39,7 @@ interface Location {
 }
 
 interface StoryBlock {
-  localId: string;
+  local_id: string;
   type: BlockType;
   data: string;
 }
@@ -47,26 +47,34 @@ interface StoryBlock {
 export default function EditStoryPage() {
   const { id } = useParams()
   const router = useRouter()
-  const { currentUser } = useAuth()
+  const { user } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [title, setTitle] = useState("")
   const [subtitle, setSubtitle] = useState("")
   const [date, setDate] = useState<Date>(new Date())
   const [location, setLocation] = useState<Location | undefined>(undefined)
-  const [privacy, setPrivacy] = useState<"family" | "personal" | "custom">("family")
+  const [privacy, setPrivacy] = useState<PrivacyLevel>("family")
   const [customAccessMembers, setCustomAccessMembers] = useState<string[]>([])
   const [taggedMembers, setTaggedMembers] = useState<string[]>([])
   const [blocks, setBlocks] = useState<Block[]>([])
   const [showLocationPicker, setShowLocationPicker] = useState(false)
+  const supabase = createClientComponentClient<Database>()
 
   useEffect(() => {
     const fetchStory = async () => {
-      if (!id || !currentUser) return
+      if (!id || !user) return
 
       try {
-        const storyDoc = await getDoc(doc(db, "stories", id as string))
-        if (!storyDoc.exists()) {
+        const { data: storyData, error } = await supabase
+          .from('stories')
+          .select('*')
+          .eq('id', id)
+          .single()
+
+        if (error) throw error
+
+        if (!storyData) {
           toast({
             variant: "destructive",
             title: "Error",
@@ -75,11 +83,9 @@ export default function EditStoryPage() {
           router.push("/feed")
           return
         }
-
-        const storyData = storyDoc.data()
         
         // Verify ownership
-        if (storyData.authorID !== currentUser.uid) {
+        if (storyData.author_id !== user.id) {
           toast({
             variant: "destructive",
             title: "Error",
@@ -92,15 +98,15 @@ export default function EditStoryPage() {
         // Set form data
         setTitle(storyData.title)
         setSubtitle(storyData.subtitle || "")
-        setDate(storyData.eventDate ? new Date(storyData.eventDate.seconds * 1000) : new Date())
+        setDate(storyData.event_date ? new Date(storyData.event_date) : new Date())
         setLocation(storyData.location)
-        setPrivacy(storyData.privacy === "privateAccess" ? "personal" : storyData.privacy)
-        setCustomAccessMembers(storyData.customAccessMembers || [])
-        setTaggedMembers(storyData.peopleInvolved || [])
+        setPrivacy(storyData.privacy)
+        setCustomAccessMembers(storyData.custom_access_members || [])
+        setTaggedMembers(storyData.people_involved || [])
 
         // Convert story blocks to form blocks
         const formBlocks = storyData.blocks.map((block: StoryBlock) => ({
-          id: block.localId,
+          id: block.local_id,
           type: block.type,
           content: block.data
         }))
@@ -118,7 +124,7 @@ export default function EditStoryPage() {
     }
 
     fetchStory()
-  }, [id, currentUser, router, toast])
+  }, [id, user, router, toast, supabase])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -132,7 +138,7 @@ export default function EditStoryPage() {
       return
     }
 
-    if (!id || !currentUser) {
+    if (!id || !user) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -150,7 +156,7 @@ export default function EditStoryPage() {
           if (block.type === 'text') {
             return {
               data: block.content as string,
-              localId: block.id,
+              local_id: block.id,
               type: block.type
             }
           }
@@ -158,35 +164,28 @@ export default function EditStoryPage() {
           // For media blocks, check if the content is a File (new upload) or URL (already uploaded)
           if (block.content instanceof File) {
             try {
-              const url = await uploadMedia(
-                block.content,
-                id as string,
-                block.type,
-                {
-                  onProgress: (progress) => {
-                    setBlocks(currentBlocks =>
-                      currentBlocks.map(b =>
-                        b.id === block.id
-                          ? { ...b, uploadProgress: progress }
-                          : b
-                      )
-                    )
-                  },
-                  onError: (error) => {
-                    setBlocks(currentBlocks =>
-                      currentBlocks.map(b =>
-                        b.id === block.id
-                          ? { ...b, error: error.message }
-                          : b
-                      )
-                    )
-                    throw error // Re-throw to handle in the outer catch
-                  }
-                }
-              )
+              // Upload to Supabase Storage
+              const fileExt = block.content.name.split('.').pop()
+              const filePath = `${id}/${block.id}.${fileExt}`
+              
+              const { data: uploadData, error: uploadError } = await supabase
+                .storage
+                .from('story-media')
+                .upload(filePath, block.content, {
+                  upsert: true
+                })
+
+              if (uploadError) throw uploadError
+
+              // Get public URL
+              const { data: { publicUrl } } = supabase
+                .storage
+                .from('story-media')
+                .getPublicUrl(filePath)
+
               return {
-                data: url,
-                localId: block.id,
+                data: publicUrl,
+                local_id: block.id,
                 type: block.type
               }
             } catch (error) {
@@ -197,29 +196,37 @@ export default function EditStoryPage() {
 
           return {
             data: block.content as string,
-            localId: block.id,
+            local_id: block.id,
             type: block.type
           }
         })
       )
 
-      // Update the story using the Cloud Function
-      await updateStory(id as string, currentUser.uid, {
-        title: title.trim(),
-        subtitle: subtitle.trim() || undefined,
-        eventDate: date,
-        location,
-        privacy: privacy === "personal" ? "privateAccess" : privacy,
-        customAccessMembers: privacy === "custom" ? customAccessMembers : undefined,
-        blocks: processedBlocks,
-        peopleInvolved: taggedMembers
-      });
-      
+      // Update story in Supabase
+      const { error: updateError } = await supabase
+        .from('stories')
+        .update({
+          title,
+          subtitle: subtitle || null,
+          event_date: date.toISOString(),
+          location,
+          privacy,
+          custom_access_members: privacy === 'custom' ? customAccessMembers : [],
+          people_involved: taggedMembers,
+          blocks: processedBlocks,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .eq('author_id', user.id)
+
+      if (updateError) throw updateError
+
       toast({
         title: "Success",
-        description: "Story updated successfully!"
+        description: "Story updated successfully",
       })
-      router.push(`/story/${id}`) // Redirect to story page after successful update
+
+      router.push(`/story/${id}`)
     } catch (error) {
       console.error("Error updating story:", error)
       toast({
@@ -306,57 +313,53 @@ export default function EditStoryPage() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Date</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant={"outline"}
-                  className={`w-full justify-start text-left font-normal`}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {format(date, "PPP")}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar 
-                  mode="single" 
-                  selected={date} 
-                  onSelect={handleDateSelect}
-                  initialFocus 
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
+        <div className="space-y-2">
+          <Label>Event Date</Label>
+          <DatePicker
+            date={date}
+            onSelect={handleDateSelect}
+          />
+        </div>
 
-          <div className="space-y-2">
-            <Label>Location</Label>
-            <div className="relative">
+        <div className="space-y-2">
+          <Label>Location</Label>
+          <div className="flex items-center gap-2">
+            {location ? (
+              <div className="flex-1">
+                <Input
+                  value={location.address}
+                  readOnly
+                  onClick={() => setShowLocationPicker(true)}
+                  className="cursor-pointer"
+                />
+              </div>
+            ) : (
               <Button
                 type="button"
                 variant="outline"
-                className="w-full justify-start text-left font-normal"
-                onClick={() => setShowLocationPicker(!showLocationPicker)}
+                className="flex-1"
+                onClick={() => setShowLocationPicker(true)}
               >
-                {location ? (
-                  <span className="truncate">{location.address}</span>
-                ) : (
-                  <span className="text-muted-foreground">Select location</span>
-                )}
+                Add Location
               </Button>
-              {showLocationPicker && (
-                <div className="absolute z-10 mt-1 w-[600px] bg-white rounded-lg shadow-lg border p-4">
-                  <LocationPicker
-                    onLocationSelect={handleLocationSelect}
-                    defaultLocation={location}
-                    isOpen={showLocationPicker}
-                    onClose={() => setShowLocationPicker(false)}
-                  />
-                </div>
-              )}
-            </div>
+            )}
+            {location && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setLocation(undefined)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
           </div>
+          {showLocationPicker && (
+            <LocationPicker
+              onSelect={handleLocationSelect}
+              onClose={() => setShowLocationPicker(false)}
+            />
+          )}
         </div>
 
         <div className="space-y-2">
@@ -397,96 +400,149 @@ export default function EditStoryPage() {
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">Story Content</h2>
-            <div className="flex items-center gap-2 ml-auto">
-              <Button type="button" variant="outline" size="sm" onClick={() => addBlock("text")}>
-                <Type className="h-4 w-4 mr-2" />
-                Add Text
+          {blocks.map((block) => (
+            <div key={block.id} className="group relative border rounded-lg p-4">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute -right-2 -top-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => removeBlock(block.id)}
+              >
+                <X className="h-4 w-4" />
               </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => addBlock("image")}>
-                <ImageIcon className="h-4 w-4 mr-2" />
-                Add Image
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => addBlock("video")}>
-                <Video className="h-4 w-4 mr-2" />
-                Add Video
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => addBlock("audio")}>
-                <Mic className="h-4 w-4 mr-2" />
-                Add Audio
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {blocks.map((block) => (
-              <div key={block.id} className="group relative border rounded-lg p-4">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute -right-2 -top-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => removeBlock(block.id)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-                <div className="absolute left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-move">
-                  <GripVertical className="h-4 w-4 text-gray-400" />
-                </div>
-                {block.type === "text" && (
-                  <textarea
-                    value={block.content as string}
-                    onChange={(e) => updateBlock(block.id, e.target.value)}
-                    placeholder="Start writing..."
-                    className="w-full min-h-[100px] p-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-[#0A5C36] focus:border-transparent"
-                  />
-                )}
-                {(block.type === "image" || block.type === "video" || block.type === "audio") && (
-                  <div className="space-y-2">
-                    <MediaUpload
-                      type={block.type}
-                      onFileSelect={(file) => handleFileSelect(block.id, file)}
-                      value={block.content instanceof File ? '' : block.content as string}
-                      onRemove={() => updateBlock(block.id, "")}
-                    />
-                    {block.uploadProgress !== undefined && block.uploadProgress < 100 && (
-                      <div className="w-full bg-gray-200 rounded-full h-2.5">
-                        <div
-                          className="bg-[#0A5C36] h-2.5 rounded-full transition-all duration-300"
-                          style={{ width: `${block.uploadProgress}%` }}
-                        />
-                      </div>
-                    )}
-                    {block.error && (
-                      <div className="text-sm text-red-500 mt-1">
-                        {block.error}
-                      </div>
-                    )}
-                    {block.type === "audio" && (
-                      <>
-                        <div className="text-sm text-gray-500 text-center">or</div>
-                        <AudioRecorder
-                          onRecordingComplete={(blob) => handleAudioRecord(block.id, blob)}
-                        />
-                      </>
-                    )}
-                  </div>
-                )}
+              <div className="absolute left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-move">
+                <GripVertical className="h-4 w-4 text-gray-400" />
               </div>
-            ))}
-          </div>
+              {block.type === "text" && (
+                <textarea
+                  value={block.content as string}
+                  onChange={(e) => updateBlock(block.id, e.target.value)}
+                  placeholder="Start writing..."
+                  className="w-full min-h-[100px] p-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-[#0A5C36] focus:border-transparent"
+                />
+              )}
+              {block.type === "image" && (
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handleFileSelect(block.id, file)
+                    }}
+                    className="hidden"
+                    id={`image-upload-${block.id}`}
+                  />
+                  <label
+                    htmlFor={`image-upload-${block.id}`}
+                    className="cursor-pointer block w-full aspect-video bg-gray-100 rounded-lg flex items-center justify-center"
+                  >
+                    {typeof block.content === "string" && block.content ? (
+                      <img
+                        src={block.content}
+                        alt="Story image"
+                        className="w-full h-full object-cover rounded-lg"
+                      />
+                    ) : (
+                      <div className="text-gray-500">Click to upload image</div>
+                    )}
+                  </label>
+                </div>
+              )}
+              {block.type === "video" && (
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handleFileSelect(block.id, file)
+                    }}
+                    className="hidden"
+                    id={`video-upload-${block.id}`}
+                  />
+                  <label
+                    htmlFor={`video-upload-${block.id}`}
+                    className="cursor-pointer block w-full aspect-video bg-gray-100 rounded-lg flex items-center justify-center"
+                  >
+                    {typeof block.content === "string" && block.content ? (
+                      <video
+                        src={block.content}
+                        controls
+                        className="w-full h-full rounded-lg"
+                      />
+                    ) : (
+                      <div className="text-gray-500">Click to upload video</div>
+                    )}
+                  </label>
+                </div>
+              )}
+              {block.type === "audio" && (
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handleFileSelect(block.id, file)
+                    }}
+                    className="hidden"
+                    id={`audio-upload-${block.id}`}
+                  />
+                  <label
+                    htmlFor={`audio-upload-${block.id}`}
+                    className="cursor-pointer block w-full p-4 bg-gray-100 rounded-lg flex items-center justify-center"
+                  >
+                    {typeof block.content === "string" && block.content ? (
+                      <audio src={block.content} controls className="w-full" />
+                    ) : (
+                      <div className="text-gray-500">Click to upload audio</div>
+                    )}
+                  </label>
+                </div>
+              )}
+              {block.uploadProgress !== undefined && (
+                <div className="mt-2">
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div
+                      className="bg-[#0A5C36] h-2.5 rounded-full"
+                      style={{ width: `${block.uploadProgress}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+              {block.error && (
+                <p className="mt-2 text-sm text-red-600">{block.error}</p>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={() => addBlock("text")}>
+            Add Text
+          </Button>
+          <Button type="button" variant="outline" onClick={() => addBlock("image")}>
+            Add Image
+          </Button>
+          <Button type="button" variant="outline" onClick={() => addBlock("video")}>
+            Add Video
+          </Button>
+          <Button type="button" variant="outline" onClick={() => addBlock("audio")}>
+            Add Audio
+          </Button>
         </div>
 
         <div className="flex justify-end gap-4">
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.back()}
+            onClick={() => router.push(`/story/${id}`)}
           >
             Cancel
           </Button>
-          <Button type="submit">
-            Save Changes
+          <Button type="submit" disabled={loading}>
+            {loading ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </form>

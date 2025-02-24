@@ -4,8 +4,7 @@ import Link from "next/link"
 import { Button } from "./ui/button"
 import { ScrollArea, ScrollBar } from "./ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
-import type { Story } from "@/utils/storyUtils"
-import { Timestamp } from "firebase/firestore"
+import type { Story } from "@/lib/client/utils/storyUtils"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "./ui/card"
 import { Badge } from "./ui/badge"
 
@@ -20,41 +19,26 @@ const getOrdinalSuffix = (day: number): string => {
   }
 };
 
-// Helper function to convert any timestamp-like object to Date
-const toDate = (timestamp: Date | Timestamp | { _seconds: number; _nanoseconds: number } | { seconds: number; nanoseconds: number } | string | undefined | null): Date | null => {
+// Helper function to convert ISO string or Date to Date object
+const toDate = (date: string | Date | null | undefined): Date | null => {
   try {
-    if (!timestamp) return null;
+    if (!date) return null;
 
     // Handle Date object
-    if (timestamp instanceof Date) {
-      return timestamp;
-    }
-
-    // Handle Firestore Timestamp
-    if (timestamp instanceof Timestamp) {
-      return timestamp.toDate();
-    }
-
-    // Handle timestamp-like object with _seconds and _nanoseconds
-    if (typeof timestamp === 'object' && '_seconds' in timestamp && typeof timestamp._seconds === 'number') {
-      return new Date(timestamp._seconds * 1000);
-    }
-
-    // Handle timestamp-like object with seconds and nanoseconds
-    if (typeof timestamp === 'object' && 'seconds' in timestamp && typeof timestamp.seconds === 'number') {
-      return new Date(timestamp.seconds * 1000);
+    if (date instanceof Date) {
+      return date;
     }
 
     // Handle ISO string
-    if (typeof timestamp === 'string') {
-      const date = new Date(timestamp);
-      if (isNaN(date.getTime())) return null;
-      return date;
+    if (typeof date === 'string') {
+      const parsedDate = new Date(date);
+      if (isNaN(parsedDate.getTime())) return null;
+      return parsedDate;
     }
 
     return null;
   } catch (error) {
-    console.error('Error converting timestamp to date:', error);
+    console.error('Error converting date:', error);
     return null;
   }
 };
@@ -67,16 +51,16 @@ const formatDateWithOrdinal = (date: Date): string => {
 };
 
 // Helper function to safely format date
-const formatEventDate = (timestamp: Date | Timestamp | { seconds: number; nanoseconds: number } | string | undefined | null): string | null => {
-  const date = toDate(timestamp);
-  if (!date) return null;
-  return formatDateWithOrdinal(date);
+const formatEventDate = (date: string | Date | null | undefined): string | null => {
+  const parsedDate = toDate(date);
+  if (!parsedDate) return null;
+  return formatDateWithOrdinal(parsedDate);
 };
 
-const formatCreatedDate = (timestamp: Date | Timestamp | { seconds: number; nanoseconds: number } | string | undefined | null): string | null => {
-  const date = toDate(timestamp);
-  if (!date) return null;
-  return formatDateWithOrdinal(date);
+const formatCreatedDate = (date: string | Date | null | undefined): string | null => {
+  const parsedDate = toDate(date);
+  if (!parsedDate) return null;
+  return formatDateWithOrdinal(parsedDate);
 };
 
 interface StoryProps {
@@ -137,7 +121,7 @@ export function StoryCard({ story, currentUserId }: StoryProps) {
               <div>
                 <div className="flex items-center gap-1">
                   <p className="font-medium leading-none">{story.author.displayName}</p>
-                  {story.authorID === currentUserId && story.privacy === "privateAccess" && (
+                  {story.authorID === currentUserId && story.privacy === "personal" && (
                     <Lock className="h-4 w-4 text-destructive flex-shrink-0" />
                   )}
                 </div>

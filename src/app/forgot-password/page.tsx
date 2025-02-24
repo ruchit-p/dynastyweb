@@ -7,15 +7,18 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/components/ui/use-toast';
+import { Loader2 } from 'lucide-react';
+import { createClientSupabaseClient } from '@/lib/client/supabase-browser';
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
-  const { resetPassword } = useAuth();
+  const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const supabase = createClientSupabaseClient();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -24,7 +27,12 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     try {
-      await resetPassword(email);
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`,
+      });
+
+      if (error) throw error;
+
       setMessage('Check your email for password reset instructions');
       // Optional: redirect to login page after a few seconds
       setTimeout(() => router.push('/login'), 5000);
@@ -67,12 +75,20 @@ export default function ForgotPasswordPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              error={error}
             />
           </div>
 
           <div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Sending...' : 'Reset Password'}
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                "Reset Password"
+              )}
             </Button>
           </div>
         </form>

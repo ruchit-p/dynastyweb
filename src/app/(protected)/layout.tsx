@@ -1,39 +1,22 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { auth } from "@/lib/firebase"
-import { User } from "firebase/auth"
+import { redirect } from 'next/navigation'
+import { getSession } from '@/app/actions/auth'
 import Navbar from "@/components/Navbar"
 import { Toaster } from "@/components/ui/toaster"
 
-export default function ProtectedLayout({
+export default async function ProtectedLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const [user, setUser] = useState<User | null>(null)
-  const router = useRouter()
+  const { session, profile, error } = await getSession()
 
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        setUser(user)
-      } else {
-        router.push("/login")
-      }
-    })
-
-    return () => unsubscribe()
-  }, [router])
-
-  if (!user) {
-    return null // or a loading spinner
+  if (!session || error) {
+    redirect('/login')
   }
 
   return (
     <div className="min-h-screen bg-gray-50 pt-16">
-      <Navbar user={user} />
+      <Navbar user={profile} />
       {children}
       <Toaster />
     </div>

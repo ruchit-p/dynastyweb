@@ -6,8 +6,8 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { Loader2, CheckCircle2, XCircle } from "lucide-react"
-import { functions } from "@/lib/firebase"
-import { httpsCallable } from "firebase/functions"
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import type { Database } from '@/lib/shared/types/supabase'
 
 export default function VerifyEmailConfirmPage() {
   const [isVerifying, setIsVerifying] = useState(true)
@@ -16,19 +16,23 @@ export default function VerifyEmailConfirmPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
+  const supabase = createClientComponentClient<Database>()
 
   useEffect(() => {
     const verifyEmail = async () => {
       try {
-        const uid = searchParams.get("uid")
         const token = searchParams.get("token")
 
-        if (!uid || !token) {
+        if (!token) {
           throw new Error("Invalid verification link. Missing required parameters.")
         }
 
-        const verifyEmailFunction = httpsCallable(functions, "verifyEmail")
-        await verifyEmailFunction({ userId: uid, token })
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: token,
+          type: 'email'
+        })
+
+        if (error) throw error
 
         setIsVerifying(false)
         toast({
@@ -47,16 +51,16 @@ export default function VerifyEmailConfirmPage() {
     }
 
     verifyEmail()
-  }, [searchParams, router, toast])
+  }, [searchParams, router, toast, supabase])
 
   const handleResendVerification = async () => {
     try {
-      const sendVerificationEmailFunction = httpsCallable(functions, "sendVerificationEmail")
-      await sendVerificationEmailFunction({
-        userId: searchParams.get("uid"),
-        email: searchParams.get("email"),
-        displayName: searchParams.get("displayName"),
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: searchParams.get("email") || '',
       })
+
+      if (error) throw error
 
       toast({
         title: "New verification email sent",

@@ -20,16 +20,14 @@ import {
 import { Fingerprint, Key, Trash, Loader2 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
-import { doc, deleteDoc } from "firebase/firestore"
-import { db } from "@/lib/firebase"
-import { deleteUser } from "firebase/auth"
+import { createClient } from "@/lib/supabase/client"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import { ChangePasswordDialog } from "@/components/ChangePasswordDialog"
 import { SettingsManager, type PrivacySettings } from "@/utils/settingsManager"
 
 export default function PrivacySecurityPage() {
   const router = useRouter()
-  const { currentUser, firestoreUser, signOut } = useAuth()
+  const { user, profile, signOut } = useAuth()
   const { toast } = useToast()
   const [settings, setSettings] = useState<PrivacySettings>({
     locationEnabled: true,
@@ -44,11 +42,11 @@ export default function PrivacySecurityPage() {
 
   useEffect(() => {
     const loadSettings = async () => {
-      if (!currentUser?.uid) return
+      if (!user?.id) return
 
       try {
         const settingsManager = SettingsManager.getInstance()
-        const userSettings = await settingsManager.loadSettings(currentUser.uid)
+        const userSettings = await settingsManager.loadSettings(user.id)
         setSettings(userSettings.privacy)
       } catch (error) {
         console.error("Error loading privacy settings:", error)
@@ -63,7 +61,7 @@ export default function PrivacySecurityPage() {
     }
 
     void loadSettings()
-  }, [currentUser?.uid, toast])
+  }, [user?.id, toast])
 
   const handleToggle = (key: keyof PrivacySettings) => {
     if (key === "locationEnabled") {
@@ -76,13 +74,13 @@ export default function PrivacySecurityPage() {
   }
 
   const handleSave = async () => {
-    if (!currentUser?.uid) return
+    if (!user?.id) return
 
     try {
       setIsSaving(true)
       const settingsManager = SettingsManager.getInstance()
-      await settingsManager.saveSettings(currentUser.uid, {
-        notifications: (await settingsManager.loadSettings(currentUser.uid)).notifications,
+      await settingsManager.saveSettings(user.id, {
+        notifications: (await settingsManager.loadSettings(user.id)).notifications,
         privacy: settings,
       })
 
@@ -103,16 +101,23 @@ export default function PrivacySecurityPage() {
   }
 
   const handleDeleteAccount = async () => {
-    if (!currentUser || !firestoreUser) return
+    if (!user || !profile) return
 
     try {
       setIsDeleting(true)
+      const supabase = createClient()
 
-      // Delete user document from Firestore
-      await deleteDoc(doc(db, "users", currentUser.uid))
+      // Delete user's profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', user.id)
 
-      // Delete user from Firebase Auth
-      await deleteUser(currentUser)
+      if (profileError) throw profileError
+
+      // Delete user's auth account
+      const { error: authError } = await supabase.auth.admin.deleteUser(user.id)
+      if (authError) throw authError
 
       // Log out the user
       await signOut()

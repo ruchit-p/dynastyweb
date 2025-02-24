@@ -37,13 +37,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Firebase
-.firebase/
-emulator-data/
-firebase-debug.log*
-ui-debug.log*
-firestore-debug.log*
-pubsub-debug.log*
-
 # Supabase
 supabase/*

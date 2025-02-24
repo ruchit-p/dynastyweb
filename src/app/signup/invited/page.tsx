@@ -5,14 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import { format } from "date-fns"
-import { Calendar as CalendarIcon } from "lucide-react"
+import { Calendar as CalendarIcon, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useToast } from "@/components/ui/use-toast"
-import { Loader2 } from "lucide-react"
-import { useAuth } from "@/context/AuthContext"
-import { invitedSignupFormSchema, type InvitedSignupFormData, validateFormData } from "@/lib/validation"
+import { useAuth } from "@/lib/client/hooks/useAuth"
+import { signupFormSchema, type SignupFormData, validateFormData } from "@/lib/validation"
 import { cn } from "@/lib/utils"
 import {
   Select,
@@ -37,6 +35,11 @@ interface PrefillData {
   relationship?: string;
 }
 
+interface InvitedSignupFormData extends SignupFormData {
+  invitationId: string;
+  token: string;
+}
+
 export default function InvitedSignupPage() {
   const [formData, setFormData] = useState<InvitedSignupFormData>({
     email: "",
@@ -56,57 +59,47 @@ export default function InvitedSignupPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { signUpWithInvitation, verifyInvitation } = useAuth()
-  const { toast } = useToast()
 
   useEffect(() => {
     const token = searchParams.get("token")
     const id = searchParams.get("id")
 
-    if (token && id) {
-      setFormData(prev => ({ ...prev, token, invitationId: id }))
-      verifyInvitation(token, id)
-        .then((data: {
-          prefillData: {
-            firstName: string;
-            lastName: string;
-            dateOfBirth?: Date;
-            gender?: string;
-            phoneNumber?: string;
-            relationship?: string;
-          };
-          inviteeEmail: string;
-        }) => {
-          if (data.prefillData) {
-            setPrefillData(data.prefillData)
-            setFormData(prev => ({
-              ...prev,
-              firstName: data.prefillData.firstName || "",
-              lastName: data.prefillData.lastName || "",
-              dateOfBirth: data.prefillData.dateOfBirth ? new Date(data.prefillData.dateOfBirth) : new Date(),
-              gender: (data.prefillData.gender === "male" || data.prefillData.gender === "female" || data.prefillData.gender === "other") 
-                ? data.prefillData.gender 
-                : "other",
-              phone: data.prefillData.phoneNumber || "",
-              email: data.inviteeEmail || "",
-            }))
-          }
-        })
-        .catch((error: unknown) => {
-          toast({
-            title: "Error",
-            description: error instanceof Error ? error.message : "Invalid invitation link",
-            variant: "destructive",
-          })
-          router.push("/signup")
-        })
-    } else {
+    if (!token || !id) {
       router.push("/signup")
+      return
     }
-  }, [searchParams, router, toast, verifyInvitation])
+
+    setFormData((prev: InvitedSignupFormData) => ({ ...prev, token, invitationId: id }))
+    
+    const verifyAndPrefill = async () => {
+      try {
+        const result = await verifyInvitation(token, id)
+        if (result.success && result.prefillData) {
+          setPrefillData(result.prefillData)
+          setFormData((prev: InvitedSignupFormData) => ({
+            ...prev,
+            firstName: result.prefillData.firstName || "",
+            lastName: result.prefillData.lastName || "",
+            dateOfBirth: result.prefillData.dateOfBirth ? new Date(result.prefillData.dateOfBirth) : new Date(),
+            gender: (result.prefillData.gender === "male" || result.prefillData.gender === "female" || result.prefillData.gender === "other") 
+              ? result.prefillData.gender 
+              : "other",
+            phone: result.prefillData.phoneNumber || "",
+            email: result.inviteeEmail || "",
+          }))
+        }
+      } catch {
+        // Error handling is done by AuthContext
+        router.push("/signup")
+      }
+    }
+
+    verifyAndPrefill()
+  }, [searchParams, router, verifyInvitation])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    setFormData((prev: InvitedSignupFormData) => ({ ...prev, [name]: value }))
     // Clear error when user starts typing
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }))
@@ -114,7 +107,7 @@ export default function InvitedSignupPage() {
   }
 
   const handleGenderChange = (value: "male" | "female" | "other") => {
-    setFormData((prev) => ({ ...prev, gender: value }))
+    setFormData((prev: InvitedSignupFormData) => ({ ...prev, gender: value }))
     if (errors.gender) {
       setErrors((prev) => ({ ...prev, gender: "" }))
     }
@@ -122,7 +115,7 @@ export default function InvitedSignupPage() {
 
   const handleDateChange = (date: Date | undefined) => {
     if (date) {
-      setFormData((prev) => ({ ...prev, dateOfBirth: date }))
+      setFormData((prev: InvitedSignupFormData) => ({ ...prev, dateOfBirth: date }))
       if (errors.dateOfBirth) {
         setErrors((prev) => ({ ...prev, dateOfBirth: "" }))
       }
@@ -135,17 +128,11 @@ export default function InvitedSignupPage() {
     setErrors({})
 
     // Validate form data
-    const validation = validateFormData(invitedSignupFormSchema, formData)
+    const validation = validateFormData(signupFormSchema, formData)
     if (!validation.success) {
       const newErrors: { [key: string]: string } = {}
       validation.errors?.forEach((error) => {
         newErrors[error.field] = error.message
-        // Show the error in a toast for better visibility
-        toast({
-          title: "Validation Error",
-          description: error.message,
-          variant: "destructive",
-        })
       })
       setErrors(newErrors)
       setIsLoading(false)
@@ -154,19 +141,7 @@ export default function InvitedSignupPage() {
 
     try {
       await signUpWithInvitation(formData)
-      toast({
-        title: "Account created!",
-        description: "Please check your email to verify your account.",
-      })
-      // Ensure we redirect to verify-email page
-      router.push("/verify-email")
-    } catch (error) {
-      console.error("Signup error:", error)
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create account",
-        variant: "destructive",
-      })
+      // Navigation and toast notifications are handled by AuthContext
     } finally {
       setIsLoading(false)
     }

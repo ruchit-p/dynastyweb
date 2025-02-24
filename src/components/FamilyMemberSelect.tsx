@@ -4,14 +4,14 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { collection, doc, getDoc } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import type { Database } from '@/lib/shared/types/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { Spinner } from '@/components/ui/spinner'
 
 interface FamilyMember {
-  id: string;
-  displayName: string;
+  id: string
+  displayName: string
 }
 
 interface FamilyMemberSelectProps {
@@ -30,60 +30,66 @@ export function FamilyMemberSelect({
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
-  const { currentUser } = useAuth()
+  const { user } = useAuth()
+  const supabase = createClientComponentClient<Database>()
 
   useEffect(() => {
     const fetchFamilyMembers = async () => {
-      if (!currentUser) return;
+      if (!user) return
 
       try {
-        setLoading(true);
+        setLoading(true)
+
         // First get the user's family tree ID
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        if (!userDoc.exists()) {
-          console.error('User document not found');
-          return;
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('family_tree_id')
+          .eq('id', user.id)
+          .single()
+
+        if (userError) throw userError
+        if (!userData?.family_tree_id) {
+          console.error('No family tree ID found')
+          return
         }
 
-        const userData = userDoc.data();
-        const familyTreeId = userData.familyTreeId;
+        // Get the family tree members
+        const { data: familyTreeData, error: treeError } = await supabase
+          .from('family_trees')
+          .select(`
+            members,
+            users:members(
+              id,
+              full_name,
+              first_name,
+              last_name
+            )
+          `)
+          .eq('id', userData.family_tree_id)
+          .single()
 
-        // Get the family tree document
-        const treeDoc = await getDoc(doc(db, 'familyTrees', familyTreeId));
-        if (!treeDoc.exists()) {
-          console.error('Family tree not found');
-          return;
+        if (treeError) throw treeError
+        if (!familyTreeData?.users) {
+          console.error('No family tree members found')
+          return
         }
-
-        // Fetch all users in the family tree
-        const usersRef = collection(db, 'users');
-        const userDocs = await Promise.all(
-          treeDoc.data().memberUserIds.map((userId: string) => 
-            getDoc(doc(usersRef, userId))
-          )
-        );
 
         // Transform user data into FamilyMember format
-        const members = userDocs
-          .filter(doc => doc.exists())
-          .map(doc => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              displayName: data.displayName || `${data.firstName} ${data.lastName}`.trim()
-            };
-          });
+        const members = familyTreeData.users.map(user => ({
+          id: user.id,
+          displayName: user.full_name || `${user.first_name} ${user.last_name}`.trim()
+        }))
 
-        setFamilyMembers(members);
+        setFamilyMembers(members)
       } catch (error) {
-        console.error('Error fetching family members:', error);
+        console.error('Error fetching family members:', error)
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
+    }
 
-    void fetchFamilyMembers();
-  }, [currentUser]);
+    void fetchFamilyMembers()
+  }, [user, supabase])
 
   const toggleMember = (value: string) => {
     const newSelection = selectedMembers.includes(value)

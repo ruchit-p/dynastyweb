@@ -9,13 +9,11 @@ import { Label } from "@/components/ui/label"
 import { Camera, Loader2 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore"
-import { db, storage } from "@/lib/firebase"
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
+import { createClient } from "@/lib/supabase/client"
 import ProtectedRoute from "@/components/ProtectedRoute"
 
 export default function PersonalInformationPage() {
-  const { currentUser, firestoreUser, refreshFirestoreUser } = useAuth()
+  const { user, profile, refreshProfile } = useAuth()
   const { toast } = useToast()
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -27,14 +25,14 @@ export default function PersonalInformationPage() {
   })
 
   useEffect(() => {
-    if (firestoreUser) {
+    if (profile) {
       setFormData({
-        firstName: firestoreUser.firstName,
-        lastName: firestoreUser.lastName,
-        phoneNumber: firestoreUser.phoneNumber || "",
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        phoneNumber: profile.phone_number || "",
       })
     }
-  }, [firestoreUser])
+  }, [profile])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -48,33 +46,54 @@ export default function PersonalInformationPage() {
   }
 
   const handleSave = async () => {
-    if (!currentUser?.uid) return
+    if (!user?.id) return
 
     try {
       setIsSaving(true)
+      const supabase = createClient()
 
-      let profilePictureUrl = firestoreUser?.profilePicture
+      let profilePictureUrl = profile?.avatar_url
 
       // Upload new profile picture if one was selected
       if (newProfilePicture) {
-        const storageRef = ref(storage, `profile-pictures/${currentUser.uid}`)
-        await uploadBytes(storageRef, newProfilePicture)
-        profilePictureUrl = await getDownloadURL(storageRef)
+        const fileExt = newProfilePicture.name.split('.').pop()
+        const filePath = `${user.id}-${Math.random()}.${fileExt}`
+
+        const { error: uploadError, data } = await supabase.storage
+          .from('avatars')
+          .upload(filePath, newProfilePicture)
+
+        if (uploadError) {
+          throw uploadError
+        }
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(filePath)
+
+        profilePictureUrl = publicUrl
       }
 
-      // Update Firestore document
-      const userRef = doc(db, "users", currentUser.uid)
-      await updateDoc(userRef, {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        phoneNumber: formData.phoneNumber,
-        displayName: `${formData.firstName} ${formData.lastName}`.trim(),
-        profilePicture: profilePictureUrl,
-        updatedAt: serverTimestamp(),
-      })
+      // Update profile in database
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          phone_number: formData.phoneNumber,
+          display_name: `${formData.firstName} ${formData.lastName}`.trim(),
+          avatar_url: profilePictureUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id)
 
-      // Refresh Firestore user data
-      await refreshFirestoreUser()
+      if (updateError) {
+        throw updateError
+      }
+
+      // Refresh profile data
+      await refreshProfile()
 
       toast({
         title: "Success",
@@ -95,7 +114,7 @@ export default function PersonalInformationPage() {
     }
   }
 
-  if (!firestoreUser) {
+  if (!profile) {
     return (
       <ProtectedRoute>
         <div className="flex justify-center items-center min-h-[500px]">
@@ -111,7 +130,7 @@ export default function PersonalInformationPage() {
         <div className="flex flex-col items-center mb-6">
           <div className="relative">
             <Image
-              src={newProfilePicture ? URL.createObjectURL(newProfilePicture) : (firestoreUser.profilePicture || "/avatar.svg")}
+              src={newProfilePicture ? URL.createObjectURL(newProfilePicture) : (profile.avatar_url || "/avatar.svg")}
               alt="Profile picture"
               width={200}
               height={200}
@@ -164,7 +183,7 @@ export default function PersonalInformationPage() {
               id="email"
               name="email"
               type="email"
-              value={firestoreUser.email}
+              value={user?.email}
               disabled={true} // Email cannot be changed
               className="bg-gray-50"
             />
@@ -198,5 +217,5 @@ export default function PersonalInformationPage() {
         </div>
       </div>
     </ProtectedRoute>
-  );
+  )
 } 

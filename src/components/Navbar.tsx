@@ -4,9 +4,8 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { auth, db } from "@/lib/firebase"
-import { signOut } from "firebase/auth"
-import { doc, getDoc } from "firebase/firestore"
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import type { Database } from '@/lib/shared/types/supabase'
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -18,8 +17,8 @@ import {
 import { Bell, Settings, LogOut, Plus, BookOpen, Users, Home, PenSquare } from "lucide-react"
 
 interface User {
-  photoURL: string | null
-  displayName: string | null
+  avatar_url: string | null
+  full_name: string | null
   email: string | null
 }
 
@@ -32,16 +31,21 @@ export default function Navbar({ user }: NavbarProps) {
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false)
   const [profilePicture, setProfilePicture] = useState<string | null>(null)
   const router = useRouter()
+  const supabase = createClientComponentClient<Database>()
 
   useEffect(() => {
     const fetchUserData = async () => {
       if (!user) return
 
       try {
-        const userDoc = await getDoc(doc(db, "users", auth.currentUser?.uid || ""))
-        if (userDoc.exists()) {
-          const data = userDoc.data()
-          setProfilePicture(data.profilePicture || null)
+        const { data, error } = await supabase
+          .from('users')
+          .select('avatar_url')
+          .single()
+
+        if (error) throw error
+        if (data) {
+          setProfilePicture(data.avatar_url)
         }
       } catch (error) {
         console.error("Error fetching user data:", error)
@@ -49,11 +53,12 @@ export default function Navbar({ user }: NavbarProps) {
     }
 
     void fetchUserData()
-  }, [user])
+  }, [user, supabase])
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth)
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
       router.push("/login")
     } catch (error) {
       console.error("Error signing out:", error)
@@ -148,7 +153,7 @@ export default function Navbar({ user }: NavbarProps) {
                     height={40}
                   />
                   <div className="flex flex-col">
-                    <span className="text-sm font-medium">{user.displayName || "User"}</span>
+                    <span className="text-sm font-medium">{user.full_name || "User"}</span>
                     <span className="text-xs text-gray-500">{user.email}</span>
                   </div>
                 </div>

@@ -253,13 +253,8 @@ a:hover {
   border: 0;
 }
 
-/* Hide Firebase emulator warning bar */
-.firebase-emulator-warning {
-  display: none !important;
-}
-
-/* Also hide any elements with text containing "Running in emulator mode" that aren't our custom indicator */
-div[style*="position: fixed"][style*="bottom: 0"] {
+/* Hide development mode indicator that isn't our custom one */
+div[style*="position: fixed"][style*="bottom: 0"]:not(.custom-dev-indicator) {
   display: none !important;
 }
 

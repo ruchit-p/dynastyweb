@@ -4,10 +4,10 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { PenSquare, Book } from "lucide-react"
-import { useAuth } from "@/context/AuthContext"
-import { type Story } from "@/utils/storyUtils"
+import { useAuth } from "@/lib/client/hooks/useAuth"
+import { type Story } from "@/lib/client/utils/storyUtils"
 import { StoryCard } from "@/components/Story"
-import { getUserStories } from "@/utils/functionUtils"
+import { getUserStories } from "@/app/actions/stories"
 
 // Define the enriched story type that includes author and tagged people
 type EnrichedStory = Story & {
@@ -23,7 +23,7 @@ type EnrichedStory = Story & {
 };
 
 export default function HistoryBookPage() {
-  const { currentUser } = useAuth()
+  const { user } = useAuth()
   const [stories, setStories] = useState<EnrichedStory[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -38,28 +38,21 @@ export default function HistoryBookPage() {
         setLoading(true);
         setError(null);
 
-        if (!currentUser?.uid) {
+        if (!user?.id) {
           console.log('[HistoryBook] Missing user ID, skipping story fetch');
           setError('Unable to load stories. Please try logging out and back in.');
           return;
         }
         
         console.log('[HistoryBook] Fetching user stories');
-        const response = await getUserStories(currentUser.uid);
-        console.log('[HistoryBook] Stories response:', response);
+        const userStories = await getUserStories(user.id);
+        console.log('[HistoryBook] Stories response:', userStories);
         
         if (!mounted) {
           console.log('[HistoryBook] Component unmounted, skipping state update');
           return;
         }
 
-        if (!response || !response.stories) {
-          console.error('[HistoryBook] Invalid response format:', response);
-          setError('Received invalid data format from server');
-          return;
-        }
-
-        const { stories: userStories } = response;
         console.log('[HistoryBook] Processed stories:', {
           count: userStories.length,
           stories: userStories.map(s => ({
@@ -81,14 +74,14 @@ export default function HistoryBookPage() {
       }
     };
 
-    if (currentUser) {
+    if (user) {
       loadStories();
     }
 
     return () => {
       mounted = false;
     };
-  }, [currentUser]);
+  }, [user]);
 
   if (loading) {
     return (
@@ -146,7 +139,7 @@ export default function HistoryBookPage() {
               <StoryCard
                 key={story.id}
                 story={story}
-                currentUserId={currentUser?.uid || ''}
+                currentUserId={user?.id || ''}
               />
             ))}
           </div>

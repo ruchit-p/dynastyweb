@@ -1,36 +1,161 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dynasty Web - Family Tree & Stories Platform
+
+A modern web application for creating and managing family trees, sharing family stories, and preserving family history. Built with Next.js, TypeScript, and Supabase.
+
+## Features
+
+### Core Features
+- **Family Tree Management**: Create and manage your family tree with an intuitive interface
+- **Family Stories**: Share and preserve family memories with rich multimedia content
+- **User Authentication**: Secure authentication and authorization using Supabase Auth
+- **Real-time Updates**: Live updates for collaborative features
+- **Media Management**: Upload and manage photos, videos, and audio recordings
+- **Privacy Controls**: Granular privacy settings for sharing content
+
+### Technical Stack
+- **Frontend**: Next.js 14 with App Router
+- **Language**: TypeScript
+- **Database**: Supabase (PostgreSQL)
+- **Authentication**: Supabase Auth
+- **Storage**: Supabase Storage
+- **UI Components**: Shadcn/ui
+- **Styling**: Tailwind CSS
+- **Forms**: React Hook Form with Zod validation
+- **State Management**: React Context + Custom Hooks
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+- Node.js 18.x or later
+- npm or yarn
+- Supabase account and project
 
+### Environment Setup
+1. Clone the repository
+```bash
+git clone https://github.com/yourusername/dynastyweb.git
+cd dynastyweb
+```
+
+2. Install dependencies
+```bash
+npm install
+# or
+yarn install
+```
+
+3. Create a `.env.local` file with your Supabase credentials:
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+4. Run the development server:
 ```bash
 npm run dev
 # or
 yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+dynastyweb/
+├── src/
+│   ├── app/                 # Next.js app router pages
+│   ├── components/          # Reusable React components
+│   ├── lib/                 # Utility functions and shared code
+│   │   ├── client/         # Client-side utilities
+│   │   ├── server/         # Server-side utilities
+│   │   └── validation/     # Schema validation
+│   ├── types/              # TypeScript type definitions
+│   └── styles/             # Global styles
+├── public/                 # Static assets
+├── docs/                   # Documentation
+│   └── STORIES.md         # Stories feature documentation
+└── supabase/              # Supabase configuration and migrations
+```
 
-## Learn More
+## Features Documentation
 
-To learn more about Next.js, take a look at the following resources:
+### Family Stories
+The Stories feature allows family members to share and preserve memories through rich multimedia content. See [STORIES.md](docs/STORIES.md) for detailed documentation.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Key capabilities:
+- Create multimedia stories
+- Tag family members
+- Set privacy levels
+- Add location data
+- Include event dates
+- Rich text editing
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Family Tree
+- Create and manage family trees
+- Add family members and relationships
+- Upload photos and documents
+- Share trees with family members
+- Export tree data
 
-## Deploy on Vercel
+## Development
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Code Style
+- Use TypeScript for type safety
+- Follow ESLint configuration
+- Use Prettier for code formatting
+- Follow component organization guidelines
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Testing
+```bash
+# Run unit tests
+npm run test
+
+# Run e2e tests
+npm run test:e2e
+```
+
+### Database Migrations
+```bash
+# Generate new migration
+npm run migration:generate
+
+# Run migrations
+npm run migration:up
+```
+
+## Deployment
+
+### Production Deployment
+The application is deployed on Vercel:
+
+1. Connect your repository to Vercel
+2. Configure environment variables
+3. Deploy using the Vercel dashboard or CLI
+
+### Environment Variables
+Required environment variables for production:
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SITE_URL=
+```
+
+## Contributing
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Support
+For support, email support@dynastyweb.com or open an issue in the repository.
+
+## Acknowledgments
+- Next.js team for the amazing framework
+- Supabase team for the backend infrastructure
+- Shadcn for the UI components
+- All contributors to the project

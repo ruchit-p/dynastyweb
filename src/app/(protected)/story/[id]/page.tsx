@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { doc, getDoc } from "firebase/firestore"
-import { db } from "@/lib/firebase"
 import { useAuth } from "@/context/AuthContext"
 import { Button } from "@/components/ui/button"
 import { CalendarIcon, MapPin, Lock, Users, Trash2, Edit } from "lucide-react"
@@ -13,6 +11,8 @@ import { useToast } from "@/components/ui/use-toast"
 import AudioPlayer from "@/components/AudioPlayer"
 import VideoPlayer from "@/components/VideoPlayer"
 import ProtectedRoute from "@/components/ProtectedRoute"
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import type { Database } from '@/lib/shared/types/supabase'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,55 +23,56 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { deleteStory } from "@/utils/functionUtils"
 
 // Helper function to handle both production and emulator image URLs
 const getImageUrl = (url: string) => {
   if (!url) return "/placeholder.svg"
-  
-  // Check if we're using the emulator
-  if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
-    // Replace the emulator URL with the production URL pattern
-    return url.replace('http://127.0.0.1:9199/v0/b/dynasty-eba63.firebasestorage.app', 'https://firebasestorage.googleapis.com')
-  }
-  
   return url
 }
 
 interface StoryData {
+  id: string
   title: string
   subtitle?: string
-  authorID: string
-  createdAt: { seconds: number; nanoseconds: number }
-  eventDate?: { seconds: number; nanoseconds: number }
+  author_id: string
+  created_at: string
+  event_date?: string
   location?: { lat: number; lng: number; address: string }
-  privacy: "family" | "privateAccess" | "custom"
-  peopleInvolved: string[]
+  privacy: "family" | "personal" | "custom"
+  people_involved: string[]
   blocks: {
     type: "text" | "image" | "video" | "audio"
     data: string
-    localId: string
+    local_id: string
   }[]
 }
 
 export default function StoryDetailsPage() {
   const { id } = useParams()
   const router = useRouter()
-  const { currentUser } = useAuth()
+  const { user } = useAuth()
   const { toast } = useToast()
   const [story, setStory] = useState<StoryData | null>(null)
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const supabase = createClientComponentClient<Database>()
 
   useEffect(() => {
     const fetchStory = async () => {
       if (!id) return
 
       try {
-        const storyDoc = await getDoc(doc(db, "stories", id as string))
-        if (storyDoc.exists()) {
-          setStory(storyDoc.data() as StoryData)
+        const { data: storyData, error } = await supabase
+          .from('stories')
+          .select('*')
+          .eq('id', id)
+          .single()
+
+        if (error) throw error
+
+        if (storyData) {
+          setStory(storyData as StoryData)
         } else {
           toast({
             variant: "destructive",
@@ -92,14 +93,22 @@ export default function StoryDetailsPage() {
     }
 
     fetchStory()
-  }, [id, toast])
+  }, [id, toast, supabase])
 
   const handleDelete = async () => {
-    if (!story || !id || !currentUser) return;
+    if (!story || !id || !user) return;
     
     try {
       setDeleting(true);
-      await deleteStory(id as string, currentUser.uid);
+      
+      const { error } = await supabase
+        .from('stories')
+        .delete()
+        .eq('id', id)
+        .eq('author_id', user.id)
+
+      if (error) throw error
+
       toast({
         title: "Success",
         description: "Story deleted successfully",
@@ -140,7 +149,7 @@ export default function StoryDetailsPage() {
             <h1 className="text-3xl font-bold mb-2">{story.title}</h1>
             {story.subtitle && <h2 className="text-xl text-gray-600">{story.subtitle}</h2>}
           </div>
-          {currentUser?.uid === story.authorID && (
+          {user?.id === story.author_id && (
             <div className="flex gap-2">
               <Button 
                 variant="outline" 
@@ -185,10 +194,10 @@ export default function StoryDetailsPage() {
         </div>
 
         <div className="flex flex-wrap gap-4 mb-6">
-          {story.eventDate && (
+          {story.event_date && (
             <div className="flex items-center text-gray-600">
               <CalendarIcon className="mr-2 h-4 w-4" />
-              {format(new Date(story.eventDate.seconds * 1000), "PPP")}
+              {format(new Date(story.event_date), "PPP")}
             </div>
           )}
           {story.location && (
@@ -199,19 +208,19 @@ export default function StoryDetailsPage() {
           )}
           <div className="flex items-center text-gray-600">
             <Lock className="mr-2 h-4 w-4" />
-            {story.privacy === "family" ? "Family" : story.privacy === "privateAccess" ? "Private" : "Custom"}
+            {story.privacy === "family" ? "Family" : story.privacy === "personal" ? "Private" : "Custom"}
           </div>
-          {story.peopleInvolved.length > 0 && (
+          {story.people_involved.length > 0 && (
             <div className="flex items-center text-gray-600">
               <Users className="mr-2 h-4 w-4" />
-              {story.peopleInvolved.length} people tagged
+              {story.people_involved.length} people tagged
             </div>
           )}
         </div>
 
         <div className="space-y-6">
           {story.blocks.map((block) => (
-            <div key={block.localId} className="border rounded-lg p-4">
+            <div key={block.local_id} className="border rounded-lg p-4">
               {block.type === "text" && <p className="whitespace-pre-wrap">{block.data}</p>}
               {block.type === "image" && (
                 <Image
@@ -220,7 +229,6 @@ export default function StoryDetailsPage() {
                   width={600}
                   height={400}
                   className="rounded-lg object-cover w-full"
-                  unoptimized={process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true'}
                 />
               )}
               {block.type === "video" && <VideoPlayer url={block.data} />}
