@@ -6,55 +6,93 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { Mail, Loader2, Home } from "lucide-react"
-import { useAuth } from "@/lib/client/hooks/useAuth"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import type { Database } from "@/lib/shared/types/supabase"
 
 export default function VerifyEmailPage() {
   const [email, setEmail] = useState("")
   const [isResending, setIsResending] = useState(false)
-  const { user, loading } = useAuth()
+  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
   const { toast } = useToast()
   const supabase = createClientComponentClient<Database>()
 
-  // Effect for initial auth state and email setup
+  // Check verification status on mount and redirect if verified
   useEffect(() => {
-    // Only take action after the auth state has loaded
-    if (!loading) {
-      if (user?.email_confirmed_at) {
-        router.push("/family-tree")
-      } else if (user?.email) {
-        setEmail(user.email)
-      } else if (!user) {
-        // Only redirect to login if we're sure there's no user
-        toast({
-          title: "Session expired",
-          description: "Please sign in again to verify your email.",
-          variant: "destructive",
-        })
-        router.push("/login")
+    const checkVerification = async () => {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser()
+        if (error) throw error
+
+        if (!user) {
+          // No user found, redirect to login
+          router.push('/login')
+          return
+        }
+
+        if (user.email_confirmed_at) {
+          // Email is verified, redirect to family tree
+          router.push('/family-tree')
+          return
+        }
+
+        // Set email for resend functionality
+        setEmail(user.email || '')
+        setIsLoading(false)
+      } catch (error) {
+        console.error('Error checking verification:', error)
+        router.push('/login')
       }
     }
-  }, [user, loading, router, toast])
 
-  // Handle resend verification email
-  const handleResendVerification = async () => {
+    checkVerification()
+  }, [router, supabase])
+
+  // Listen for auth state changes
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'USER_UPDATED' && session?.user.email_confirmed_at) {
+        // Update the user's profile
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({
+            is_pending_signup: false,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', session.user.id)
+
+        if (updateError) {
+          console.error('Error updating user profile:', updateError)
+        }
+
+        // Redirect to family tree
+        router.push('/family-tree')
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [supabase, router])
+
+  const handleResendEmail = async () => {
+    if (!email) return
+
+    setIsResending(true)
     try {
-      setIsResending(true)
       const { error } = await supabase.auth.resend({
         type: 'signup',
         email: email,
       })
-      
+
       if (error) throw error
 
       toast({
         title: "Verification email sent",
-        description: "Please check your email for the verification link.",
+        description: "Please check your inbox for the verification link.",
       })
     } catch (error) {
-      console.error('Error resending verification:', error)
+      console.error("Error resending verification email:", error)
       toast({
         title: "Error",
         description: "Failed to resend verification email. Please try again.",
@@ -65,51 +103,78 @@ export default function VerifyEmailPage() {
     }
   }
 
-  return (
-    <div className="container flex flex-col items-center justify-center min-h-screen py-12 space-y-8">
-      <div className="flex flex-col items-center space-y-4 text-center">
-        <div className="relative w-24 h-24">
-          <Image
-            src="/logo.png"
-            alt="Logo"
-            fill
-            className="object-contain"
-            priority
-          />
-        </div>
-        <h1 className="text-3xl font-bold">Check your email</h1>
-        <p className="max-w-sm text-muted-foreground">
-          We sent a verification link to {email}. Click the link to verify your email address.
-        </p>
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-[#0A5C36]" />
       </div>
+    )
+  }
 
-      <div className="flex flex-col items-center space-y-4">
-        <Button
-          variant="outline"
-          onClick={handleResendVerification}
-          disabled={isResending || !email}
-          className="w-full"
-        >
-          {isResending ? (
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <Image
+          src="/dynasty.png"
+          alt="Dynasty Logo"
+          width={60}
+          height={60}
+          className="mx-auto"
+        />
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          Verify your email
+        </h2>
+        <div className="mt-2 text-center text-sm text-gray-600">
+          {email ? (
             <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Sending...
+              We sent a verification link to <span className="font-medium">{email}</span>
             </>
           ) : (
-            <>
-              <Mail className="w-4 h-4 mr-2" />
-              Resend verification email
-            </>
+            "Please verify your email to continue"
           )}
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => router.push("/")}
-          className="w-full"
-        >
-          <Home className="w-4 h-4 mr-2" />
-          Return to home
-        </Button>
+        </div>
+      </div>
+
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+          <div className="space-y-6">
+            <div className="text-sm text-gray-600 text-center">
+              <p>Click the link in the email to verify your account.</p>
+              <p className="mt-2">
+                Didn&apos;t receive the email? Check your spam folder or click below to resend.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <Button
+                onClick={handleResendEmail}
+                disabled={isResending || !email}
+                className="w-full"
+              >
+                {isResending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Resend verification email
+                  </>
+                )}
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => router.push("/")}
+                className="w-full"
+              >
+                <Home className="mr-2 h-4 w-4" />
+                Return to home
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )

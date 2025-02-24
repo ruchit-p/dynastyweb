@@ -1,9 +1,8 @@
 'use server'
 
-import { createServerSupabaseClient } from '@/lib/server/supabase-admin'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { validateFormData, signupFormSchema, loginFormSchema } from '@/lib/validation'
+import { createServerActionClient } from '@supabase/auth-helpers-nextjs'
 import type { AuthError as SupabaseAuthError } from '@supabase/supabase-js'
 import type { Database } from '@/lib/shared/types/supabase'
 import { UsersRepository, InvitationsRepository } from '@/lib/server/repositories'
@@ -30,8 +29,22 @@ export type SignInData = {
 }
 
 export type InvitedSignUpData = SignUpData & {
-  invitationId: string;
-  token: string;
+  invitationId: string
+  token: string
+}
+
+export type VerifyInvitationResult = {
+  success: boolean
+  prefillData?: {
+    firstName: string
+    lastName: string
+    dateOfBirth?: Date
+    gender?: string
+    phoneNumber?: string
+    relationship?: string
+  }
+  inviteeEmail?: string
+  error?: AuthError
 }
 
 type UserInsert = Database['public']['Tables']['users']['Insert']
@@ -40,9 +53,11 @@ type ServerAction<Args extends unknown[], Return> = (...args: Args) => Promise<R
 /**
  * Creates a new Supabase client for each request
  */
-function getSupabase() {
+async function getSupabase() {
   const cookieStore = cookies()
-  return createServerSupabaseClient()
+  return createServerActionClient<Database, 'public'>({ 
+    cookies: () => cookieStore 
+  })
 }
 
 /**
@@ -67,23 +82,35 @@ function formatError(error: unknown): AuthError {
  */
 export async function signUp(data: SignUpData) {
   try {
-    const supabase = getSupabase()
+    // Create a service role client for admin operations
+    const cookieStore = cookies()
+    const supabase = createServerActionClient<Database, 'public'>({ 
+      cookies: () => cookieStore 
+    }, {
+      supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      options: { db: { schema: 'public' } }
+    })
 
-    // Create auth user
+    // Create auth user with email confirmation disabled for now
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
       options: {
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
+        data: {
+          first_name: data.firstName,
+          last_name: data.lastName,
+          display_name: `${data.firstName} ${data.lastName}`,
+        }
       }
     })
 
     if (authError) throw authError
+    if (!authData.user) throw new Error('No user returned from auth signup')
 
     // Create user profile
-    const usersRepo = new UsersRepository(supabase)
     const userProfile: UserInsert = {
-      id: authData.user!.id,
+      id: authData.user.id,
       email: data.email,
       first_name: data.firstName,
       last_name: data.lastName,
@@ -96,15 +123,96 @@ export async function signUp(data: SignUpData) {
       parent_ids: [],
       children_ids: [],
       spouse_ids: [],
-      is_admin: false,
+      is_admin: true,
       can_add_members: true,
       can_edit: true,
       email_verified: false,
       data_retention_period: 'forever'
     }
-    await usersRepo.create(userProfile)
 
-    return { success: true }
+    // Insert user profile using service role client
+    const { error: profileError } = await supabase
+      .from('users')
+      .insert(userProfile)
+
+    if (profileError) {
+      console.error('Profile creation error:', profileError)
+      throw profileError
+    }
+
+    // Create default family tree
+    const { data: treeData, error: treeError } = await supabase
+      .from('family_trees')
+      .insert({
+        name: `${data.firstName}'s Family Tree`,
+        owner_id: authData.user.id,
+        privacy_level: 'private',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (treeError) {
+      console.error('Family tree creation error:', treeError)
+      throw treeError
+    }
+
+    // Update user profile with family tree ID
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ family_tree_id: treeData.id })
+      .eq('id', authData.user.id)
+
+    if (updateError) {
+      console.error('Error updating user with family tree ID:', updateError)
+      throw updateError
+    }
+
+    // Add user as admin of their family tree
+    const { error: accessError } = await supabase
+      .from('family_tree_access')
+      .insert({
+        tree_id: treeData.id,
+        user_id: authData.user.id,
+        role: 'admin',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+
+    if (accessError) {
+      console.error('Access creation error:', accessError)
+      throw accessError
+    }
+
+    // Add user as first member of their family tree
+    const { error: memberError } = await supabase
+      .from('family_tree_members')
+      .insert({
+        tree_id: treeData.id,
+        user_id: authData.user.id,
+        first_name: data.firstName,
+        last_name: data.lastName,
+        display_name: `${data.firstName} ${data.lastName}`,
+        date_of_birth: data.dateOfBirth,
+        gender: data.gender,
+        is_pending: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+
+    if (memberError) {
+      console.error('Member creation error:', memberError)
+      throw memberError
+    }
+
+    // Return success with user data
+    return { 
+      success: true,
+      user: authData.user,
+      session: authData.session,
+      needsEmailVerification: !authData.session
+    }
   } catch (error) {
     console.error('Sign up error:', error)
     return {
@@ -119,18 +227,42 @@ export async function signUp(data: SignUpData) {
  */
 export async function signIn(data: SignInData) {
   try {
-    const supabase = getSupabase()
+    console.log('SignIn attempt with:', { email: data.email }); // Debug log
+    const supabase = await getSupabase()
     
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
       email: data.email,
       password: data.password
     })
 
-    if (error) throw error
+    if (error) {
+      console.error('SignIn error:', error)
+      return {
+        success: false,
+        error
+      }
+    }
 
-    return { success: true }
+    if (!authData.session || !authData.user) {
+      console.error('No session or user data returned from auth')
+      return {
+        success: false,
+        error: new Error('No session established')
+      }
+    }
+
+    console.log('SignIn successful:', { 
+      userId: authData.user.id,
+      sessionExpires: authData.session.expires_at
+    })
+
+    return { 
+      success: true, 
+      session: authData.session,
+      user: authData.user 
+    }
   } catch (error) {
-    console.error('Sign in error:', error)
+    console.error('SignIn error:', error)
     return {
       success: false,
       error: formatError(error)
@@ -143,7 +275,7 @@ export async function signIn(data: SignInData) {
  */
 export async function signOut() {
   try {
-    const supabase = getSupabase()
+    const supabase = await getSupabase()
     const { error } = await supabase.auth.signOut()
 
     if (error) throw error
@@ -163,7 +295,7 @@ export async function signOut() {
  */
 export async function resetPassword(email: string) {
   try {
-    const supabase = getSupabase()
+    const supabase = await getSupabase()
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/reset-password`
     })
@@ -185,7 +317,7 @@ export async function resetPassword(email: string) {
  */
 export async function updatePassword(newPassword: string) {
   try {
-    const supabase = getSupabase()
+    const supabase = await getSupabase()
     const { error } = await supabase.auth.updateUser({
       password: newPassword
     })
@@ -207,7 +339,15 @@ export async function updatePassword(newPassword: string) {
  */
 export async function verifyEmail(token: string) {
   try {
-    const supabase = getSupabase()
+    const cookieStore = cookies()
+    const supabase = createServerActionClient<Database, 'public'>({ 
+      cookies: () => cookieStore 
+    }, {
+      supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      options: { db: { schema: 'public' } }
+    })
+
+    // Verify the email
     const { error } = await supabase.auth.verifyOtp({
       token_hash: token,
       type: 'email'
@@ -215,15 +355,32 @@ export async function verifyEmail(token: string) {
 
     if (error) throw error
 
-    // Update user profile
+    // Get the user after verification
     const { data: { user } } = await supabase.auth.getUser()
+    
     if (user) {
+      // The trigger will handle updating the user profile
+      // Just mark the token as used
+      const { error: tokenError } = await supabase
+        .from('email_verification_tokens')
+        .update({
+          used_at: new Date().toISOString()
+        })
+        .eq('token', token)
+
+      if (tokenError) throw tokenError
+
+      // Get the updated user profile
       const usersRepo = new UsersRepository(supabase)
-      await usersRepo.update(user.id, {
-        email_verified: true,
-        is_pending_signup: false,
-        updated_at: new Date().toISOString()
-      })
+      const profile = await usersRepo.getById(user.id)
+
+      return { 
+        success: true,
+        user: {
+          ...user,
+          profile
+        }
+      }
     }
 
     return { success: true }
@@ -241,7 +398,7 @@ export async function verifyEmail(token: string) {
  */
 export async function verifyInvitation(token: string, invitationId: string) {
   try {
-    const supabase = getSupabase()
+    const supabase = await getSupabase()
     const invitationsRepo = new InvitationsRepository(supabase)
     
     const invitation = await invitationsRepo.getByToken(token, invitationId)
@@ -279,7 +436,7 @@ export async function verifyInvitation(token: string, invitationId: string) {
  */
 export async function signUpWithInvitation(data: InvitedSignUpData) {
   try {
-    const supabase = getSupabase()
+    const supabase = await getSupabase()
 
     // Verify invitation first
     const invitation = await verifyInvitation(data.token, data.invitationId)
@@ -344,7 +501,7 @@ export async function signUpWithInvitation(data: InvitedSignUpData) {
  */
 export async function getUser() {
   try {
-    const supabase = getSupabase()
+    const supabase = await getSupabase()
     const { data: { user }, error } = await supabase.auth.getUser()
 
     if (error) throw error
@@ -370,7 +527,7 @@ export async function getUser() {
 /**
  * Middleware to protect server actions
  */
-export function withAuth<T extends ServerAction<unknown[], unknown>>(action: T): T {
+export async function withAuth<T extends ServerAction<unknown[], unknown>>(action: T): Promise<T> {
   return (async (...args: Parameters<T>) => {
     const { user } = await getUser()
     
@@ -389,7 +546,7 @@ export function withAuth<T extends ServerAction<unknown[], unknown>>(action: T):
  */
 export async function getSession() {
   try {
-    const supabase = getSupabase()
+    const supabase = await getSupabase()
     const { data: { session }, error } = await supabase.auth.getSession()
 
     if (error) throw error
@@ -422,7 +579,7 @@ export async function getSession() {
  */
 export async function refreshSession() {
   try {
-    const supabase = getSupabase()
+    const supabase = await getSupabase()
     const { data: { session }, error } = await supabase.auth.refreshSession()
 
     if (error) throw error

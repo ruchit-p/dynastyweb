@@ -3,12 +3,19 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { validateFormData, loginFormSchema, type LoginFormData } from '@/lib/validation';
-import { useAuth } from '@/lib/client/hooks/useAuth';
+import { useAuth } from '@/context/AuthContext';
+import { showVerificationToast } from '@/components/VerificationToast';
+
+type AuthError = {
+  message: string;
+  code?: string;
+};
 
 export default function LoginPage() {
   const [formData, setFormData] = useState<LoginFormData>({
@@ -18,11 +25,12 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get('redirect') || '/family-tree';
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    // Clear error when user starts typing
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
@@ -33,21 +41,37 @@ export default function LoginPage() {
     setIsLoading(true);
     setErrors({});
 
-    // Validate form data
-    const validation = validateFormData(loginFormSchema, formData);
-    if (!validation.success) {
-      const newErrors: { [key: string]: string } = {};
-      validation.errors.forEach((error) => {
-        newErrors[error.field] = error.message;
-      });
-      setErrors(newErrors);
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      await login(formData);
-      // Navigation and toast notifications are handled by AuthContext
+      // Validate form data
+      const validation = validateFormData(loginFormSchema, formData);
+      if (!validation.success) {
+        const newErrors: { [key: string]: string } = {};
+        validation.errors.forEach((error) => {
+          newErrors[error.field] = error.message;
+        });
+        setErrors(newErrors);
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('Attempting login with:', formData); // Debug log
+
+      // Pass the redirect path to login
+      await login({
+        email: formData.email.trim(),
+        password: formData.password
+      }, redirect);
+      
+    } catch (error) {
+      console.error('Login error:', error);
+      const authError = error as AuthError;
+      if (authError.code === 'email_not_confirmed') {
+        showVerificationToast();
+      } else {
+        setErrors({
+          email: authError.message || 'Failed to log in',
+        });
+      }
     } finally {
       setIsLoading(false);
     }

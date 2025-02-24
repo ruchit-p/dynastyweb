@@ -1,17 +1,13 @@
 import './globals.css'
 import { Inter } from 'next/font/google'
 import { AuthProvider } from '@/context/AuthContext'
-import { EmulatorProvider } from '@/context/EmulatorContext'
+import { Toaster } from '@/components/ui/toaster'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata = {
-  title: 'Dynasty',
-  description: 'Dynasty - Family Tree Application',
-  icons: {
-    icon: '/dynasty.png',
-    apple: '/dynasty.png',
-  },
+  title: 'Dynasty - Family Tree & History Book',
+  description: 'Create, share, and preserve your family\'s legacy with Dynasty - the digital family tree and history book platform.',
 }
 
 export default function RootLayout({
@@ -22,11 +18,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <EmulatorProvider>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
-        </EmulatorProvider>
+        <AuthProvider>
+          {children}
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   )

@@ -17,8 +17,8 @@ import {
 import { Bell, Settings, LogOut, Plus, BookOpen, Users, Home, PenSquare } from "lucide-react"
 
 interface User {
-  avatar_url: string | null
-  full_name: string | null
+  profile_picture: string | null
+  display_name: string | null
   email: string | null
 }
 
@@ -35,25 +35,32 @@ export default function Navbar({ user }: NavbarProps) {
 
   useEffect(() => {
     const fetchUserData = async () => {
-      if (!user) return
+      if (!user?.email) return;
 
       try {
+        // Get verified user data
+        const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+        if (!verifiedUser) return;
+
+        // Fetch user profile data
         const { data, error } = await supabase
           .from('users')
-          .select('avatar_url')
-          .single()
+          .select('profile_picture, display_name')
+          .eq('id', verifiedUser.id)
+          .single();
 
-        if (error) throw error
+        if (error) throw error;
         if (data) {
-          setProfilePicture(data.avatar_url)
+          setProfilePicture(data.profile_picture);
         }
       } catch (error) {
-        console.error("Error fetching user data:", error)
+        console.error("Error fetching user data:", error);
       }
-    }
+    };
 
-    void fetchUserData()
-  }, [user, supabase])
+    void fetchUserData();
+  }, [user?.email, supabase]);
 
   const handleSignOut = async () => {
     try {
@@ -153,7 +160,7 @@ export default function Navbar({ user }: NavbarProps) {
                     height={40}
                   />
                   <div className="flex flex-col">
-                    <span className="text-sm font-medium">{user.full_name || "User"}</span>
+                    <span className="text-sm font-medium">{user.display_name || "User"}</span>
                     <span className="text-xs text-gray-500">{user.email}</span>
                   </div>
                 </div>

@@ -164,39 +164,4 @@ export async function listBuckets() {
   }
 
   return data
-}
-
-/**
- * Migrates files from Firebase Storage to Supabase Storage
- */
-export async function migrateFromFirebase(
-  bucket: StorageBucket,
-  firebaseUrl: string
-) {
-  try {
-    const response = await fetch(firebaseUrl)
-    if (!response.ok) {
-      throw new Error('Failed to fetch file from Firebase')
-    }
-
-    const blob = await response.blob()
-    const fileName = firebaseUrl.split('/').pop()
-
-    if (!fileName) {
-      throw new Error('Invalid Firebase URL')
-    }
-
-    const { error } = await supabase.storage
-      .from(bucket)
-      .upload(fileName, blob)
-
-    if (error) {
-      throw error
-    }
-
-    return true
-  } catch (error) {
-    console.error('Migration error:', error)
-    throw new Error('Failed to migrate file from Firebase')
-  }
 } 

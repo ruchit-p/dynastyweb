@@ -1,10 +1,10 @@
 "use server"
 
 import { z } from "zod"
-import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { createServerSupabaseClient } from "@/lib/server/supabase"
 import { withAuth } from "./auth"
 import { revalidatePath } from 'next/cache'
-import { StoriesRepository } from '@/lib/repositories/stories'
+import { StoriesRepository } from '@/lib/server/repositories/stories'
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import type { Database } from '@/lib/shared/types/supabase'

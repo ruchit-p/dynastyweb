@@ -190,11 +190,6 @@ middleware.ts
 - Log errors properly
 - Return appropriate status codes
 
-## Rate Limiting
-- Implement per-route limits
-- Use Redis or similar for distributed rate limiting
-- Consider user roles for limit tiers
-
 ## Monitoring
 - Log security-relevant events
 - Track performance metrics

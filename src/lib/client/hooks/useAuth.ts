@@ -18,6 +18,7 @@ import {
 // MARK: - Types
 type AuthError = {
   message: string
+  code?: string
 }
 
 type LoginData = {
@@ -132,23 +133,35 @@ export function useAuth() {
     }
   }, [])
 
-  const handleLogin = useCallback(async (data: LoginData) => {
+  const handleLogin = useCallback(async (data: LoginData, redirect: string = '/family-tree') => {
     try {
       const result = await signIn(data)
       if (result.error) throw result.error
 
-      router.push('/feed')
-      toast({
-        title: 'Welcome back!',
-        description: 'Successfully logged in.',
-      })
+      // Check if email is confirmed
+      const { session } = await getSession()
+      if (session?.user) {
+        setUser(session.user)
+        if (!session.user.email_confirmed_at) {
+          router.push('/verify-email')
+          throw { code: 'email_not_confirmed', message: 'Please verify your email to continue.' }
+        } else {
+          router.push(redirect)
+          toast({
+            title: 'Welcome back!',
+            description: 'Successfully logged in.',
+          })
+        }
+      }
     } catch (error) {
       const authError = error as AuthError
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: authError.message || 'Failed to log in',
-      })
+      if (authError.code !== 'email_not_confirmed') {
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: authError.message || 'Failed to log in',
+        })
+      }
       throw error
     }
   }, [router])

@@ -1,6 +1,6 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { Node } from 'relatives-tree/lib/types'
-import type { Database } from '@/types/supabase'
+import type { Database } from '@/lib/shared/types/supabase'
 import type { Story } from './storyUtils'
 
 // Initialize Supabase client
@@ -19,17 +19,32 @@ type EnrichedStory = Story & {
   }>
 }
 
+// Define the tagged user type
+interface TaggedUser {
+  user: {
+    id: string
+    full_name: string
+  }
+}
+
 // MARK: - Family Tree Functions
 
 export const getFamilyTreeData = async (userId: string) => {
-  const { data, error } = await supabase
-    .from('family_tree_nodes')
-    .select('*')
-    .eq('user_id', userId)
+  const response = await fetch('/api/family-tree', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
 
-  if (error) throw error
-  return { treeNodes: data as Node[] }
-}
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch family tree data');
+  }
+
+  const data = await response.json();
+  return { treeNodes: data.treeNodes };
+};
 
 export const updateFamilyRelationships = async (
   userId: string,
@@ -284,30 +299,61 @@ export const createFamilyMember = async (
     connectToExistingParent?: boolean
   }
 ) => {
-  const { data, error } = await supabase.rpc('create_family_member', {
-    p_user_data: userData,
-    p_relation_type: relationType,
-    p_selected_node_id: selectedNodeId,
-    p_connect_to_children: options.connectToChildren || false,
-    p_connect_to_spouse: options.connectToSpouse || false,
-    p_connect_to_existing_parent: options.connectToExistingParent || false
-  })
+  const response = await fetch('/api/family-tree', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      userData,
+      relationType,
+      selectedNodeId,
+      options,
+    }),
+  });
 
-  if (error) throw error
-  return { success: true, userId: data.user_id }
-}
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to create family member');
+  }
+
+  return response.json();
+};
 
 export const deleteFamilyMember = async (
   memberId: string,
   familyTreeId: string,
   currentUserId: string
 ) => {
-  const { error } = await supabase.rpc('delete_family_member', {
-    p_member_id: memberId,
-    p_family_tree_id: familyTreeId,
-    p_current_user_id: currentUserId
-  })
+  const response = await fetch('/api/family-tree', {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      memberId,
+      familyTreeId,
+      currentUserId,
+    }),
+  });
 
-  if (error) throw error
-  return { success: true }
-} 
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to delete family member');
+  }
+
+  return response.json();
+};
+
+export const enrichStory = (story: Story): EnrichedStory => ({
+  ...story,
+  author: {
+    id: story.author.id,
+    displayName: story.author.full_name,
+    profilePicture: story.author.avatar_url
+  },
+  taggedPeople: (story.tagged_people as TaggedUser[]).map(tag => ({
+    id: tag.user.id,
+    displayName: tag.user.full_name
+  }))
+}) 

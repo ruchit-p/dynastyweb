@@ -76,45 +76,4 @@ export async function hasPermission(permission: string) {
     .single()
     
   return !!data
-}
-
-/**
- * Rate limiting utility for server-side operations
- */
-export async function checkRateLimit(
-  key: string,
-  limit: number,
-  window: number
-): Promise<boolean> {
-  const now = Date.now()
-  const userId = (await getAuthenticatedUser())?.id
-  if (!userId) return false
-
-  const { data } = await supabaseAdmin
-    .from('rate_limits')
-    .select('count, last_reset')
-    .eq('key', `${userId}:${key}`)
-    .single()
-
-  if (!data || now - data.last_reset > window) {
-    await supabaseAdmin
-      .from('rate_limits')
-      .upsert({
-        key: `${userId}:${key}`,
-        count: 1,
-        last_reset: now
-      })
-    return true
-  }
-
-  if (data.count >= limit) {
-    return false
-  }
-
-  await supabaseAdmin
-    .from('rate_limits')
-    .update({ count: data.count + 1 })
-    .eq('key', `${userId}:${key}`)
-
-  return true
 } 

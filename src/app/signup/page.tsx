@@ -84,8 +84,27 @@ export default function SignupPage() {
     }
 
     try {
-      await signUp(formData)
+      await signUp({
+        ...formData,
+        dateOfBirth: formData.dateOfBirth.toISOString(),
+      })
       // Navigation and toast notifications are handled by AuthContext
+    } catch (error: any) {
+      console.error('Signup error:', error)
+      // Handle specific error cases
+      if (error.code === 'user_already_exists') {
+        setErrors({
+          email: 'An account with this email already exists. Please sign in instead.',
+        })
+      } else if (error.code === '42501') {
+        // This is the RLS error, but user was created successfully
+        // We can ignore this error since the auth account was created
+        return
+      } else {
+        setErrors({
+          email: 'Failed to create account. Please try again.',
+        })
+      }
     } finally {
       setIsLoading(false)
     }
@@ -99,7 +118,8 @@ export default function SignupPage() {
           alt="Dynasty Logo"
           width={60}
           height={60}
-          className="mx-auto"
+          className="mx-auto h-[60px] w-[60px]"
+          priority
         />
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
           Create your account

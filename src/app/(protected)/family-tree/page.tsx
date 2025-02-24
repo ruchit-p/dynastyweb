@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import calcTree from "relatives-tree";
 import type { Node, ExtNode, Connector } from 'relatives-tree/lib/types';
-import { getFamilyTreeData, createFamilyMember, deleteFamilyMember } from "@/utils/functionUtils";
+import { getFamilyTreeData, createFamilyMember, deleteFamilyMember } from "@/lib/client/utils/functionUtils";
 import FamilyNode from '@/components/FamilyNode';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { Spinner } from '@/components/ui/spinner';
@@ -97,22 +97,27 @@ export default function FamilyTreePage() {
   const DEBUG_MODE = false; // Debug flag - set to true to enable debug features
 
   const fetchFamilyTreeData = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser?.id) {
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
-      const { treeNodes } = await getFamilyTreeData(currentUser.uid);
-      setTreeData([...treeNodes]); // Convert readonly array to mutable array
-    } catch {
+      const { treeNodes } = await getFamilyTreeData(currentUser.id);
+      setTreeData(treeNodes || []); // Handle potential undefined
+    } catch (error) {
+      console.error('Error loading family tree:', error);
       toast({
         title: "Error",
-        description: "Failed to load family tree. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to load family tree. Please try again.",
         variant: "destructive",
       });
+      setTreeData([]); // Reset tree data on error
     } finally {
       setLoading(false);
     }
-  }, [currentUser, toast]);
+  }, [currentUser?.id, toast]);
 
   useEffect(() => {
     void fetchFamilyTreeData();
@@ -575,28 +580,14 @@ export default function FamilyTreePage() {
     setScale(prev => Math.max(prev - 0.1, 0.1));
   };
 
-  if (loading) {
+  if (!currentUser?.id) {
     return (
-      <ProtectedRoute>
-        <main className="family-tree-container w-screen">
-          <div className="flex items-center justify-center w-full h-full">
-            <Spinner className="text-primary" />
-          </div>
-        </main>
-      </ProtectedRoute>
-    );
-  }
-
-  if (!currentUser) {
-    return (
-      <ProtectedRoute>
-        <main className="family-tree-container w-screen">
-          <div className="flex flex-col items-center justify-center w-full h-full gap-4">
-            <h2 className="text-xl font-semibold">Not Authenticated</h2>
-            <p className="text-gray-600">Please sign in to view your family tree.</p>
-          </div>
-        </main>
-      </ProtectedRoute>
+      <main className="family-tree-container w-screen">
+        <div className="flex flex-col items-center justify-center w-full h-full gap-4">
+          <h2 className="text-xl font-semibold">Not Authenticated</h2>
+          <p className="text-gray-600">Please sign in to view your family tree.</p>
+        </div>
+      </main>
     );
   }
 
