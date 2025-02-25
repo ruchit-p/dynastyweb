@@ -11,8 +11,7 @@ import { useToast } from "@/components/ui/use-toast"
 import AudioPlayer from "@/components/AudioPlayer"
 import VideoPlayer from "@/components/VideoPlayer"
 import ProtectedRoute from "@/components/ProtectedRoute"
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { Database } from '@/lib/shared/types/supabase'
+import { supabaseBrowser } from '@/lib/client/supabase-browser'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,14 +55,13 @@ export default function StoryDetailsPage() {
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const supabase = createClientComponentClient<Database>()
 
   useEffect(() => {
     const fetchStory = async () => {
       if (!id) return
 
       try {
-        const { data: storyData, error } = await supabase
+        const { data: storyData, error } = await supabaseBrowser
           .from('stories')
           .select('*')
           .eq('id', id)
@@ -93,7 +91,7 @@ export default function StoryDetailsPage() {
     }
 
     fetchStory()
-  }, [id, toast, supabase])
+  }, [id, toast])
 
   const handleDelete = async () => {
     if (!story || !id || !user) return;
@@ -101,7 +99,7 @@ export default function StoryDetailsPage() {
     try {
       setDeleting(true);
       
-      const { error } = await supabase
+      const { error } = await supabaseBrowser
         .from('stories')
         .delete()
         .eq('id', id)

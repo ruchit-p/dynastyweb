@@ -1,5 +1,4 @@
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { Database } from '@/lib/shared/types/supabase'
+import { supabaseBrowser } from '@/lib/client/supabase-browser'
 import { toast } from '@/components/ui/use-toast'
 
 // MARK: - Types
@@ -28,7 +27,6 @@ export async function uploadMedia(
   file: File,
   options: UploadOptions = {}
 ): Promise<string> {
-  const supabase = createClientComponentClient<Database>()
   const {
     bucket = 'media',
     path = '',
@@ -48,7 +46,7 @@ export async function uploadMedia(
     const fileName = `${path}${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
 
     // Upload file
-    const { error: uploadError, data } = await supabase.storage
+    const { error: uploadError, data } = await supabaseBrowser.storage
       .from(bucket)
       .upload(fileName, processedFile, {
         onUploadProgress: ({ count, total }) => {
@@ -60,7 +58,7 @@ export async function uploadMedia(
     if (uploadError) throw uploadError
 
     // Get public URL
-    const { data: { publicUrl } } = supabase.storage
+    const { data: { publicUrl } } = supabaseBrowser.storage
       .from(bucket)
       .getPublicUrl(fileName)
 
@@ -76,13 +74,11 @@ export async function uploadMedia(
 }
 
 export async function deleteMedia(url: string, bucket = 'media'): Promise<void> {
-  const supabase = createClientComponentClient<Database>()
-
   try {
     const path = url.split('/').pop()
     if (!path) throw new Error('Invalid media URL')
 
-    const { error } = await supabase.storage
+    const { error } = await supabaseBrowser.storage
       .from(bucket)
       .remove([path])
 
@@ -106,11 +102,9 @@ export async function processMedia(
   url: string,
   options: MediaProcessingOptions
 ): Promise<string> {
-  const supabase = createClientComponentClient<Database>()
-
   try {
     // Call the Edge Function for media processing
-    const { data, error } = await supabase.functions.invoke('process-media', {
+    const { data, error } = await supabaseBrowser.functions.invoke('process-media', {
       body: {
         url,
         operations: [

@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from '@/lib/server/supabase-admin'
+import { createClient } from '@/lib/server/supabase'
 import { withAuth } from './auth'
 import { StorageBucket } from '@/lib/shared/types/storage'
 import { validateFile } from '@/lib/shared/validation/storage'
@@ -23,24 +23,28 @@ export type StorageError = {
 export const uploadFile = withAuth(async (
   file: File,
   bucket: StorageBucket,
+  path?: string,
   options?: {
-    path?: string
-    contentType?: string
+    upsert?: boolean,
     cacheControl?: string
   }
 ): Promise<UploadResult> => {
   try {
     // Validate file
-    const validation = validateFile(file, bucket)
-    if (!validation.isValid) {
-      return { path: '', url: '', error: validation.error }
+    const validationError = validateFile(file, bucket)
+    if (validationError) {
+      return {
+        path: '',
+        url: '',
+        error: validationError
+      }
     }
 
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     
     // Generate unique file path if not provided
     const fileExt = file.name.split('.').pop()
-    const fileName = options?.path || `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+    const fileName = path || `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
 
     // Upload file
     const { data, error } = await supabase.storage
@@ -75,7 +79,7 @@ export const downloadFile = withAuth(async (
   path: string
 ): Promise<Blob | null> => {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     const { data, error } = await supabase.storage
       .from(bucket)
       .download(path)
@@ -101,7 +105,7 @@ export const createSignedUrl = withAuth(async (
   expiresIn: number = 3600
 ): Promise<string | null> => {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     const { data, error } = await supabase.storage
       .from(bucket)
       .createSignedUrl(path, expiresIn)
@@ -123,10 +127,18 @@ export const createSignedUrl = withAuth(async (
  */
 export const listFiles = withAuth(async (
   bucket: StorageBucket,
-  path?: string
+  path?: string,
+  options?: {
+    limit?: number,
+    offset?: number,
+    sortBy?: {
+      column: string,
+      order: 'asc' | 'desc'
+    }
+  }
 ) => {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     const { data, error } = await supabase.storage
       .from(bucket)
       .list(path)
@@ -148,13 +160,13 @@ export const listFiles = withAuth(async (
  */
 export const deleteFile = withAuth(async (
   bucket: StorageBucket,
-  path: string
+  paths: string | string[]
 ): Promise<{ success: boolean, error?: string }> => {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     const { error } = await supabase.storage
       .from(bucket)
-      .remove([path])
+      .remove(Array.isArray(paths) ? paths : [paths])
 
     if (error) {
       console.error('Delete error:', error)

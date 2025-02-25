@@ -1,5 +1,4 @@
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { Database } from '@/types/supabase'
+import { supabaseBrowser } from '@/lib/client/supabase-browser'
 
 export interface UserSettings {
   notifications: NotificationSettings
@@ -37,7 +36,6 @@ export class SettingsManager {
   private static instance: SettingsManager
   private debounceTimeout: NodeJS.Timeout | null = null
   private readonly debounceInterval = 500 // 500ms
-  private supabase = createClientComponentClient<Database>()
 
   private constructor() {}
 
@@ -50,7 +48,7 @@ export class SettingsManager {
 
   async loadSettings(userId: string): Promise<UserSettings> {
     try {
-      const { data: settings, error } = await this.supabase
+      const { data: settings, error } = await supabaseBrowser
         .from('user_settings')
         .select('*')
         .eq('user_id', userId)
@@ -92,7 +90,7 @@ export class SettingsManager {
     return new Promise((resolve, reject) => {
       this.debounceTimeout = setTimeout(async () => {
         try {
-          const { error } = await this.supabase
+          const { error } = await supabaseBrowser
             .from('user_settings')
             .upsert({
               user_id: userId,

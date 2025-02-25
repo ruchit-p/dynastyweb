@@ -1,0 +1,233 @@
+---
+description: Guidelines for fetching data in Next.js applications
+globs: **/*.ts, **/*.tsx, **/*.js, **/*.jsx
+alwaysApply: true
+---
+# Specify the following for Cursor rules
+description: Guidelines for fetching data in Next.js applications
+globs: "**/*.ts, **/*.tsx, **/*.js, **/*.jsx"
+---
+
+# Next.js Data Fetching Patterns
+
+## Overview
+
+Next.js provides several methods for fetching data in your applications. The App Router offers a simplified data fetching system built on React's fetch API and suspense.
+
+## 🚨 CRITICAL PRINCIPLES 🚨
+
+1. Server Components are the preferred way to fetch data
+2. `fetch()` is extended in Next.js with automatic deduplication and caching
+3. `async/await` can be used directly in components
+4. Route Handlers should be used for API routes
+
+## Fetching Data in Server Components
+
+```tsx
+// app/users/page.tsx
+async function getUsers() {
+  const res = await fetch('https://api.example.com/users')
+  if (!res.ok) throw new Error('Failed to fetch users')
+  return res.json()
+}
+
+export default async function UsersPage() {
+  const users = await getUsers()
+  
+  return (
+    <div>
+      <h1>Users</h1>
+      <ul>
+        {users.map(user => (
+          <li key={user.id}>{user.name}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+## Parallel Data Fetching
+
+Use Promise.all or Promise.allSettled for parallel requests:
+
+```tsx
+async function getItem() {
+  // Initiate both requests in parallel
+  const itemPromise = fetch('https://api.example.com/item')
+  const relatedItemsPromise = fetch('https://api.example.com/related')
+  
+  // Wait for both promises to settle
+  const [itemRes, relatedRes] = await Promise.all([
+    itemPromise,
+    relatedItemsPromise
+  ])
+  
+  if (!itemRes.ok) throw new Error('Failed to fetch item')
+  if (!relatedRes.ok) throw new Error('Failed to fetch related items')
+  
+  const [item, related] = await Promise.all([
+    itemRes.json(),
+    relatedRes.json()
+  ])
+  
+  return { item, related }
+}
+```
+
+## Data Fetching with Supabase
+
+When using Supabase in a Next.js Server Component:
+
+```tsx
+import { createClient } from '@/lib/server/supabase'
+
+async function getItems() {
+  const supabase = await createClient()
+  const { data, error } = await supabase.from('items').select()
+  
+  if (error) throw error
+  return data
+}
+
+export default async function ItemsPage() {
+  const items = await getItems()
+  // Render items
+}
+```
+
+## Caching & Revalidation
+
+Next.js provides built-in caching for data fetching with three strategies:
+
+### 1. Full Route Cache (Default)
+
+```tsx
+// Cached by default (static)
+const data = await fetch('https://api.example.com/data')
+```
+
+### 2. Time-based Revalidation
+
+```tsx
+// Revalidate every 60 seconds
+const data = await fetch('https://api.example.com/data', { 
+  next: { revalidate: 60 } 
+})
+```
+
+### 3. On-demand Revalidation
+
+```tsx
+// Set a tag for revalidation
+const data = await fetch('https://api.example.com/data', {
+  next: { tags: ['collection'] }
+})
+
+// In a Server Action or Route Handler:
+revalidateTag('collection')
+```
+
+### 4. Disable Caching
+
+```tsx
+// Never cache this data
+const data = await fetch('https://api.example.com/data', { 
+  cache: 'no-store' 
+})
+```
+
+## Error Handling
+
+Use error.js files for handling fetch errors in specific route segments:
+
+```tsx
+// app/items/error.tsx
+'use client'
+
+import { useEffect } from 'react'
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  useEffect(() => {
+    console.error(error)
+  }, [error])
+
+  return (
+    <div>
+      <h2>Something went wrong!</h2>
+      <button onClick={() => reset()}>Try again</button>
+    </div>
+  )
+}
+```
+
+## Best Practices
+
+1. **Fetch in Server Components** when possible
+2. **Fetch as close as possible** to where data is used
+3. **Use parallel data fetching** to improve performance
+4. **Stream content** with Suspense boundaries for improved UX
+5. **Implement proper error handling**
+6. **Choose appropriate caching** strategies based on data volatility
+7. **Consider SWR or React Query** for client-side data fetching with advanced features
+
+## Common Patterns
+
+### Loading States with Suspense
+
+```tsx
+import { Suspense } from 'react'
+import { UserList, UserSkeleton } from '@/components'
+
+export default function UsersPage() {
+  return (
+    <div>
+      <h1>Users</h1>
+      <Suspense fallback={<UserSkeleton />}>
+        <UserList />
+      </Suspense>
+    </div>
+  )
+}
+```
+
+### Client Component Data Fetching (when needed)
+
+```tsx
+'use client'
+
+import { useState, useEffect } from 'react'
+
+export default function ClientDataFetching() {
+  const [data, setData] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch('/api/data')
+        const json = await response.json()
+        setData(json)
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error('An error occurred'))
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  if (isLoading) return <div>Loading...</div>
+  if (error) return <div>Error: {error.message}</div>
+  
+  return <div>{/* Render data */}</div>
+}
+``` 

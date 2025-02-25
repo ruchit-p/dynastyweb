@@ -1,4 +1,4 @@
-import { supabase } from './supabase-admin'
+import { createServiceClient } from './supabase-admin'
 import type { StorageBucket } from '../client/storage'
 
 // MARK: - Types
@@ -8,6 +8,9 @@ export type StorageStats = {
   fileCount: number
   lastModified: Date
 }
+
+// Initialize admin client
+const supabase = createServiceClient()
 
 // MARK: - Admin Functions
 

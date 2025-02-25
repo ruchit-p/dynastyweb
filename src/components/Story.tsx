@@ -1,5 +1,5 @@
 import { format } from "date-fns"
-import { Lock, MapPin, FileText, Video, AudioLines, User, Image as ImageIcon } from "lucide-react"
+import { Lock, MapPin, FileText, Video, AudioLines, User, Image as ImageIcon, Users, UserCheck } from "lucide-react"
 import Link from "next/link"
 import { Button } from "./ui/button"
 import { ScrollArea, ScrollBar } from "./ui/scroll-area"
@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 import type { Story } from "@/lib/client/utils/storyUtils"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "./ui/card"
 import { Badge } from "./ui/badge"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip"
 
 // Helper function to get ordinal suffix for a number
 const getOrdinalSuffix = (day: number): string => {
@@ -95,6 +96,36 @@ export function StoryCard({ story, currentUserId }: StoryProps) {
     { text: 0, image: 0, video: 0, audio: 0 },
   )
 
+  // Function to get privacy icon and tooltip text
+  const getPrivacyDetails = () => {
+    const isAuthor = story.author.id === currentUserId;
+    
+    switch(story.privacy) {
+      case 'family':
+        return {
+          icon: <Users className="h-4 w-4 text-blue-500 flex-shrink-0" />,
+          tooltip: 'Visible to all family members',
+          show: true // Always show family icon
+        };
+      case 'personal':
+        return {
+          icon: <Lock className="h-4 w-4 text-red-500 flex-shrink-0" />,
+          tooltip: 'Only visible to you',
+          show: isAuthor // Only show lock to the author
+        };
+      case 'custom':
+        return {
+          icon: <UserCheck className="h-4 w-4 text-green-500 flex-shrink-0" />,
+          tooltip: 'Visible to selected family members',
+          show: true // Always show custom icon
+        };
+      default:
+        return { icon: null, tooltip: '', show: false };
+    }
+  };
+
+  const privacyDetails = getPrivacyDetails();
+
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader className="pb-2">
@@ -121,8 +152,17 @@ export function StoryCard({ story, currentUserId }: StoryProps) {
               <div>
                 <div className="flex items-center gap-1">
                   <p className="font-medium leading-none">{story.author.displayName}</p>
-                  {story.authorID === currentUserId && story.privacy === "personal" && (
-                    <Lock className="h-4 w-4 text-destructive flex-shrink-0" />
+                  {privacyDetails.show && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>{privacyDetails.icon}</span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{privacyDetails.tooltip}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )}
                 </div>
                 {story.eventDate && (

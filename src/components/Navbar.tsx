@@ -4,8 +4,8 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { Database } from '@/lib/shared/types/supabase'
+import { supabaseBrowser } from '@/lib/client/supabase-browser'
+import { signOut } from '@/app/actions/auth'
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -31,7 +31,9 @@ export default function Navbar({ user }: NavbarProps) {
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false)
   const [profilePicture, setProfilePicture] = useState<string | null>(null)
   const router = useRouter()
-  const supabase = createClientComponentClient<Database>()
+  
+  // Use the singleton browser client
+  const supabase = supabaseBrowser
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -64,8 +66,9 @@ export default function Navbar({ user }: NavbarProps) {
 
   const handleSignOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
+      // Use the server action instead of direct client auth
+      const result = await signOut()
+      if (result.error) throw result.error
       router.push("/login")
     } catch (error) {
       console.error("Error signing out:", error)

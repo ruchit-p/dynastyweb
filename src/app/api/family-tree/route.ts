@@ -1,110 +1,194 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import type { Database } from '@/lib/shared/types/supabase';
+import { createClient } from '@/lib/server/supabase';
 
 export const dynamic = 'force-dynamic';
+
+// Define types for our nodes
+type FamilyTreeNode = {
+  id: string;
+  gender: string;
+  family_tree_id: string;
+  user_id?: string;
+  parents?: string[];
+  children?: string[];
+  siblings?: string[];
+  spouses?: string[];
+  attributes: {
+    first_name?: string;
+    last_name?: string;
+    display_name?: string;
+    date_of_birth?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
 
 // GET /api/family-tree
 export async function GET() {
   try {
-    // Get cookie store
-    const cookieStore = cookies()
-    const supabase = createRouteHandlerClient<Database, 'public'>({ 
-      cookies: () => cookieStore 
-    });
+    const supabase = await createClient();
+    
+    if (!supabase) {
+      console.error('Failed to initialize Supabase client');
+      return NextResponse.json({ error: 'Failed to initialize database connection' }, { status: 500 });
+    }
     
     // First get and verify the session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    if (sessionError) throw sessionError
-    if (!session) throw new Error('Not authenticated')
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) {
+      console.error('Auth session error:', sessionError);
+      return NextResponse.json({ error: 'Authentication error', details: sessionError.message }, { status: 401 });
+    }
+    
+    if (!session) {
+      console.error('No session found');
+      return NextResponse.json({ error: 'Not authenticated', reason: 'no_session' }, { status: 401 });
+    }
 
     // Then verify the user with getUser for secure authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser(session.access_token)
-    if (authError) throw authError
-    if (!user) throw new Error('Not authenticated')
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      console.error('Auth user error:', authError);
+      return NextResponse.json({ error: 'Authentication error', details: authError.message }, { status: 401 });
+    }
+    
+    if (!user) {
+      console.error('No user found despite valid session');
+      return NextResponse.json({ error: 'Not authenticated', reason: 'no_user' }, { status: 401 });
+    }
 
-    // Get user's family tree ID
-    const { data: userData, error: userDataError } = await supabase
+    console.log('User authenticated successfully:', user.id);
+
+    // Get the family tree id - first try to get from user profile
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('family_tree_id')
       .eq('id', user.id)
-      .single()
+      .single();
+      
+    if (userError && userError.code !== 'PGRST116') {
+      console.error('Error getting user data:', userError);
+      return NextResponse.json({ error: 'Error retrieving user data', details: userError.message }, { status: 500 });
+    }
+    
+    let familyTreeId = userData?.family_tree_id;
+    
+    // If not found in user profile, try family_tree_access
+    if (!familyTreeId) {
+      const { data: accessData, error: accessError } = await supabase
+        .from('family_tree_access')
+        .select('tree_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .single();
+        
+      if (accessError && accessError.code !== 'PGRST116') {
+        console.error('Error getting family tree access:', accessError);
+      } else {
+        familyTreeId = accessData?.tree_id;
+      }
+    }
+    
+    // If still no family tree, try to find trees the user owns
+    if (!familyTreeId) {
+      const { data: ownedTrees, error: ownedError } = await supabase
+        .from('family_trees')
+        .select('id')
+        .eq('owner_id', user.id)
+        .limit(1)
+        .single();
+        
+      if (ownedError && ownedError.code !== 'PGRST116') {
+        console.error('Error getting owned trees:', ownedError);
+      } else {
+        familyTreeId = ownedTrees?.id;
+      }
+    }
+    
+    if (!familyTreeId) {
+      console.log('No family tree found for user:', user.id);
+      return NextResponse.json({ 
+        error: 'No family tree found',
+        action: 'create',
+        trees: []
+      }, { status: 404 });
+    }
 
-    if (userDataError) throw userDataError
-    if (!userData?.family_tree_id) throw new Error('No family tree found')
+    console.log('Found family tree for user:', user.id, 'tree ID:', familyTreeId);
 
-    // Get family tree data
-    const { data: treeData, error: treeError } = await supabase
-      .from('family_trees')
-      .select('*')
-      .eq('id', userData.family_tree_id)
-      .single()
-
-    if (treeError) throw treeError
-
-    // Get family tree nodes
+    // Get the nodes for this family tree
     const { data: nodes, error: nodesError } = await supabase
       .from('family_tree_nodes')
-      .select(`
-        id,
-        user_id,
-        parents,
-        children,
-        spouses,
-        gender,
-        attributes
-      `)
-      .eq('family_tree_id', userData.family_tree_id)
+      .select('*')
+      .eq('family_tree_id', familyTreeId);
+      
+    if (nodesError) {
+      console.error('Error fetching family tree nodes:', nodesError);
+      return NextResponse.json({ 
+        error: 'Error retrieving family tree data', 
+        details: nodesError.message 
+      }, { status: 500 });
+    }
+    
+    // If no nodes, return empty array
+    if (!nodes || nodes.length === 0) {
+      console.log('No nodes found for family tree:', familyTreeId);
+      return NextResponse.json({ 
+        treeId: familyTreeId,
+        nodes: [] 
+      });
+    }
 
-    if (nodesError) throw nodesError
-    if (!nodes) throw new Error('Failed to fetch family tree nodes')
+    // Get the family tree details
+    const { data: treeData, error: treeError } = await supabase
+      .from('family_trees')
+      .select('name, description, privacy_level')
+      .eq('id', familyTreeId)
+      .single();
+      
+    if (treeError) {
+      console.error('Error fetching family tree details:', treeError);
+    }
 
-    // Transform nodes with type safety
-    const transformedNodes = nodes.map(node => ({
+    // Transform the nodes to match the expected format (if needed)
+    const transformedNodes = nodes.map((node: FamilyTreeNode): FamilyTreeNode => ({
       id: node.id,
-      user_id: node.user_id,
       gender: node.gender,
-      parents: Array.isArray(node.parents) ? node.parents : [],
-      children: Array.isArray(node.children) ? node.children : [],
-      spouses: Array.isArray(node.spouses) ? node.spouses : [],
-      attributes: {
-        ...(node.attributes as Record<string, unknown>),
-        familyTreeId: userData.family_tree_id
-      }
-    }))
+      family_tree_id: node.family_tree_id,
+      user_id: node.user_id,
+      parents: node.parents || [],
+      children: node.children || [],
+      spouses: node.spouses || [],
+      attributes: node.attributes || {}
+    }));
 
-    return NextResponse.json({ 
-      tree: treeData,
+    return NextResponse.json({
+      treeId: familyTreeId, 
+      treeName: treeData?.name,
+      treeDescription: treeData?.description,
+      privacyLevel: treeData?.privacy_level,
       nodes: transformedNodes
-    })
+    });
   } catch (error) {
-    console.error('Error fetching family tree:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch family tree' },
-      { status: 401 }
-    );
+    console.error('Error in family tree API:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 // POST /api/family-tree
 export async function POST(request: Request) {
   try {
-    // Get cookie store
-    const cookieStore = cookies()
-    const supabase = createRouteHandlerClient<Database, 'public'>({ 
-      cookies: () => cookieStore 
-    });
+    const supabase = await createClient();
     
     // First get and verify the session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    if (sessionError) throw sessionError
-    if (!session) throw new Error('Not authenticated')
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    if (!session) throw new Error('Not authenticated');
 
     // Then verify the user with getUser for secure authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser(session.access_token)
-    if (authError) throw authError
-    if (!user) throw new Error('Not authenticated')
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError) throw authError;
+    if (!user) throw new Error('Not authenticated');
 
     // Get the request body
     const body = await request.json();
@@ -135,21 +219,17 @@ export async function POST(request: Request) {
 // DELETE /api/family-tree
 export async function DELETE(request: Request) {
   try {
-    // Get cookie store
-    const cookieStore = cookies()
-    const supabase = createRouteHandlerClient<Database, 'public'>({ 
-      cookies: () => cookieStore 
-    });
+    const supabase = await createClient();
     
     // First get and verify the session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    if (sessionError) throw sessionError
-    if (!session) throw new Error('Not authenticated')
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    if (!session) throw new Error('Not authenticated');
 
     // Then verify the user with getUser for secure authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser(session.access_token)
-    if (authError) throw authError
-    if (!user) throw new Error('Not authenticated')
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError) throw authError;
+    if (!user) throw new Error('Not authenticated');
 
     // Get the request body
     const body = await request.json();

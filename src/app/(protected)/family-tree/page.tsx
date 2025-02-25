@@ -68,6 +68,16 @@ interface CustomNode extends Omit<Node, 'placeholder'> {
   };
 }
 
+// Extended User type that includes the required properties
+interface ExtendedUser {
+  id: string;
+  gender?: string;
+  first_name?: string;
+  last_name?: string;
+  display_name?: string;
+  email?: string;
+}
+
 export default function FamilyTreePage() {
   const { currentUser } = useAuth();
   const { toast } = useToast();
@@ -90,11 +100,18 @@ export default function FamilyTreePage() {
   });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [rootNode, setRootNode] = useState<string>(currentUser?.uid || '');
+  const [rootNode, setRootNode] = useState<string>('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const treeContainerRef = useRef<HTMLDivElement>(null);
   const DEBUG_MODE = false; // Debug flag - set to true to enable debug features
+
+  // Update rootNode when user changes
+  useEffect(() => {
+    if (currentUser?.id) {
+      setRootNode(currentUser.id);
+    }
+  }, [currentUser?.id]);
 
   const fetchFamilyTreeData = useCallback(async () => {
     if (!currentUser?.id) {
@@ -104,7 +121,20 @@ export default function FamilyTreePage() {
 
     try {
       setLoading(true);
+      console.log('Fetching family tree data for user:', currentUser.id);
       const { treeNodes } = await getFamilyTreeData(currentUser.id);
+      
+      if (!treeNodes || treeNodes.length === 0) {
+        console.log('No tree nodes returned from API');
+        toast({
+          title: "Empty Family Tree",
+          description: "Your family tree doesn't have any members yet. Add your first family member to get started.",
+          variant: "default",
+        });
+      } else {
+        console.log(`Loaded ${treeNodes.length} family tree nodes`);
+      }
+      
       setTreeData(treeNodes || []); // Handle potential undefined
     } catch (error) {
       console.error('Error loading family tree:', error);
@@ -369,7 +399,7 @@ export default function FamilyTreePage() {
 
   const canDeleteMember = (node: ExtNode): boolean => {
     // Can't delete self
-    if (node.id === currentUser?.uid) return false;
+    if (node.id === currentUser?.id) return false;
 
     const isLeafMember = (member: Node): boolean => {
       // If this member has no children, they are a leaf
@@ -392,7 +422,7 @@ export default function FamilyTreePage() {
     // If the member has an account (status !== 'pending'), only tree owner can delete
     const memberData = (fullNode as CustomNode).attributes;
     const hasAccount = memberData?.status && memberData.status !== 'pending';
-    const isOwner = currentUser?.uid === memberData?.treeOwnerId;
+    const isOwner = currentUser?.id === memberData?.treeOwnerId;
 
     if (hasAccount && !isOwner) {
       setDeleteError(
@@ -412,7 +442,7 @@ export default function FamilyTreePage() {
   };
 
   const handleDeleteMember = async () => {
-    if (!selectedNode || !currentUser || selectedNode.id === currentUser.uid) return;
+    if (!selectedNode || !currentUser || selectedNode.id === currentUser.id) return;
     const node = selectedNode as CustomNode;
 
     if (!canDeleteMember(selectedNode)) {
@@ -430,7 +460,7 @@ export default function FamilyTreePage() {
       await deleteFamilyMember(
         node.id,
         node.attributes.familyTreeId,
-        currentUser.uid
+        currentUser.id
       );
 
       toast({
@@ -580,16 +610,213 @@ export default function FamilyTreePage() {
     setScale(prev => Math.max(prev - 0.1, 0.1));
   };
 
-  if (!currentUser?.id) {
-    return (
-      <main className="family-tree-container w-screen">
+  // Function to render the tree based on the current state
+  const renderTree = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <Spinner />
+        </div>
+      );
+    }
+
+    if (!currentUser?.id) {
+      return (
         <div className="flex flex-col items-center justify-center w-full h-full gap-4">
           <h2 className="text-xl font-semibold">Not Authenticated</h2>
           <p className="text-gray-600">Please sign in to view your family tree.</p>
         </div>
-      </main>
+      );
+    }
+
+    if (treeData.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center w-full h-full gap-4">
+          <h2 className="text-xl font-semibold">No Family Tree Data</h2>
+          <p className="text-gray-600">Your family tree is empty. Start by adding family members.</p>
+          <div className="mt-4">
+            <Button
+              variant="default"
+              onClick={async () => {
+                try {
+                  // Create a family tree via the API
+                  const response = await fetch('/api/family-tree/create', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                  });
+                  
+                  if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to create family tree');
+                  }
+                  
+                  const data = await response.json();
+                  
+                  // Now set the node with the new tree ID
+                  const userNode = {
+                    id: currentUser.id,
+                    gender: (currentUser as ExtendedUser).gender || 'other',
+                    left: 0, top: 0,
+                    hasSubTree: false,
+                    parents: [],
+                    siblings: [],
+                    spouses: [],
+                    children: [],
+                    attributes: {
+                      familyTreeId: data.treeId,
+                      first_name: (currentUser as ExtendedUser).first_name || '',
+                      last_name: (currentUser as ExtendedUser).last_name || '',
+                      display_name: (currentUser as ExtendedUser).display_name || `${(currentUser as ExtendedUser).first_name || ''} ${(currentUser as ExtendedUser).last_name || ''}`,
+                      isBloodRelated: true,
+                      treeOwnerId: currentUser.id
+                    }
+                  };
+                  
+                  setSelectedNode(userNode as ExtNode);
+                  setRelationType('child');
+                  setIsSheetOpen(true);
+                  
+                  // Refresh the tree data
+                  await fetchFamilyTreeData();
+                  
+                  toast({
+                    title: "Family Tree Created",
+                    description: "Your family tree has been created. Add your first family member to get started.",
+                    variant: "default",
+                  });
+                } catch (error) {
+                  console.error('Error creating family tree:', error);
+                  toast({
+                    title: "Error",
+                    description: error instanceof Error ? error.message : "Failed to create family tree. Please try again.",
+                    variant: "destructive",
+                  });
+                }
+              }}
+            >
+              Create Your Family Tree
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div 
+        ref={treeContainerRef}
+        className="absolute inset-0 overflow-hidden"
+        onWheel={handleWheel}
+      >
+        <div 
+          className="tree-wrapper absolute"
+          style={{
+            width: `${calcTree(treeData, {
+              rootId: rootNode,
+              placeholders: false
+            }).canvas.width * WIDTH}px`,
+            height: `${calcTree(treeData, {
+              rootId: rootNode,
+              placeholders: false
+            }).canvas.height * HEIGHT}px`,
+            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+            transition: 'transform 0.2s ease-out',
+            transformOrigin: '0 0',
+            left: 0,
+            top: 0
+          }}
+        >
+          {/* Render connectors first so they appear behind nodes */}
+          {calcTree(treeData, {
+            rootId: rootNode,
+            placeholders: false
+          }).connectors.map((connector: Connector, index: number) => {
+            const [x1, y1, x2, y2] = connector;
+            const key = `connector-${index}`;
+
+            // Calculate centered coordinates
+            const startX = x1 * WIDTH - (WIDTH / 2);
+            const startY = y1 * HEIGHT - (HEIGHT / 2.5);
+            const endX = x2 * WIDTH - (WIDTH / 2);
+            const endY = y2 * HEIGHT - (HEIGHT / 2.5);
+
+            return (
+              <div
+                key={key}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  overflow: 'visible',
+                }}
+              >
+                <svg
+                  style={{
+                    position: 'absolute',
+                    width: '100%',
+                    height: '100%',
+                    overflow: 'visible',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <path
+                    d={`M ${startX} ${startY} L ${endX} ${endY}`}
+                    stroke="#94a3b8"
+                    strokeWidth="1"
+                    fill="none"
+                  />
+                </svg>
+              </div>
+            );
+          })}
+
+          {/* Render nodes on top of connectors */}
+          {calcTree(treeData, {
+            rootId: rootNode,
+            placeholders: false
+          }).nodes.map((node: ExtNode) => (
+            <div
+              key={node.id}
+              onMouseDown={(e) => {
+                handleNodeClick(node, true);
+                e.stopPropagation();
+              }}
+              onMouseUp={(e) => {
+                e.stopPropagation();
+              }}
+              onMouseMove={(e) => {
+                handleNodeClick(node, false);
+                e.stopPropagation();
+              }}
+              className="cursor-pointer absolute"
+              style={{
+                left: node.left * WIDTH,
+                top: node.top * HEIGHT,
+                width: WIDTH,
+                height: HEIGHT,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <FamilyNode
+                node={node}
+                isSelected={selectedNode?.id === node.id}
+                style={{
+                  width: WIDTH - 20,
+                  height: HEIGHT - 40,
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
     );
-  }
+  };
 
   return (
     <ProtectedRoute>
@@ -627,6 +854,17 @@ export default function FamilyTreePage() {
           </Button>
         </div>
 
+        {/* Center Tree Button */}
+        <div className="fixed bottom-8 left-8 z-20">
+          <Button
+            variant="outline"
+            onClick={() => centerTree()}
+            className="rounded-full"
+          >
+            Center Tree
+          </Button>
+        </div>
+
         {selectedNode && (
           <div className="fixed top-20 right-4 z-10 py-4">
             <DropdownMenu>
@@ -643,7 +881,7 @@ export default function FamilyTreePage() {
                 <DropdownMenuItem onSelect={() => handleAddMember('child')}>
                   Add Child
                 </DropdownMenuItem>
-                {selectedNode.id !== currentUser?.uid && (
+                {selectedNode.id !== currentUser?.id && (
                   <DropdownMenuItem
                     className={cn(
                       "text-red-600",
@@ -884,123 +1122,7 @@ export default function FamilyTreePage() {
           </SheetContent>
         </Sheet>
 
-        {treeData.length === 0 ? (
-          <div className="flex flex-col items-center justify-center w-full h-full gap-4">
-            <h2 className="text-xl font-semibold">No Family Tree Data</h2>
-            <p className="text-gray-600">Your family tree is empty. Start by adding family members.</p>
-          </div>
-        ) : (
-          <div 
-            ref={treeContainerRef}
-            className="absolute inset-0 overflow-hidden"
-            onWheel={handleWheel}
-          >
-            <div 
-              className="tree-wrapper absolute"
-              style={{
-                width: `${calcTree(treeData, {
-                  rootId: rootNode,
-                  placeholders: false
-                }).canvas.width * WIDTH}px`,
-                height: `${calcTree(treeData, {
-                  rootId: rootNode,
-                  placeholders: false
-                }).canvas.height * HEIGHT}px`,
-                transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-                transition: 'transform 0.2s ease-out',
-                transformOrigin: '0 0',
-                left: 0,
-                top: 0
-              }}
-            >
-              {/* Render connectors first so they appear behind nodes */}
-              {calcTree(treeData, {
-                rootId: rootNode,
-                placeholders: false
-              }).connectors.map((connector: Connector, index: number) => {
-                const [x1, y1, x2, y2] = connector;
-                const key = `connector-${index}`;
-
-                // Calculate centered coordinates
-                const startX = x1 * WIDTH - (WIDTH / 2);
-                const startY = y1 * HEIGHT - (HEIGHT / 2.5);
-                const endX = x2 * WIDTH - (WIDTH / 2);
-                const endY = y2 * HEIGHT - (HEIGHT / 2.5);
-
-                return (
-                  <div
-                    key={key}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      overflow: 'visible',
-                    }}
-                  >
-                    <svg
-                      style={{
-                        position: 'absolute',
-                        width: '100%',
-                        height: '100%',
-                        overflow: 'visible',
-                        pointerEvents: 'none',
-                      }}
-                    >
-                      <path
-                        d={`M ${startX} ${startY} L ${endX} ${endY}`}
-                        stroke="#94a3b8"
-                        strokeWidth="1"
-                        fill="none"
-                      />
-                    </svg>
-                  </div>
-                );
-              })}
-
-              {/* Render nodes on top of connectors */}
-              {calcTree(treeData, {
-                rootId: rootNode,
-                placeholders: false
-              }).nodes.map((node: ExtNode) => (
-                <div
-                  key={node.id}
-                  onMouseDown={(e) => {
-                    handleNodeClick(node, true);
-                    e.stopPropagation();
-                  }}
-                  onMouseUp={(e) => {
-                    e.stopPropagation();
-                  }}
-                  onMouseMove={(e) => {
-                    handleNodeClick(node, false);
-                    e.stopPropagation();
-                  }}
-                  className="cursor-pointer absolute"
-                  style={{
-                    left: node.left * WIDTH,
-                    top: node.top * HEIGHT,
-                    width: WIDTH,
-                    height: HEIGHT,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  <FamilyNode
-                    node={node}
-                    isSelected={selectedNode?.id === node.id}
-                    style={{
-                      width: WIDTH - 20,
-                      height: HEIGHT - 40,
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {renderTree()}
 
         <AlertDialog 
           open={showDeleteDialog} 

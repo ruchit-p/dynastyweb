@@ -1,0 +1,152 @@
+---
+description: Guidelines for Next.js App Router project structure
+globs: **/*.ts, **/*.tsx, **/*.js, **/*.jsx
+alwaysApply: true
+---
+# Specify the following for Cursor rules
+description: Guidelines for Next.js App Router project structure
+globs: "**/*.ts, **/*.tsx, **/*.js, **/*.jsx"
+---
+
+# Next.js App Router Project Structure
+
+## Overview
+
+Next.js App Router uses a file-system based router where folders define routes and special files define UI and behavior. Understanding the correct project structure is essential for building maintainable Next.js applications.
+
+## 🚨 CRITICAL FILES AND CONVENTIONS 🚨
+
+1. **Root Layout** (`app/layout.tsx`): REQUIRED for all applications
+2. **Page Files** (`page.tsx`): Required to make a route segment publicly accessible
+3. **Route Groups** (`(folderName)`): Parentheses indicate organizational folders that don't affect URL paths
+4. **Dynamic Segments** (`[id]`, `[...slug]`): Square brackets create dynamic routes
+
+## Top-Level Files/Folders
+
+```
+project-root/
+├── app/                  # Main application code with App Router
+├── components/           # Shared components
+├── lib/ or utils/        # Utility functions and shared code
+├── styles/               # Global styles
+├── public/               # Static assets
+├── middleware.ts         # Edge middleware
+├── next.config.js        # Next.js configuration
+├── package.json          # Project dependencies
+└── tsconfig.json         # TypeScript configuration
+```
+
+## App Folder Structure
+
+```
+app/
+├── layout.tsx            # Root layout (required)
+├── page.tsx              # Home page (/)
+├── global-error.tsx      # Global error handling
+├── not-found.tsx         # Custom 404 page
+├── api/                  # API routes
+│   └── [...]/
+│       └── route.ts      # Route handlers
+├── (grouping)/           # Route group (won't affect URL)
+│   └── [...]/
+├── [dynamic]/            # Dynamic route
+│   └── page.tsx          # Dynamic page
+└── dashboard/            # Regular route (/dashboard)
+    ├── layout.tsx        # Dashboard layout
+    ├── page.tsx          # Dashboard page
+    ├── loading.tsx       # Loading UI
+    └── error.tsx         # Error boundary
+```
+
+## Special Files
+
+| File           | Purpose                                        |
+|----------------|------------------------------------------------|
+| `layout`       | Shared UI for a segment and its children       |
+| `page`         | UI for a route and makes it publicly accessible|
+| `loading`      | Loading UI for a segment                       |
+| `error`        | Error UI for a segment                         |
+| `not-found`    | UI for 404 errors                              |
+| `route`        | API endpoint                                   |
+| `template`     | Similar to layout but creates a new instance   |
+| `default`      | Fallback UI for parallel routes                |
+| `global-error` | Global error UI                                |
+
+## Component Organization
+
+```
+components/
+├── ui/                   # Reusable UI components
+│   ├── button.tsx
+│   └── card.tsx
+├── forms/                # Form-related components
+│   ├── login-form.tsx
+│   └── register-form.tsx
+└── layouts/              # Layout components
+    ├── sidebar.tsx
+    └── navbar.tsx
+```
+
+## Client vs. Server Components
+
+By default, all components in Next.js App Router are Server Components. To use Client Components, add the `'use client'` directive at the top of the file:
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+
+export default function Counter() {
+  const [count, setCount] = useState(0);
+  
+  return (
+    <button onClick={() => setCount(count + 1)}>
+      Count: {count}
+    </button>
+  );
+}
+```
+
+## Best Practices
+
+1. **Co-location**: Keep related files close to where they're used
+2. **Partial Rendering**: Leverage nested layouts for performance
+3. **Route Groups**: Use route groups for organization without affecting URLs
+4. **Clear Separation**: Maintain clear separation between client and server code
+5. **Feature-Based Organization**: Consider grouping by feature for large applications
+
+## Common Patterns
+
+1. **Feature Folders**:
+   ```
+   app/
+   ├── (features)/
+   │   ├── authentication/
+   │   ├── billing/
+   │   └── settings/
+   ```
+
+2. **Auth-Protected Routes**:
+   ```
+   app/
+   ├── (public)/
+   │   ├── login/
+   │   └── register/
+   ├── (protected)/
+   │   ├── dashboard/
+   │   └── settings/
+   ```
+
+3. **API Organization**:
+   ```
+   app/
+   ├── api/
+   │   ├── users/
+   │   │   └── route.ts
+   │   ├── auth/
+   │   │   └── [...nextauth]/
+   │   │       └── route.ts
+   │   └── webhooks/
+   │       └── stripe/
+   │           └── route.ts
+   ``` 

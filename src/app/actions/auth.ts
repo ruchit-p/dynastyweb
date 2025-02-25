@@ -2,16 +2,18 @@
 
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { createServerActionClient } from '@supabase/auth-helpers-nextjs'
 import type { AuthError as SupabaseAuthError } from '@supabase/supabase-js'
 import type { Database } from '@/lib/shared/types/supabase'
 import { UsersRepository, InvitationsRepository } from '@/lib/server/repositories'
+import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@/lib/server/supabase'
 
 // MARK: - Types
 
 export type AuthError = {
   message: string
   code?: string
+  details?: string
 }
 
 export type SignUpData = {
@@ -54,24 +56,86 @@ type ServerAction<Args extends unknown[], Return> = (...args: Args) => Promise<R
  * Creates a new Supabase client for each request
  */
 async function getSupabase() {
-  const cookieStore = cookies()
-  return createServerActionClient<Database, 'public'>({ 
-    cookies: () => cookieStore 
-  })
+  const cookieStore = await cookies()
+  return createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options)
+            })
+          } catch {
+            // This can be ignored if you have middleware refreshing user sessions
+          }
+        },
+      },
+    }
+  )
+}
+
+// Separate function for service role client
+async function getServiceRoleSupabase() {
+  const cookieStore = await cookies()
+  return createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options)
+            })
+          } catch {
+            // This can be ignored if you have middleware refreshing user sessions
+          }
+        },
+      },
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  )
 }
 
 /**
  * Formats error messages from Supabase
  */
 function formatError(error: unknown): AuthError {
+  console.error('Formatting error:', error)
+  
+  // Handle PostgrestError (database errors)
+  if (error && typeof error === 'object' && 'code' in error && 'message' in error && 'details' in error) {
+    const pgError = error as { code: string; message: string; details: string }
+    return {
+      message: `Database error: ${pgError.message}`,
+      code: pgError.code,
+      details: pgError.details
+    }
+  }
+  
+  // Handle standard Error objects
   if (error instanceof Error) {
     return {
       message: error.message,
       code: (error as SupabaseAuthError).code
     }
   }
+  
+  // Handle unknown error format
   return {
-    message: 'An unexpected error occurred'
+    message: 'An unexpected error occurred',
+    details: JSON.stringify(error)
   }
 }
 
@@ -82,14 +146,9 @@ function formatError(error: unknown): AuthError {
  */
 export async function signUp(data: SignUpData) {
   try {
+    console.log('Starting user signup process for:', data.email);
     // Create a service role client for admin operations
-    const cookieStore = cookies()
-    const supabase = createServerActionClient<Database, 'public'>({ 
-      cookies: () => cookieStore 
-    }, {
-      supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      options: { db: { schema: 'public' } }
-    })
+    const supabase = await getServiceRoleSupabase();
 
     // Create auth user with email confirmation disabled for now
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -103,107 +162,363 @@ export async function signUp(data: SignUpData) {
           display_name: `${data.firstName} ${data.lastName}`,
         }
       }
-    })
+    });
 
-    if (authError) throw authError
-    if (!authData.user) throw new Error('No user returned from auth signup')
-
-    // Create user profile
-    const userProfile: UserInsert = {
-      id: authData.user.id,
-      email: data.email,
-      first_name: data.firstName,
-      last_name: data.lastName,
-      display_name: `${data.firstName} ${data.lastName}`,
-      date_of_birth: data.dateOfBirth,
-      gender: data.gender,
-      is_pending_signup: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      parent_ids: [],
-      children_ids: [],
-      spouse_ids: [],
-      is_admin: true,
-      can_add_members: true,
-      can_edit: true,
-      email_verified: false,
-      data_retention_period: 'forever'
+    if (authError) {
+      console.error('Auth signup error:', authError);
+      throw authError;
     }
+    if (!authData.user) throw new Error('No user returned from auth signup');
 
-    // Insert user profile using service role client
-    const { error: profileError } = await supabase
+    console.log('Auth user created successfully:', authData.user.id);
+    
+    // IMPORTANT: Wait a moment to ensure auth user is fully registered in the database
+    // This helps avoid race conditions with triggers
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Check if user profile already exists (from trigger)
+    const { data: existingProfile } = await supabase
       .from('users')
-      .insert(userProfile)
-
-    if (profileError) {
-      console.error('Profile creation error:', profileError)
-      throw profileError
-    }
-
-    // Create default family tree
-    const { data: treeData, error: treeError } = await supabase
-      .from('family_trees')
-      .insert({
-        name: `${data.firstName}'s Family Tree`,
-        owner_id: authData.user.id,
-        privacy_level: 'private',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .select()
-      .single()
-
-    if (treeError) {
-      console.error('Family tree creation error:', treeError)
-      throw treeError
-    }
-
-    // Update user profile with family tree ID
-    const { error: updateError } = await supabase
-      .from('users')
-      .update({ family_tree_id: treeData.id })
+      .select('id')
       .eq('id', authData.user.id)
+      .single();
+      
+    if (existingProfile) {
+      console.log('User profile already exists from trigger, updating it');
+      
+      // Begin transaction to ensure all operations succeed or fail together
+      const { error: beginTxnError } = await supabase.rpc('begin_transaction');
+      if (beginTxnError) {
+        console.error('Transaction start error:', beginTxnError);
+        throw beginTxnError;
+      }
+      
+      try {
+        // Update the existing profile with complete information
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({
+            first_name: data.firstName,
+            last_name: data.lastName,
+            display_name: `${data.firstName} ${data.lastName}`,
+            date_of_birth: data.dateOfBirth,
+            gender: data.gender as 'male' | 'female' | 'other',
+            is_pending_signup: false,
+            updated_at: new Date().toISOString(),
+            is_admin: true,
+            can_add_members: true,
+            can_edit: true
+          })
+          .eq('id', authData.user.id);
+          
+        if (updateError) {
+          console.error('Error updating existing profile:', updateError);
+          throw updateError;
+        }
+        
+        // Create default family tree
+        const { data: treeData, error: treeError } = await supabase
+          .from('family_trees')
+          .insert({
+            name: `${data.firstName}'s Family Tree`,
+            owner_id: authData.user.id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
 
-    if (updateError) {
-      console.error('Error updating user with family tree ID:', updateError)
-      throw updateError
-    }
+        if (treeError) {
+          console.error('Family tree creation error:', treeError);
+          throw treeError;
+        }
+        
+        console.log('Family tree created successfully:', treeData.id);
+        
+        // Update user with family tree ID
+        const { error: updateTreeError } = await supabase
+          .from('users')
+          .update({ family_tree_id: treeData.id })
+          .eq('id', authData.user.id);
+        
+        if (updateTreeError) {
+          console.error('Error updating user with family tree ID:', updateTreeError);
+          throw updateTreeError;
+        }
+        
+        // Grant owner admin access in family_tree_access table
+        const { error: accessError } = await supabase
+          .from('family_tree_access')
+          .insert({
+            tree_id: treeData.id,
+            user_id: authData.user.id,
+            role: 'admin',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+          
+        if (accessError) {
+          console.error('Error creating family tree access record:', accessError);
+          throw accessError;
+        }
+        
+        // Add user as a member of their own family tree
+        const { error: nodeError } = await supabase
+          .from('family_tree_nodes')
+          .insert({
+            family_tree_id: treeData.id,
+            user_id: authData.user.id,
+            gender: data.gender,
+            attributes: {
+              first_name: data.firstName,
+              last_name: data.lastName,
+              display_name: `${data.firstName} ${data.lastName}`,
+              date_of_birth: data.dateOfBirth,
+              familyTreeId: treeData.id,
+              isBloodRelated: true,
+              treeOwnerId: authData.user.id
+            },
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+          
+        if (nodeError) {
+          console.error('Error creating family tree node:', nodeError);
+          throw nodeError;
+        }
+        
+        console.log('User added as family tree member successfully');
+        
+        // Create history book for the user
+        const { data: historyBookData, error: historyBookError } = await supabase
+          .from('history_books')
+          .insert({
+            title: `${data.firstName}'s History Book`,
+            description: `A collection of stories and memories for ${data.firstName} ${data.lastName}`,
+            family_tree_id: treeData.id,
+            owner_id: authData.user.id,
+            privacy_level: 'personal',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
 
-    // Add user as admin of their family tree
-    const { error: accessError } = await supabase
-      .from('family_tree_access')
-      .insert({
-        tree_id: treeData.id,
-        user_id: authData.user.id,
-        role: 'admin',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+        if (historyBookError) {
+          console.error('History book creation error:', historyBookError);
+          throw historyBookError;
+        }
+        
+        console.log('History book created successfully:', historyBookData.id);
+        
+        // Update user with history book ID
+        const { error: updateHistoryBookError } = await supabase
+          .from('users')
+          .update({ history_book_id: historyBookData.id })
+          .eq('id', authData.user.id);
+        
+        if (updateHistoryBookError) {
+          console.error('Error updating user with history book ID:', updateHistoryBookError);
+          throw updateHistoryBookError;
+        }
+        
+        // Commit the transaction
+        const { error: commitError } = await supabase.rpc('commit_transaction');
+        if (commitError) {
+          console.error('Transaction commit error:', commitError);
+          throw commitError;
+        }
+        
+        console.log('Existing user setup completed successfully');
+      } catch (error) {
+        // Rollback transaction on any error
+        console.error('Error during existing user setup:', error);
+        const { error: rollbackError } = await supabase.rpc('rollback_transaction');
+        if (rollbackError) {
+          console.error('Transaction rollback error:', rollbackError);
+        }
+        throw error;
+      }
+    } else {
+      // Begin transaction to ensure all database operations are atomic
+      const { error: transactionError } = await supabase.rpc('begin_transaction');
+      if (transactionError) {
+        console.error('Transaction start error:', transactionError);
+        throw transactionError;
+      }
+      
+      try {
+        // 1. Create user profile
+        const userProfile: UserInsert = {
+          id: authData.user.id,
+          email: data.email,
+          first_name: data.firstName,
+          last_name: data.lastName,
+          display_name: `${data.firstName} ${data.lastName}`,
+          date_of_birth: data.dateOfBirth,
+          gender: data.gender as 'male' | 'female' | 'other',
+          is_pending_signup: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          is_admin: true,
+          can_add_members: true,
+          can_edit: true,
+          email_verified: false,
+          data_retention_period: 'forever'
+        };
 
-    if (accessError) {
-      console.error('Access creation error:', accessError)
-      throw accessError
-    }
+        console.log('Creating user profile in database transaction');
 
-    // Add user as first member of their family tree
-    const { error: memberError } = await supabase
-      .from('family_tree_members')
-      .insert({
-        tree_id: treeData.id,
-        user_id: authData.user.id,
-        first_name: data.firstName,
-        last_name: data.lastName,
-        display_name: `${data.firstName} ${data.lastName}`,
-        date_of_birth: data.dateOfBirth,
-        gender: data.gender,
-        is_pending: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+        // Insert user profile using service role client
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert(userProfile);
 
-    if (memberError) {
-      console.error('Member creation error:', memberError)
-      throw memberError
+        if (profileError) {
+          console.error('Profile creation error:', profileError);
+          throw profileError;
+        }
+        
+        // 2. Manually create notification preferences to avoid trigger race condition
+        const { error: preferencesError } = await supabase
+          .from('notification_preferences')
+          .insert({
+            user_id: authData.user.id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        
+        if (preferencesError) {
+          console.error('Notification preferences creation error:', preferencesError);
+          throw preferencesError;
+        }
+
+        // 3. Create default family tree
+        const { data: treeData, error: treeError } = await supabase
+          .from('family_trees')
+          .insert({
+            name: `${data.firstName}'s Family Tree`,
+            owner_id: authData.user.id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (treeError) {
+          console.error('Family tree creation error:', treeError);
+          throw treeError;
+        }
+        
+        console.log('Family tree created successfully:', treeData.id);
+        
+        // 4. Update user with family tree ID
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ 
+            family_tree_id: treeData.id,
+            is_pending_signup: false
+          })
+          .eq('id', authData.user.id);
+        
+        if (updateError) {
+          console.error('Error updating user with family tree ID:', updateError);
+          throw updateError;
+        }
+        
+        // 5. Grant owner admin access in family_tree_access table
+        const { error: accessError } = await supabase
+          .from('family_tree_access')
+          .insert({
+            tree_id: treeData.id,
+            user_id: authData.user.id,
+            role: 'admin',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+          
+        if (accessError) {
+          console.error('Error creating family tree access record:', accessError);
+          throw accessError;
+        }
+        
+        // 6. Add user as a member of their own family tree
+        const { error: nodeError } = await supabase
+          .from('family_tree_nodes')
+          .insert({
+            family_tree_id: treeData.id,
+            user_id: authData.user.id,
+            gender: data.gender,
+            attributes: {
+              first_name: data.firstName,
+              last_name: data.lastName,
+              display_name: `${data.firstName} ${data.lastName}`,
+              date_of_birth: data.dateOfBirth,
+              familyTreeId: treeData.id,
+              isBloodRelated: true,
+              treeOwnerId: authData.user.id
+            },
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+          
+        if (nodeError) {
+          console.error('Error creating family tree node:', nodeError);
+          throw nodeError;
+        }
+        
+        console.log('User added as family tree member successfully');
+        
+        // 7. Create history book for the user
+        const { data: historyBookData, error: historyBookError } = await supabase
+          .from('history_books')
+          .insert({
+            title: `${data.firstName}'s History Book`,
+            description: `A collection of stories and memories for ${data.firstName} ${data.lastName}`,
+            family_tree_id: treeData.id,
+            owner_id: authData.user.id,
+            privacy_level: 'personal',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (historyBookError) {
+          console.error('History book creation error:', historyBookError);
+          throw historyBookError;
+        }
+        
+        console.log('History book created successfully:', historyBookData.id);
+        
+        // 8. Update user with history book ID
+        const { error: updateHistoryBookError } = await supabase
+          .from('users')
+          .update({ history_book_id: historyBookData.id })
+          .eq('id', authData.user.id);
+        
+        if (updateHistoryBookError) {
+          console.error('Error updating user with history book ID:', updateHistoryBookError);
+          throw updateHistoryBookError;
+        }
+        
+        // Commit the transaction
+        const { error: commitError } = await supabase.rpc('commit_transaction');
+        if (commitError) {
+          console.error('Transaction commit error:', commitError);
+          throw commitError;
+        }
+        
+        console.log('Signup transaction completed successfully');
+      } catch (dbError) {
+        // Rollback transaction on any error
+        console.error('Database error during signup:', dbError);
+        const { error: rollbackError } = await supabase.rpc('rollback_transaction');
+        if (rollbackError) {
+          console.error('Transaction rollback error:', rollbackError);
+        }
+        throw dbError;
+      }
     }
 
     // Return success with user data
@@ -212,13 +527,20 @@ export async function signUp(data: SignUpData) {
       user: authData.user,
       session: authData.session,
       needsEmailVerification: !authData.session
-    }
+    };
   } catch (error) {
-    console.error('Sign up error:', error)
+    console.error('Sign up error:', error);
+    console.error('Error type:', typeof error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    
+    if (error && typeof error === 'object') {
+      console.error('Error properties:', Object.keys(error));
+    }
+    
     return {
       success: false,
       error: formatError(error)
-    }
+    };
   }
 }
 
@@ -228,8 +550,12 @@ export async function signUp(data: SignUpData) {
 export async function signIn(data: SignInData) {
   try {
     console.log('SignIn attempt with:', { email: data.email }); // Debug log
-    const supabase = await getSupabase()
+    const supabase = await createClient()
     
+    // First try to refresh the session in case there's a valid token
+    await supabase.auth.refreshSession()
+    
+    // Sign in with email and password
     const { data: authData, error } = await supabase.auth.signInWithPassword({
       email: data.email,
       password: data.password
@@ -251,9 +577,26 @@ export async function signIn(data: SignInData) {
       }
     }
 
+    // After successful sign-in, explicitly get the session again
+    // This ensures cookies are properly set
+    const { data: { session: verifiedSession }, error: sessionError } = 
+      await supabase.auth.getSession()
+    
+    if (sessionError) {
+      console.warn('Warning: Could not verify session after login:', sessionError)
+      // Continue anyway with the initial session
+    } else if (!verifiedSession) {
+      console.warn('Warning: No verified session found after login')
+      // Continue anyway with the initial session
+    } else {
+      console.log('Session verified after sign-in')
+    }
+
     console.log('SignIn successful:', { 
       userId: authData.user.id,
-      sessionExpires: authData.session.expires_at
+      sessionExpires: authData.session.expires_at,
+      hasAccessToken: !!authData.session.access_token,
+      hasRefreshToken: !!authData.session.refresh_token
     })
 
     return { 
@@ -339,13 +682,27 @@ export async function updatePassword(newPassword: string) {
  */
 export async function verifyEmail(token: string) {
   try {
-    const cookieStore = cookies()
-    const supabase = createServerActionClient<Database, 'public'>({ 
-      cookies: () => cookieStore 
-    }, {
-      supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      options: { db: { schema: 'public' } }
-    })
+    const cookieStore = await cookies()
+    const supabase = createServerClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) => {
+                cookieStore.set(name, value, options)
+              })
+            } catch {
+              // This can be ignored if you have middleware refreshing user sessions
+            }
+          },
+        },
+      }
+    )
 
     // Verify the email
     const { error } = await supabase.auth.verifyOtp({
@@ -464,13 +821,10 @@ export async function signUpWithInvitation(data: InvitedSignUpData) {
       last_name: data.lastName,
       display_name: `${data.firstName} ${data.lastName}`,
       date_of_birth: data.dateOfBirth,
-      gender: data.gender,
+      gender: data.gender as 'male' | 'female' | 'other',
       is_pending_signup: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      parent_ids: [],
-      children_ids: [],
-      spouse_ids: [],
       is_admin: false,
       can_add_members: true,
       can_edit: true,
@@ -591,5 +945,25 @@ export async function refreshSession() {
       session: null,
       error: formatError(error)
     }
+  }
+}
+
+/**
+ * Gets the current user's ID from the session
+ * @returns The user ID or null if not authenticated
+ */
+export async function getUserId(): Promise<string | null> {
+  try {
+    const supabase = await createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      return null;
+    }
+    
+    return session.user.id;
+  } catch (error) {
+    console.error('Error getting user ID:', error);
+    return null;
   }
 } 

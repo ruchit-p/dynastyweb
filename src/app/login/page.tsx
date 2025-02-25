@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { validateFormData, loginFormSchema, type LoginFormData } from '@/lib/validation';
-import { useAuth } from '@/context/AuthContext';
+import { toast } from '@/components/ui/use-toast';
+import { signIn } from '@/app/actions/auth';
 import { showVerificationToast } from '@/components/VerificationToast';
 
 type AuthError = {
@@ -24,7 +25,7 @@ export default function LoginPage() {
   });
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/family-tree';
 
@@ -55,13 +56,29 @@ export default function LoginPage() {
       }
 
       console.log('Attempting login with:', formData); // Debug log
-
-      // Pass the redirect path to login
-      await login({
+      
+      // Use server action instead of direct client authentication
+      const result = await signIn({
         email: formData.email.trim(),
         password: formData.password
-      }, redirect);
+      });
       
+      if (result.error) {
+        throw result.error;
+      }
+      
+      if (result.user) {
+        if (!result.user.email_confirmed_at) {
+          router.push('/verify-email');
+          showVerificationToast();
+        } else {
+          router.push(redirect);
+          toast({
+            title: 'Welcome back!',
+            description: 'Successfully logged in.',
+          });
+        }
+      }
     } catch (error) {
       console.error('Login error:', error);
       const authError = error as AuthError;

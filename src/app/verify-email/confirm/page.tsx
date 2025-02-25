@@ -6,8 +6,7 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { Loader2, CheckCircle2, XCircle } from "lucide-react"
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { Database } from '@/lib/shared/types/supabase'
+import { supabaseBrowser } from '@/lib/client/supabase-browser'
 
 export default function VerifyEmailConfirmPage() {
   const [isVerifying, setIsVerifying] = useState(true)
@@ -16,8 +15,7 @@ export default function VerifyEmailConfirmPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
-  const supabase = createClientComponentClient<Database>()
-
+  
   useEffect(() => {
     const verifyEmail = async () => {
       try {
@@ -30,12 +28,12 @@ export default function VerifyEmailConfirmPage() {
         }
 
         // Get the current user after verification
-        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        const { data: { user }, error: userError } = await supabaseBrowser.auth.getUser()
         if (userError) throw userError
         if (!user) throw new Error("User not found")
 
         // Update the user's profile to remove pending status
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseBrowser
           .from('users')
           .update({
             is_pending_signup: false,
@@ -65,7 +63,7 @@ export default function VerifyEmailConfirmPage() {
     }
 
     verifyEmail()
-  }, [searchParams, router, toast, supabase])
+  }, [searchParams, router, toast])
 
   if (isVerifying) {
     return (

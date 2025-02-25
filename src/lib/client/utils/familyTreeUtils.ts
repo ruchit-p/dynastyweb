@@ -1,4 +1,3 @@
-import { createClientSupabaseClient } from '../supabase-browser'
 import { Node, Gender, RelType } from 'relatives-tree/lib/types'
 
 // MARK: - Types

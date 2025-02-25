@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2 } from 'lucide-react';
-import { createClientSupabaseClient } from '@/lib/client/supabase-browser';
+import { createClient } from '@/lib/client/supabase-browser';
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -18,7 +18,7 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const supabase = createClientSupabaseClient();
+  const supabase = createClient();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

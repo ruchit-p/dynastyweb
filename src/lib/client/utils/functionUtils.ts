@@ -1,10 +1,7 @@
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { supabaseBrowser } from '@/lib/client/supabase-browser'
 import type { Node } from 'relatives-tree/lib/types'
 import type { Database } from '@/lib/shared/types/supabase'
 import type { Story } from './storyUtils'
-
-// Initialize Supabase client
-const supabase = createClientComponentClient<Database>()
 
 // Define the enriched story type
 type EnrichedStory = Story & {
@@ -30,20 +27,49 @@ interface TaggedUser {
 // MARK: - Family Tree Functions
 
 export const getFamilyTreeData = async (userId: string) => {
-  const response = await fetch('/api/family-tree', {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
+  try {
+    console.log('Fetching family tree data for user:', userId);
+    
+    const response = await fetch('/api/family-tree', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to fetch family tree data');
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Family tree data fetch error:', {
+        status: response.status,
+        error: errorData
+      });
+      
+      // Handle different error types
+      if (response.status === 401) {
+        // Authentication error - user might need to log in again
+        throw new Error('Authentication failed. Please try logging in again.');
+      } else if (response.status === 404) {
+        // No family tree found - this is normal for new users with empty trees
+        console.log('No family tree found. This is expected for new users.');
+        return { treeNodes: [] };
+      } else {
+        // Other API errors
+        throw new Error(errorData.error || 'Failed to fetch family tree data');
+      }
+    }
+
+    const data = await response.json();
+    console.log('Family tree data fetched successfully:', {
+      treeId: data.treeId,
+      nodeCount: data.nodes?.length || 0
+    });
+    
+    return { treeNodes: data.nodes || [] };
+  } catch (error) {
+    console.error('Exception in getFamilyTreeData:', error);
+    throw error;
   }
-
-  const data = await response.json();
-  return { treeNodes: data.treeNodes };
 };
 
 export const updateFamilyRelationships = async (
@@ -57,7 +83,7 @@ export const updateFamilyRelationships = async (
     removeSpouses?: string[]
   }
 ) => {
-  const { error } = await supabase.rpc('update_family_relationships', {
+  const { error } = await supabaseBrowser.rpc('update_family_relationships', {
     p_user_id: userId,
     p_add_parents: updates.addParents || [],
     p_remove_parents: updates.removeParents || [],
@@ -74,7 +100,7 @@ export const updateFamilyRelationships = async (
 // MARK: - Stories Functions
 
 export const getAccessibleStories = async (userId: string, familyTreeId: string) => {
-  const { data: stories, error } = await supabase
+  const { data: stories, error } = await supabaseBrowser
     .from('stories')
     .select(`
       *,
@@ -120,7 +146,7 @@ export const getAccessibleStories = async (userId: string, familyTreeId: string)
 }
 
 export const getUserStories = async (userId: string) => {
-  const { data: stories, error } = await supabase
+  const { data: stories, error } = await supabaseBrowser
     .from('stories')
     .select(`
       *,
@@ -184,7 +210,7 @@ export const createStory = async (storyData: {
   familyTreeId: string
   peopleInvolved: string[]
 }) => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseBrowser
     .from('stories')
     .insert({
       author_id: storyData.authorID,
@@ -192,7 +218,7 @@ export const createStory = async (storyData: {
       subtitle: storyData.subtitle,
       event_date: storyData.eventDate?.toISOString(),
       location: storyData.location,
-      privacy_level: storyData.privacy === 'personal' ? 'personal' : storyData.privacy,
+      privacy_level: storyData.privacy,
       custom_access_members: storyData.privacy === 'custom' ? storyData.customAccessMembers : [],
       blocks: storyData.blocks,
       family_tree_id: storyData.familyTreeId,
@@ -231,7 +257,7 @@ export const updateStory = async (
   }>
 ) => {
   // First check if user has permission to update
-  const { data: story, error: fetchError } = await supabase
+  const { data: story, error: fetchError } = await supabaseBrowser
     .from('stories')
     .select('author_id')
     .eq('id', storyId)
@@ -240,7 +266,7 @@ export const updateStory = async (
   if (fetchError) throw fetchError
   if (story.author_id !== userId) throw new Error('Unauthorized to update this story')
 
-  const { error } = await supabase
+  const { error } = await supabaseBrowser
     .from('stories')
     .update({
       title: updates.title,
@@ -261,7 +287,7 @@ export const updateStory = async (
 
 export const deleteStory = async (storyId: string, userId: string) => {
   // First check if user has permission to delete
-  const { data: story, error: fetchError } = await supabase
+  const { data: story, error: fetchError } = await supabaseBrowser
     .from('stories')
     .select('author_id')
     .eq('id', storyId)
@@ -270,7 +296,7 @@ export const deleteStory = async (storyId: string, userId: string) => {
   if (fetchError) throw fetchError
   if (story.author_id !== userId) throw new Error('Unauthorized to delete this story')
 
-  const { error } = await supabase
+  const { error } = await supabaseBrowser
     .from('stories')
     .update({ is_deleted: true })
     .eq('id', storyId)

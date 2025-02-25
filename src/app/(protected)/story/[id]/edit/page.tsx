@@ -11,8 +11,7 @@ import { X, GripVertical } from "lucide-react"
 import { FamilyMemberSelect } from "@/components/FamilyMemberSelect"
 import { DatePicker } from "@/components/ui/date-picker"
 import { LocationPicker } from "@/components/LocationPicker"
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { Database } from '@/lib/shared/types/supabase'
+import { supabaseBrowser } from '@/lib/client/supabase-browser'
 import {
   Select,
   SelectContent,
@@ -59,14 +58,13 @@ export default function EditStoryPage() {
   const [taggedMembers, setTaggedMembers] = useState<string[]>([])
   const [blocks, setBlocks] = useState<Block[]>([])
   const [showLocationPicker, setShowLocationPicker] = useState(false)
-  const supabase = createClientComponentClient<Database>()
 
   useEffect(() => {
     const fetchStory = async () => {
       if (!id || !user) return
 
       try {
-        const { data: storyData, error } = await supabase
+        const { data: storyData, error } = await supabaseBrowser
           .from('stories')
           .select('*')
           .eq('id', id)
@@ -124,7 +122,7 @@ export default function EditStoryPage() {
     }
 
     fetchStory()
-  }, [id, user, router, toast, supabase])
+  }, [id, user, router, toast])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -168,7 +166,7 @@ export default function EditStoryPage() {
               const fileExt = block.content.name.split('.').pop()
               const filePath = `${id}/${block.id}.${fileExt}`
               
-              const { data: uploadData, error: uploadError } = await supabase
+              const { error: uploadError } = await supabaseBrowser
                 .storage
                 .from('story-media')
                 .upload(filePath, block.content, {
@@ -178,7 +176,7 @@ export default function EditStoryPage() {
               if (uploadError) throw uploadError
 
               // Get public URL
-              const { data: { publicUrl } } = supabase
+              const { data: { publicUrl } } = supabaseBrowser
                 .storage
                 .from('story-media')
                 .getPublicUrl(filePath)
@@ -203,7 +201,7 @@ export default function EditStoryPage() {
       )
 
       // Update story in Supabase
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseBrowser
         .from('stories')
         .update({
           title,
@@ -377,6 +375,11 @@ export default function EditStoryPage() {
               <SelectItem value="custom">Custom</SelectItem>
             </SelectContent>
           </Select>
+          <p className="text-sm text-gray-500">
+            {privacy === "family" && "Your story will be visible to all family members."}
+            {privacy === "personal" && "Your story will only be visible to you."}
+            {privacy === "custom" && "Your story will only be visible to selected family members."}
+          </p>
         </div>
 
         {privacy === "custom" && (

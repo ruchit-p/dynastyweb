@@ -1,0 +1,294 @@
+---
+description: Guidelines for implementing error handling in Next.js
+globs: **/*.ts, **/*.tsx, **/*.js, **/*.jsx
+alwaysApply: true
+---
+# Specify the following for Cursor rules
+description: Guidelines for implementing error handling in Next.js
+globs: "**/*.ts, **/*.tsx, **/*.js, **/*.jsx"
+---
+
+# Next.js Error Handling
+
+## Overview
+
+Next.js provides robust error handling mechanisms to gracefully manage errors at different levels of your application. Proper error handling improves user experience and helps with debugging.
+
+## 🚨 CRITICAL COMPONENTS 🚨
+
+1. **error.js**: Handles errors within a route segment
+2. **global-error.js**: Handles errors in root layout.js
+3. **not-found.js**: Handles 404 errors
+4. **loading.js**: Provides loading UI while error boundaries are resolving
+
+## Route Error Handling with error.js
+
+Create an error.js file at any route segment level:
+
+```tsx
+// app/dashboard/error.tsx
+'use client' // Error components must be Client Components
+
+import { useEffect } from 'react'
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  useEffect(() => {
+    // Log the error to an error reporting service
+    console.error(error)
+  }, [error])
+
+  return (
+    <div className="error-container">
+      <h2>Something went wrong!</h2>
+      <p>{error.message || 'An unexpected error occurred'}</p>
+      <button
+        onClick={
+          // Attempt to recover by trying to re-render the segment
+          () => reset()
+        }
+      >
+        Try again
+      </button>
+    </div>
+  )
+}
+```
+
+## Global Error Handling
+
+Create a global-error.js file in the app directory:
+
+```tsx
+// app/global-error.tsx
+'use client'
+
+import { useEffect } from 'react'
+
+export default function GlobalError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  useEffect(() => {
+    // Log the error to an error reporting service
+    console.error(error)
+  }, [error])
+
+  return (
+    <html>
+      <body>
+        <div className="global-error">
+          <h2>Something went wrong!</h2>
+          <button onClick={() => reset()}>Try again</button>
+        </div>
+      </body>
+    </html>
+  )
+}
+```
+
+## 404 Error Handling with not-found.js
+
+Create a not-found.js file at any route segment level:
+
+```tsx
+// app/blog/[slug]/not-found.tsx
+import Link from 'next/link'
+
+export default function NotFound() {
+  return (
+    <div className="not-found-container">
+      <h2>Not Found</h2>
+      <p>Could not find the requested resource</p>
+      <Link href="/blog">Return to blogs</Link>
+    </div>
+  )
+}
+```
+
+## Triggering the not-found UI
+
+```tsx
+// app/blog/[slug]/page.tsx
+import { notFound } from 'next/navigation'
+
+async function getPost(slug) {
+  const res = await fetch(`https://api.example.com/posts/${slug}`)
+  
+  if (!res.ok) {
+    // This will trigger the closest not-found.js file
+    notFound()
+  }
+  
+  return res.json()
+}
+
+export default async function Page({ params }: { params: { slug: string } }) {
+  const post = await getPost(params.slug)
+  
+  return (
+    <article>
+      <h1>{post.title}</h1>
+      <div>{post.content}</div>
+    </article>
+  )
+}
+```
+
+## Error Handling in Server Actions
+
+For Server Actions, implement try/catch blocks with structured error responses:
+
+```tsx
+// app/actions.ts
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
+
+export async function createItem(formData: FormData) {
+  try {
+    // Attempt to create the item
+    const name = formData.get('name')
+    // ... database operations
+    
+    // Success: revalidate and redirect
+    revalidatePath('/items')
+    redirect('/items')
+  } catch (error) {
+    // Return a structured error response
+    return {
+      success: false,
+      error: error instanceof Error 
+        ? error.message 
+        : 'Failed to create item'
+    }
+  }
+}
+```
+
+## Error Handling in API Routes
+
+Implement proper error handling in route handlers:
+
+```tsx
+// app/api/items/route.ts
+import { NextResponse } from 'next/server'
+
+export async function GET() {
+  try {
+    // Fetch items from database
+    const items = await fetchItems()
+    
+    return NextResponse.json(items)
+  } catch (error) {
+    console.error('API error:', error)
+    
+    // Return an appropriate status code with message
+    return NextResponse.json(
+      { error: 'Failed to fetch items' }, 
+      { status: 500 }
+    )
+  }
+}
+```
+
+## Error Handling with Data Fetching
+
+```tsx
+// app/products/page.tsx
+async function getProducts() {
+  try {
+    const res = await fetch('https://api.example.com/products')
+    
+    if (!res.ok) {
+      throw new Error(`Failed to fetch products: ${res.status}`)
+    }
+    
+    return res.json()
+  } catch (error) {
+    console.error('Error loading products:', error)
+    throw error // Will be caught by error.js
+  }
+}
+
+export default async function ProductsPage() {
+  const products = await getProducts()
+  // ...
+}
+```
+
+## Error Handling in Client Components
+
+```tsx
+'use client'
+
+import { useState, useEffect } from 'react'
+
+export default function ClientComponent() {
+  const [data, setData] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setIsLoading(true)
+        setError(null)
+        
+        const response = await fetch('/api/data')
+        
+        if (!response.ok) {
+          throw new Error(`Error: ${response.status}`)
+        }
+        
+        const data = await response.json()
+        setData(data)
+      } catch (error) {
+        setError(error instanceof Error ? error : new Error('An unknown error occurred'))
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  if (isLoading) return <div>Loading...</div>
+  if (error) return <div>Error: {error.message}</div>
+  if (!data) return <div>No data found</div>
+
+  return (
+    <div>
+      {/* Render data */}
+    </div>
+  )
+}
+```
+
+## Best Practices
+
+1. **Use error boundaries** at appropriate levels to contain errors
+2. **Implement helpful error messages** that guide users to resolving issues
+3. **Log meaningful errors** to your monitoring service
+4. **Handle expected errors** (like API errors) differently from unexpected ones
+5. **Use the reset function** in error.js to enable users to retry
+6. **Implement 404 handling** with not-found.js for missing resources
+7. **Keep error UIs consistent** across your application
+8. **Return appropriate status codes** from API routes
+
+## Common Error Patterns
+
+1. **Authentication Errors**: Redirect to login or show access denied messages
+2. **Form Validation Errors**: Show inline field errors with clear guidance
+3. **API Errors**: Show helpful messages based on status codes
+4. **Network Errors**: Provide retry functionality
+5. **Resource Not Found**: Use not-found.js or graceful fallbacks 

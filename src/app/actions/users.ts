@@ -1,7 +1,7 @@
 'use server'
 
 import { z } from 'zod'
-import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/server/supabase"
 import { withAuth } from "./auth"
 import { revalidatePath } from 'next/cache'
 import { UsersRepository } from '@/lib/repositories/users'
@@ -28,7 +28,7 @@ export type UpdateFamilyInput = z.infer<typeof updateFamilySchema>
 export const updateProfile = withAuth(async (input: UpdateProfileInput) => {
   try {
     const validated = updateProfileSchema.parse(input)
-    const supabase = createServerSupabaseClient()
+    const supabase = createClient()
     const repository = new UsersRepository(supabase)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -66,7 +66,7 @@ export const updateProfile = withAuth(async (input: UpdateProfileInput) => {
 export const updateFamilyRelationships = withAuth(async (input: UpdateFamilyInput) => {
   try {
     const validated = updateFamilySchema.parse(input)
-    const supabase = createServerSupabaseClient()
+    const supabase = createClient()
     const repository = new UsersRepository(supabase)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -93,7 +93,7 @@ export const updateFamilyRelationships = withAuth(async (input: UpdateFamilyInpu
 // Get family members
 export const getFamilyMembers = withAuth(async () => {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = createClient()
     const repository = new UsersRepository(supabase)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -110,7 +110,7 @@ export const getFamilyMembers = withAuth(async () => {
 // Update data retention period
 export const updateDataRetention = withAuth(async (period: 'forever' | 'year' | 'month' | 'week') => {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = createClient()
     const repository = new UsersRepository(supabase)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -133,7 +133,7 @@ export const updateDataRetention = withAuth(async (period: 'forever' | 'year' | 
 // Upload avatar
 export const uploadAvatar = withAuth(async (file: File) => {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = createClient()
     const repository = new UsersRepository(supabase)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -155,7 +155,7 @@ export const uploadAvatar = withAuth(async (file: File) => {
 // Delete avatar
 export const deleteAvatar = withAuth(async () => {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = createClient()
     const repository = new UsersRepository(supabase)
 
     const { data: { user } } = await supabase.auth.getUser()

@@ -13,10 +13,11 @@ import {
   type SignUpData,
   type InvitedSignUpData,
   type VerifyInvitationResult,
-  type SignInData
+  type SignInData,
+  signIn
 } from '@/app/actions/auth'
 import { showVerificationToast } from '@/components/VerificationToast'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from '@/lib/client/supabase-browser'
 
 // MARK: - Types
 type AuthError = {
@@ -45,7 +46,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
-  const supabase = createClientComponentClient()
+  
+  // Create Supabase client
+  const supabase = createClient()
+
+  // MARK: - Session Restoration from Storage
+  useEffect(() => {
+    // Attempt to restore auth state from localStorage if available
+    const savedSession = typeof window !== 'undefined' 
+      ? localStorage.getItem('supabase.auth.token') 
+      : null;
+      
+    if (savedSession) {
+      try {
+        const parsed = JSON.parse(savedSession);
+        if (parsed?.currentSession?.access_token && parsed?.currentSession?.refresh_token) {
+          console.log('Found saved session in localStorage');
+        }
+      } catch (e) {
+        console.warn('Failed to parse saved session from localStorage:', e);
+      }
+    }
+  }, []);
 
   // MARK: - Auth State
   useEffect(() => {
@@ -58,19 +80,126 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (sessionError) throw sessionError;
 
         if (session) {
-          // Verify user with server-side validation
-          const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser(session.access_token);
-          if (userError) throw userError;
-
-          setUser(verifiedUser);
-          setSession(session);
+          console.log('Session found, validating user...', {
+            hasAccessToken: !!session.access_token,
+            hasRefreshToken: !!session.refresh_token,
+            expiresAt: session.expires_at
+          });
           
-          // Show verification toast if user exists but email is not confirmed
-          if (verifiedUser && !verifiedUser.email_confirmed_at) {
-            showVerificationToast();
+          // First, try to get user directly with access token
+          try {
+            const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser();
+            
+            if (!userError && verifiedUser) {
+              console.log('User verified successfully');
+              setUser(verifiedUser);
+              setSession(session);
+              
+              // Manually save to localStorage for redundancy
+              if (typeof window !== 'undefined' && verifiedUser && verifiedUser.id && verifiedUser.email) {
+                try {
+                  const sessionData = {
+                    currentSession: {
+                      access_token: session.access_token,
+                      refresh_token: session.refresh_token,
+                      expires_at: session.expires_at,
+                      user: { id: verifiedUser.id, email: verifiedUser.email }
+                    }
+                  };
+                  localStorage.setItem('supabase.auth.token', JSON.stringify(sessionData));
+                } catch (storageError) {
+                  console.warn('Failed to save session to localStorage:', storageError);
+                }
+              }
+              
+              // Show verification toast if user exists but email is not confirmed
+              if (!verifiedUser.email_confirmed_at) {
+                showVerificationToast();
+              }
+              setLoading(false);
+              return;
+            }
+          } catch (firstAttemptError) {
+            console.warn('First validation attempt failed, trying alternative method:', firstAttemptError);
           }
+          
+          // If that fails, try refreshing the session with more robust error handling
+          try {
+            console.log('Attempting to refresh session...');
+            const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+            
+            if (refreshError) {
+              console.warn('Session refresh error:', refreshError);
+              // Instead of throwing, we'll try to recover
+              if (refreshError.message?.includes('expired')) {
+                // Handle expired token case
+                console.log('Token expired, clearing session');
+                await supabase.auth.signOut({ scope: 'local' });
+                setUser(null);
+                setSession(null);
+                setLoading(false);
+                return;
+              }
+            }
+            
+            if (refreshedSession) {
+              const { data: { user: refreshedUser }, error: refreshedUserError } = await supabase.auth.getUser();
+              
+              if (!refreshedUserError && refreshedUser) {
+                console.log('Session refreshed successfully');
+                setUser(refreshedUser);
+                setSession(refreshedSession);
+                
+                // Save refreshed session to localStorage
+                if (typeof window !== 'undefined' && refreshedUser && refreshedUser.id && refreshedUser.email) {
+                  try {
+                    const sessionData = {
+                      currentSession: {
+                        access_token: refreshedSession.access_token,
+                        refresh_token: refreshedSession.refresh_token,
+                        expires_at: refreshedSession.expires_at,
+                        user: { id: refreshedUser.id, email: refreshedUser.email }
+                      }
+                    };
+                    localStorage.setItem('supabase.auth.token', JSON.stringify(sessionData));
+                  } catch (storageError) {
+                    console.warn('Failed to save refreshed session to localStorage:', storageError);
+                  }
+                }
+                
+                if (!refreshedUser.email_confirmed_at) {
+                  showVerificationToast();
+                }
+                setLoading(false);
+                return;
+              }
+            } else {
+              // No refreshed session but no error - this is a valid case
+              console.log('No session after refresh attempt, clearing state');
+              setUser(null);
+              setSession(null);
+            }
+          } catch (refreshError) {
+            console.warn('Session refresh failed:', refreshError);
+            // Continue to cleanup instead of throwing
+          }
+          
+          // If we get here, we couldn't validate the user, so clear the session
+          console.warn('Could not validate user session, signing out');
+          try {
+            await supabase.auth.signOut({ scope: 'local' });
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('supabase.auth.token');
+            }
+          } catch (signOutError) {
+            console.error('Error during signOut:', signOutError);
+            // Continue even if signOut fails
+          }
+          setUser(null);
+          setSession(null);
         } else {
           // No session found, clear state
+          console.log('No session found');
           setUser(null);
           setSession(null);
         }
@@ -79,7 +208,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // On error, clear state and ensure user is logged out
         setUser(null);
         setSession(null);
-        await supabase.auth.signOut();
+        try {
+          await supabase.auth.signOut({ scope: 'local' });
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('supabase.auth.token');
+          }
+        } catch (signOutError) {
+          console.error('Error during error cleanup signOut:', signOutError);
+        }
       } finally {
         setLoading(false);
       }
@@ -96,19 +232,125 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session) {
         // On new session, verify user server-side
         try {
-          const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser(session.access_token);
-          if (userError) throw userError;
+          const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser();
           
-          setUser(verifiedUser);
-          setSession(session);
+          if (userError) {
+            console.warn('Error verifying user on auth state change, trying refresh:', userError);
+            
+            // Try refreshing the session with better error handling
+            try {
+              const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+              
+              if (refreshError) {
+                console.warn('Session refresh error during auth state change:', refreshError);
+                
+                // Handle specific error cases
+                if (refreshError.message?.includes('expired') || refreshError.message?.includes('invalid')) {
+                  console.log('Token issues during refresh, clearing session');
+                  await supabase.auth.signOut({ scope: 'local' });
+                  if (typeof window !== 'undefined') {
+                    localStorage.removeItem('supabase.auth.token');
+                  }
+                  setUser(null);
+                  setSession(null);
+                  return;
+                }
+                
+                // Don't throw - fallback to our recovery logic below
+              }
+              
+              if (refreshedSession) {
+                // Try getting user again
+                const { data: { user: refreshedUser }, error: refreshedUserError } = await supabase.auth.getUser();
+                
+                if (!refreshedUserError && refreshedUser) {
+                  console.log('Successfully recovered session after refresh');
+                  setUser(refreshedUser);
+                  setSession(refreshedSession);
+                  
+                  // Save refreshed session to localStorage
+                  if (typeof window !== 'undefined' && refreshedUser && refreshedUser.id && refreshedUser.email) {
+                    try {
+                      const sessionData = {
+                        currentSession: {
+                          access_token: refreshedSession.access_token,
+                          refresh_token: refreshedSession.refresh_token,
+                          expires_at: refreshedSession.expires_at,
+                          user: { id: refreshedUser.id, email: refreshedUser.email }
+                        }
+                      };
+                      localStorage.setItem('supabase.auth.token', JSON.stringify(sessionData));
+                    } catch (storageError) {
+                      console.warn('Failed to save refreshed session to localStorage:', storageError);
+                    }
+                  }
+                  
+                  return;
+                }
+              }
+              
+              // If we get here, refresh didn't help - clear state
+              console.warn('Could not recover session through refresh');
+              setUser(null);
+              setSession(null);
+              await supabase.auth.signOut({ scope: 'local' });
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('supabase.auth.token');
+              }
+              
+            } catch (refreshAttemptError) {
+              console.error('Error during session refresh attempt:', refreshAttemptError);
+              // Continue to cleanup
+              setUser(null);
+              setSession(null);
+              await supabase.auth.signOut({ scope: 'local' });
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('supabase.auth.token');
+              }
+            }
+          } else {
+            setUser(verifiedUser);
+            setSession(session);
+            
+            // Save session to localStorage on successful auth state change
+            if (typeof window !== 'undefined' && verifiedUser && verifiedUser.id && verifiedUser.email) {
+              try {
+                const sessionData = {
+                  currentSession: {
+                    access_token: session.access_token,
+                    refresh_token: session.refresh_token,
+                    expires_at: session.expires_at,
+                    user: { id: verifiedUser.id, email: verifiedUser.email }
+                  }
+                };
+                localStorage.setItem('supabase.auth.token', JSON.stringify(sessionData));
+              } catch (storageError) {
+                console.warn('Failed to save session to localStorage during auth change:', storageError);
+              }
+            }
+          }
         } catch (error) {
-          console.error('Error verifying user on auth state change:', error);
+          console.error('Error handling auth state change:', error);
+          // On critical errors, clear state and sign out
           setUser(null);
           setSession(null);
+          
+          // Attempt to sign out to clear any invalid tokens
+          try {
+            await supabase.auth.signOut({ scope: 'local' });
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('supabase.auth.token');
+            }
+          } catch (signOutError) {
+            console.error('Error signing out after auth state change error:', signOutError);
+          }
         }
       } else {
         setUser(null);
         setSession(null);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('supabase.auth.token');
+        }
       }
     });
 
@@ -191,94 +433,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('=== Login Flow Start ===');
       
-      // First ensure no existing session
-      await supabase.auth.signOut();
+      // Use server action for login instead of direct client auth
+      const result = await signIn(data);
       
-      // Use Supabase client directly for sign in
-      const { data: authData, error } = await supabase.auth.signInWithPassword({
-        email: data.email,
-        password: data.password,
-      });
-
-      // Handle authentication errors
-      if (error) {
-        console.error('Login error:', error);
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-        return;
+      if (result.error) {
+        throw result.error;
       }
-
-      // Validate session and user data
-      if (!authData?.session || !authData?.user) {
-        console.error('No user or session data returned');
-        toast({
-          title: "Error",
-          description: "Failed to establish session",
-          variant: "destructive",
-        });
-        return;
+      
+      if (!result.user) {
+        throw new Error('No user returned from login');
       }
-
-      // Verify user with server-side validation
-      const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser(authData.session.access_token);
-      if (userError || !verifiedUser) {
-        throw new Error('Failed to verify user authentication');
+      
+      if (!result.session) {
+        throw new Error('No session returned from login');
       }
-
-      // Check if email is verified using verified user data
-      if (!verifiedUser.email_confirmed_at) {
+      
+      // Update local state immediately with the session and user
+      setUser(result.user);
+      setSession(result.session);
+      
+      // Manually save session to localStorage for redundancy
+      if (typeof window !== 'undefined' && result.user && result.user.id && result.user.email) {
+        try {
+          const sessionData = {
+            currentSession: {
+              access_token: result.session.access_token,
+              refresh_token: result.session.refresh_token,
+              expires_at: result.session.expires_at,
+              user: { id: result.user.id, email: result.user.email }
+            }
+          };
+          localStorage.setItem('supabase.auth.token', JSON.stringify(sessionData));
+          console.log('Saved new session to localStorage after login');
+        } catch (storageError) {
+          console.warn('Failed to save session to localStorage after login:', storageError);
+        }
+      }
+      
+      // Check email verification status
+      if (!result.user.email_confirmed_at) {
         console.log('Email not verified, redirecting to verification page');
-        window.location.href = '/verify-email';
+        toast({
+          title: "Verification Required",
+          description: "Please verify your email address before logging in",
+        });
+        router.push('/verify-email');
         return;
       }
-
-      // Get fresh session after verification
-      const { data: { session: latestSession }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !latestSession) {
-        throw new Error('Failed to retrieve latest session');
-      }
-
-      // Ensure session is valid and matches verified user
-      if (latestSession.user.id !== verifiedUser.id) {
-        throw new Error('Session user mismatch');
-      }
-
-      // Update auth state with verified data
-      setUser(verifiedUser);
-      setSession(latestSession);
 
       // Show success toast
       toast({
         title: "Success",
         description: "Successfully logged in!",
       });
-
-      // Prepare redirect path
-      const targetPath = redirect.startsWith('/') ? redirect : `/${redirect}`;
-      console.log('Redirecting to:', targetPath);
       
-      // Ensure cookies are set before navigation
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Force a hard navigation to ensure middleware runs with fresh session
-      window.location.href = targetPath;
-      
-      console.log('=== Login Flow Complete ===');
+      // Route to the specified redirect path
+      console.log('Login successful, redirecting to:', redirect);
+      router.push(redirect);
     } catch (error) {
-      console.error('Login flow error:', error);
-      // Ensure clean state on error
-      await supabase.auth.signOut();
-      setUser(null);
-      setSession(null);
-      
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred during login",
-        variant: "destructive",
-      });
+      console.error('Login error:', error);
+      const authError = error as AuthError;
+      if (authError.code === 'email_not_confirmed') {
+        showVerificationToast();
+      } else {
+        toast({
+          title: "Login failed",
+          description: authError.message || 'Something went wrong',
+          variant: "destructive",
+        });
+      }
     }
   };
 

@@ -187,20 +187,18 @@ create policy "Family tree access is deletable by tree owner"
 -- Family Tree Members
 alter table family_tree_members enable row level security;
 
+-- FIXED POLICIES FOR FAMILY_TREE_MEMBERS - Replacing the recursive ones
 create policy "Family tree members are viewable by tree members"
   on family_tree_members for select
   using (
     exists (
-      select 1 from family_trees
-      where id = tree_id
+      select 1 from family_trees ft
+      left join family_tree_access fta on ft.id = fta.tree_id
+      where ft.id = family_tree_members.tree_id
       and (
-        owner_id = auth.uid()
-        or privacy_level = 'public'
-        or exists (
-          select 1 from family_tree_access
-          where tree_id = id
-          and user_id = auth.uid()
-        )
+        ft.owner_id = auth.uid()
+        or ft.privacy_level = 'public'
+        or (fta.user_id = auth.uid() and fta.role in ('admin', 'editor', 'viewer'))
       )
     )
   );
@@ -209,16 +207,12 @@ create policy "Family tree members are insertable by tree owner and editors"
   on family_tree_members for insert
   with check (
     exists (
-      select 1 from family_trees
-      where id = tree_id
+      select 1 from family_trees ft
+      left join family_tree_access fta on ft.id = fta.tree_id
+      where ft.id = tree_id
       and (
-        owner_id = auth.uid()
-        or exists (
-          select 1 from family_tree_access
-          where tree_id = id
-          and user_id = auth.uid()
-          and role in ('admin', 'editor')
-        )
+        ft.owner_id = auth.uid()
+        or (fta.user_id = auth.uid() and fta.role in ('admin', 'editor'))
       )
     )
   );
@@ -227,16 +221,12 @@ create policy "Family tree members are updatable by tree owner and editors"
   on family_tree_members for update
   using (
     exists (
-      select 1 from family_trees
-      where id = tree_id
+      select 1 from family_trees ft
+      left join family_tree_access fta on ft.id = fta.tree_id
+      where ft.id = tree_id
       and (
-        owner_id = auth.uid()
-        or exists (
-          select 1 from family_tree_access
-          where tree_id = id
-          and user_id = auth.uid()
-          and role in ('admin', 'editor')
-        )
+        ft.owner_id = auth.uid()
+        or (fta.user_id = auth.uid() and fta.role in ('admin', 'editor'))
       )
     )
   );
@@ -245,16 +235,12 @@ create policy "Family tree members are deletable by tree owner and admins"
   on family_tree_members for delete
   using (
     exists (
-      select 1 from family_trees
-      where id = tree_id
+      select 1 from family_trees ft
+      left join family_tree_access fta on ft.id = fta.tree_id
+      where ft.id = tree_id
       and (
-        owner_id = auth.uid()
-        or exists (
-          select 1 from family_tree_access
-          where tree_id = id
-          and user_id = auth.uid()
-          and role = 'admin'
-        )
+        ft.owner_id = auth.uid()
+        or (fta.user_id = auth.uid() and fta.role = 'admin')
       )
     )
   );

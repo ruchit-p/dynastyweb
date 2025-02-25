@@ -13,8 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { Database } from '@/lib/shared/types/supabase'
+import { supabaseBrowser } from '@/lib/client/supabase-browser'
 
 interface ChangePasswordDialogProps {
   open: boolean
@@ -22,14 +21,16 @@ interface ChangePasswordDialogProps {
 }
 
 export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialogProps) {
-  const { user } = useAuth()
+  const { currentUser: user } = useAuth()
   const { toast } = useToast()
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [isChanging, setIsChanging] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClientComponentClient<Database>()
+  
+  // Use the singleton browser client
+  const supabase = supabaseBrowser
 
   const resetForm = () => {
     setCurrentPassword("")

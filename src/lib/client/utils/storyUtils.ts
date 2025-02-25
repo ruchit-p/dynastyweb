@@ -1,4 +1,3 @@
-import { Database } from '@/lib/shared/types/supabase'
 import { createStory, updateStory, deleteStory, getUserStories, getAccessibleStories } from '@/app/actions/stories'
 import type { CreateStoryInput, UpdateStoryInput } from '@/app/actions/stories'
 
@@ -14,7 +13,7 @@ export type Story = {
     lng: number
     address: string
   }
-  privacy: Database['public']['Tables']['stories']['Row']['privacy_level']
+  privacy: 'family' | 'personal' | 'custom'
   customAccessMembers?: string[]
   blocks: Array<{
     type: 'text' | 'image' | 'video' | 'audio'

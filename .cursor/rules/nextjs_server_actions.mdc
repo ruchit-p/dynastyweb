@@ -1,0 +1,295 @@
+---
+description: Guidelines for implementing Server Actions in Next.js
+globs: **/*.ts, **/*.tsx, **/*.js, **/*.jsx
+alwaysApply: true
+---
+# Specify the following for Cursor rules
+description: Guidelines for implementing Server Actions in Next.js
+globs: "**/*.ts, **/*.tsx, **/*.js, **/*.jsx"
+---
+
+# Next.js Server Actions & Mutations
+
+## Overview
+
+Server Actions are a Next.js feature that allows you to run asynchronous code directly on the server. They enable forms and mutations without creating API endpoints.
+
+## 🚨 CRITICAL RULES 🚨
+
+1. Server Actions must be **async functions**
+2. Server Actions are defined with the `'use server'` directive
+3. All exports in a `'use server'` file must be async functions
+4. Server Actions must handle validation and errors properly
+
+## Defining Server Actions
+
+### File-Based Server Actions
+
+```typescript
+// app/actions.ts
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
+import { z } from 'zod';
+
+const schema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Invalid email address'),
+});
+
+export async function createItem(formData: FormData) {
+  // 1. Validate form data
+  const validatedFields = schema.safeParse({
+    name: formData.get('name'),
+    email: formData.get('email'),
+  });
+  
+  // 2. Return early if validation fails
+  if (!validatedFields.success) {
+    return {
+      success: false,
+      errors: validatedFields.error.flatten().fieldErrors,
+    };
+  }
+  
+  // 3. Prepare data for database
+  const { name, email } = validatedFields.data;
+  
+  try {
+    // 4. Store in database
+    // ... database code here
+    
+    // 5. Revalidate cache and redirect
+    revalidatePath('/items');
+    redirect('/items');
+  } catch (error) {
+    // 6. Handle errors
+    return {
+      success: false,
+      errors: {
+        _form: ['Failed to create item. Please try again.'],
+      },
+    };
+  }
+}
+```
+
+### Inline Server Actions
+
+```typescript
+// app/form.tsx
+'use client';
+
+import { useFormStatus } from 'react-dom';
+
+export default function Form() {
+  async function submitForm(formData: FormData) {
+    'use server';
+    
+    // Server-side code here
+    const name = formData.get('name');
+    // ... process the data
+    
+    return { success: true };
+  }
+  
+  return (
+    <form action={submitForm}>
+      <input name="name" type="text" />
+      <button type="submit">Submit</button>
+    </form>
+  );
+}
+```
+
+## Form Handling with Server Actions
+
+```typescript
+'use client';
+
+import { useFormState } from 'react-dom';
+import { createItem } from '@/app/actions';
+
+// Initial state
+const initialState = {
+  success: false,
+  errors: {},
+};
+
+export default function CreateItemForm() {
+  const [state, formAction] = useFormState(createItem, initialState);
+  
+  return (
+    <form action={formAction}>
+      <div>
+        <label htmlFor="name">Name</label>
+        <input id="name" name="name" type="text" />
+        {state.errors?.name && (
+          <p className="text-red-500">{state.errors.name[0]}</p>
+        )}
+      </div>
+      
+      <div>
+        <label htmlFor="email">Email</label>
+        <input id="email" name="email" type="email" />
+        {state.errors?.email && (
+          <p className="text-red-500">{state.errors.email[0]}</p>
+        )}
+      </div>
+      
+      {state.errors?._form && (
+        <p className="text-red-500">{state.errors._form[0]}</p>
+      )}
+      
+      <button type="submit">Create Item</button>
+    </form>
+  );
+}
+```
+
+## Progressive Enhancement
+
+Server Actions work with or without JavaScript enabled:
+
+```typescript
+// This works with progressive enhancement
+<form action={createItem}>
+  {/* Form fields */}
+  <button type="submit">Submit</button>
+</form>
+
+// Adding client-side logic with useFormStatus
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  
+  return (
+    <button type="submit" disabled={pending}>
+      {pending ? 'Submitting...' : 'Submit'}
+    </button>
+  );
+}
+```
+
+## Data Revalidation
+
+After mutations, revalidate the data cache with one of these methods:
+
+```typescript
+// Option 1: Revalidate a specific page
+import { revalidatePath } from 'next/cache';
+
+export async function updateItem(formData: FormData) {
+  'use server';
+  
+  // Update database...
+  
+  // Revalidate the items page
+  revalidatePath('/items');
+  
+  // Or revalidate the entire app
+  // revalidatePath('/', 'layout');
+}
+
+// Option 2: Revalidate by tag
+import { revalidateTag } from 'next/cache';
+
+export async function updateItem(formData: FormData) {
+  'use server';
+  
+  // Update database...
+  
+  // Revalidate all fetches with this tag
+  revalidateTag('items');
+}
+```
+
+## Error Handling
+
+Implement proper error handling in Server Actions:
+
+```typescript
+export async function serverAction() {
+  'use server';
+  
+  try {
+    // Attempt database operations
+    
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('Server action error:', error);
+    
+    // Return a structured error response
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'An unknown error occurred'
+    };
+  }
+}
+```
+
+## Security Best Practices
+
+1. **Input Validation**: Always validate user input with libraries like Zod or Yup
+2. **CSRF Protection**: Next.js automatically includes CSRF protection
+3. **Rate Limiting**: Consider implementing rate limiting for public actions
+4. **Authentication**: Verify user authentication status before performing sensitive operations
+5. **Secure Data Processing**: Don't return sensitive information to the client
+
+```typescript
+// Example with authentication check
+export async function deleteItem(id: string) {
+  'use server';
+  
+  // Get the user session
+  const session = await auth();
+  
+  // Check authentication
+  if (!session) {
+    return { success: false, error: 'Not authenticated' };
+  }
+  
+  // Check authorization
+  const item = await getItem(id);
+  if (item.userId !== session.user.id) {
+    return { success: false, error: 'Not authorized' };
+  }
+  
+  // Proceed with deletion
+  // ...
+}
+```
+
+## Form Validation Patterns
+
+```typescript
+// Using Zod for validation
+import { z } from 'zod';
+
+const formSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(100),
+  content: z.string().min(10, 'Content must be at least 10 characters'),
+  tags: z.string().transform(value => value.split(',').map(tag => tag.trim())),
+});
+
+export async function createPost(formData: FormData) {
+  'use server';
+  
+  const result = formSchema.safeParse({
+    title: formData.get('title'),
+    content: formData.get('content'),
+    tags: formData.get('tags') || '',
+  });
+  
+  if (!result.success) {
+    return {
+      success: false,
+      errors: result.error.flatten().fieldErrors,
+    };
+  }
+  
+  // Proceed with validated data
+  const { title, content, tags } = result.data;
+  // ...
+}
+``` 

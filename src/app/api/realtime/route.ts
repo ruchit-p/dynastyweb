@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from '@/lib/server/supabase-admin'
+import { createClient } from '@/lib/server/supabase'
 import { headers } from 'next/headers'
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import type { Database } from '@/lib/shared/types/supabase'
@@ -26,7 +26,7 @@ export async function GET() {
       return new Response('Unauthorized', { status: 401 })
     }
 
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     const encoder = new TextEncoder()
 
     const stream = new ReadableStream({

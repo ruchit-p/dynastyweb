@@ -14,8 +14,7 @@ import {
   getUserStories,
   getAccessibleStories
 } from '@/app/actions/stories'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { Database } from '@/lib/shared/types/supabase'
+import { supabaseBrowser } from '@/lib/client/supabase-browser'
 import type {
   CreateStoryResponse,
   UpdateStoryResponse,
@@ -27,7 +26,6 @@ import type {
 
 export function useStories() {
   const router = useRouter()
-  const supabase = createClientComponentClient<Database>()
   const [isLoading, setIsLoading] = useState(false)
   const [stories, setStories] = useState<Story[]>([])
 
@@ -242,25 +240,36 @@ export function useStories() {
 
   // MARK: - Real-time Updates
   useEffect(() => {
-    const channel = supabase
+    const channel = supabaseBrowser
       .channel('stories')
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'stories'
       }, () => {
-        router.refresh()
+        // Refresh stories on any changes
+        if (stories.length > 0) {
+          // We need to refresh from the same source we loaded from originally
+          // This is just a simple refresh - in a real app, you might want to
+          // be more selective about when to refresh
+          const firstStory = stories[0]
+          if (firstStory.familyTreeId) {
+            loadFamilyTreeStories(firstStory.familyTreeId)
+          } else if (firstStory.authorID) {
+            loadUserStories(firstStory.authorID)
+          }
+        }
       })
       .subscribe()
 
     return () => {
-      void supabase.removeChannel(channel)
+      supabaseBrowser.removeChannel(channel)
     }
-  }, [supabase, router])
+  }, [stories, loadFamilyTreeStories, loadUserStories])
 
   return {
-    stories,
     isLoading,
+    stories,
     create,
     update,
     remove,

@@ -209,7 +209,7 @@ export default function CreateStoryPage() {
         subtitle: subtitle.trim() || undefined,
         eventDate: date,
         location: location || undefined,
-        privacy: privacy === "personal" ? "privateAccess" : privacy,
+        privacy: privacy,
         customAccessMembers: privacy === "custom" ? customAccessMembers : undefined,
         blocks: processedBlocks,
         familyTreeId: userData.family_tree_id,
@@ -370,6 +370,11 @@ export default function CreateStoryPage() {
               <SelectItem value="custom">Custom</SelectItem>
             </SelectContent>
           </Select>
+          <p className="text-sm text-gray-500">
+            {privacy === "family" && "Your story will be visible to all family members."}
+            {privacy === "personal" && "Your story will only be visible to you."}
+            {privacy === "custom" && "Your story will only be visible to selected family members."}
+          </p>
         </div>
 
         {privacy === "custom" && (

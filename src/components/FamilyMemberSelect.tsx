@@ -4,8 +4,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { Database } from '@/lib/shared/types/supabase'
+import { supabaseBrowser } from '@/lib/client/supabase-browser'
 import { useAuth } from '@/context/AuthContext'
 import { Spinner } from '@/components/ui/spinner'
 
@@ -30,8 +29,8 @@ export function FamilyMemberSelect({
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
-  const { user } = useAuth()
-  const supabase = createClientComponentClient<Database>()
+  const { currentUser: user } = useAuth()
+  const supabase = supabaseBrowser
 
   useEffect(() => {
     const fetchFamilyMembers = async () => {

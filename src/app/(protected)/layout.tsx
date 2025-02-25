@@ -1,7 +1,5 @@
 import { redirect } from 'next/navigation'
-import { cookies } from 'next/headers'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { Database } from '@/lib/shared/types/supabase'
+import { createClient } from '@/lib/server/supabase'
 import Navbar from "@/components/Navbar"
 import { Toaster } from "@/components/ui/toaster"
 
@@ -10,11 +8,10 @@ export default async function ProtectedLayout({
 }: {
   children: React.ReactNode
 }) {
-  const cookieStore = cookies()
-  const supabase = createServerComponentClient<Database, 'public'>({ 
-    cookies: () => cookieStore 
-  })
+  // Create a Supabase client for server components
+  const supabase = await createClient()
   
+  // Get the session
   const { data: { session }, error } = await supabase.auth.getSession()
 
   if (!session || error) {

@@ -1,7 +1,7 @@
 "use server"
 
 import { z } from "zod"
-import { createServerSupabaseClient } from "@/lib/server/supabase-admin"
+import { createClient } from "@/lib/server/supabase"
 import { withAuth } from "@/lib/server/middleware"
 import { revalidatePath } from 'next/cache'
 import { FamilyTreeRepository } from '@/lib/server/repositories/family-tree'
@@ -51,7 +51,7 @@ export type InviteMemberInput = z.infer<typeof inviteMemberSchema>
 export const createFamilyTree = withAuth(async (input: CreateFamilyTreeInput) => {
   try {
     const validated = createFamilyTreeSchema.parse(input)
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     const repository = new FamilyTreeRepository(supabase)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -95,7 +95,7 @@ export const createFamilyTree = withAuth(async (input: CreateFamilyTreeInput) =>
 // Get family tree with members
 export const getFamilyTree = withAuth(async (id: string) => {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     const repository = new FamilyTreeRepository(supabase)
 
     const tree = await repository.getWithMembers(id)
@@ -111,7 +111,7 @@ export const getFamilyTree = withAuth(async (id: string) => {
 // Get user's family trees
 export const getUserFamilyTrees = withAuth(async () => {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     const repository = new FamilyTreeRepository(supabase)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -129,7 +129,7 @@ export const getUserFamilyTrees = withAuth(async () => {
 export const addFamilyMember = withAuth(async (input: AddMemberInput) => {
   try {
     const validated = addMemberSchema.parse(input)
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     const repository = new FamilyTreeRepository(supabase)
 
     const member = await repository.addMember({
@@ -149,7 +149,7 @@ export const addFamilyMember = withAuth(async (input: AddMemberInput) => {
 export const addFamilyRelationship = withAuth(async (input: AddRelationshipInput) => {
   try {
     const validated = addRelationshipSchema.parse(input)
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     const repository = new FamilyTreeRepository(supabase)
 
     const relationship = await repository.addRelationship(validated)
@@ -196,7 +196,7 @@ export const addFamilyRelationship = withAuth(async (input: AddRelationshipInput
 export const inviteFamilyMember = withAuth(async (input: InviteMemberInput) => {
   try {
     const validated = inviteMemberSchema.parse(input)
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     const repository = new FamilyTreeRepository(supabase)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -225,7 +225,7 @@ export const inviteFamilyMember = withAuth(async (input: InviteMemberInput) => {
 // Accept invitation
 export const acceptInvitation = withAuth(async (invitationId: string) => {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     const repository = new FamilyTreeRepository(supabase)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -263,7 +263,7 @@ export const acceptInvitation = withAuth(async (invitationId: string) => {
 // Reject invitation
 export const rejectInvitation = withAuth(async (invitationId: string) => {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = await createClient()
     const repository = new FamilyTreeRepository(supabase)
 
     await repository.updateInvitationStatus(invitationId, 'rejected')

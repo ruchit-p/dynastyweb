@@ -3,12 +3,14 @@
 import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from 'next/navigation'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Loader2 } from "lucide-react"
 import { signupFormSchema, type SignupFormData, validateFormData } from "@/lib/validation"
-import { useAuth } from "@/lib/client/hooks/useAuth"
+import { signUp } from "@/app/actions/auth"
+import { toast } from "@/components/ui/use-toast"
 import {
   Select,
   SelectContent,
@@ -39,7 +41,7 @@ export default function SignupPage() {
   })
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const [isLoading, setIsLoading] = useState(false)
-  const { signUp } = useAuth()
+  const router = useRouter()
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -84,25 +86,50 @@ export default function SignupPage() {
     }
 
     try {
-      await signUp({
-        ...formData,
+      // Use server action instead of direct client authentication
+      const result = await signUp({
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
         dateOfBirth: formData.dateOfBirth.toISOString(),
+        gender: formData.gender
       })
-      // Navigation and toast notifications are handled by AuthContext
-    } catch (error: any) {
+      
+      if (result.error) {
+        throw result.error
+      }
+      
+      // Navigate to verification page and show success toast
+      router.push('/verify-email')
+      toast({
+        title: 'Account created!',
+        description: 'Please check your email to verify your account.',
+      })
+    } catch (error: unknown) {
       console.error('Signup error:', error)
       // Handle specific error cases
-      if (error.code === 'user_already_exists') {
+      const err = error as { code?: string; message?: string; details?: string }
+      
+      // Handle PostgrestError (database-specific errors)
+      if (err.code === '23505') { // Unique violation
         setErrors({
           email: 'An account with this email already exists. Please sign in instead.',
         })
-      } else if (error.code === '42501') {
-        // This is the RLS error, but user was created successfully
-        // We can ignore this error since the auth account was created
-        return
-      } else {
+      } else if (err.code === 'user-exists') {
         setErrors({
-          email: 'Failed to create account. Please try again.',
+          email: 'An account with this email already exists. Please sign in instead.',
+        })
+      } else {
+        // Show detailed error message in toast
+        toast({
+          title: 'Signup failed',
+          description: err.message || 'Failed to create account. Please try again.',
+          variant: 'destructive',
+        })
+        
+        setErrors({
+          email: err.details || err.message || 'Failed to create account. Please try again.',
         })
       }
     } finally {

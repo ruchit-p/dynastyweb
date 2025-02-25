@@ -5,7 +5,7 @@ import type { Database } from '@/lib/shared/types/supabase'
  * Creates a Supabase admin client with service role key
  * This bypasses RLS and should only be used in server-side code
  */
-export function createServerSupabaseClient() {
+export function createServiceClient() {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set')
   }
@@ -22,10 +22,18 @@ export function createServerSupabaseClient() {
   )
 }
 
+/**
+ * Legacy function for backward compatibility
+ * @deprecated Use createServiceClient() instead
+ */
+export function createServerSupabaseClient() {
+  return createServiceClient()
+}
+
 // Helper to get authenticated user from server component
 export async function getAuthenticatedUser() {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = createServiceClient()
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) return null
     return user
@@ -40,7 +48,7 @@ export async function hasRole(role: string) {
     const user = await getAuthenticatedUser()
     if (!user) return false
     
-    const supabase = createServerSupabaseClient()
+    const supabase = createServiceClient()
     const { data: userRoles, error } = await supabase
       .from('user_roles')
       .select('role')
@@ -62,7 +70,7 @@ export async function hasPermission(permission: string) {
     const user = await getAuthenticatedUser()
     if (!user) return false
     
-    const supabase = createServerSupabaseClient()
+    const supabase = createServiceClient()
     const { data: userPermissions, error } = await supabase
       .from('user_permissions')
       .select('permissions')

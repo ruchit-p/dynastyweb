@@ -71,7 +71,7 @@ Protected routes are wrapped with authentication checks:
 ```typescript
 // Example protected route
 export default async function ProtectedPage() {
-  const supabase = createServerSupabaseClient()
+  const supabase = await createClient()
   const { data: { session } } = await supabase.auth.getSession()
   
   if (!session) {
