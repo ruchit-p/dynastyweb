@@ -1,6 +1,6 @@
 ---
-description: 
-globs: 
+description: Guidelines for creating and organizing Cursor rules
+globs: **/*.mdc
 alwaysApply: false
 ---
 # Specify the following for Cursor rules

@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Bell, Mail, MessageSquare, UserPlus, Calendar, Loader2 } from "lucide-react"
-import { useAuth } from "@/context/AuthContext"
+import { useAuth } from "@/components/auth"
 import { useToast } from "@/components/ui/use-toast"
 import ProtectedRoute from "@/components/ProtectedRoute"
-import { SettingsManager, type NotificationSettings } from "@/utils/settingsManager"
+import { SettingsManager, type NotificationSettings } from "@/lib/client/utils/settingsManager"
 
 export default function NotificationsPage() {
   const { currentUser } = useAuth()
@@ -25,11 +25,11 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     const loadSettings = async () => {
-      if (!currentUser?.uid) return
+      if (!currentUser?.id) return
 
       try {
         const settingsManager = SettingsManager.getInstance()
-        const userSettings = await settingsManager.loadSettings(currentUser.uid)
+        const userSettings = await settingsManager.loadSettings(currentUser.id)
         setSettings(userSettings.notifications)
       } catch (error) {
         console.error("Error loading notification settings:", error)
@@ -44,21 +44,21 @@ export default function NotificationsPage() {
     }
 
     void loadSettings()
-  }, [currentUser?.uid, toast])
+  }, [currentUser?.id, toast])
 
   const handleToggle = (key: keyof NotificationSettings) => {
-    setSettings((prev) => ({ ...prev, [key]: !prev[key] }))
+    setSettings((prev: NotificationSettings) => ({ ...prev, [key]: !prev[key] }))
   }
 
   const handleSave = async () => {
-    if (!currentUser?.uid) return
+    if (!currentUser?.id) return
 
     try {
       setIsSaving(true)
       const settingsManager = SettingsManager.getInstance()
-      await settingsManager.saveSettings(currentUser.uid, {
+      await settingsManager.saveSettings(currentUser.id, {
         notifications: settings,
-        privacy: (await settingsManager.loadSettings(currentUser.uid)).privacy,
+        privacy: (await settingsManager.loadSettings(currentUser.id)).privacy,
       })
 
       toast({

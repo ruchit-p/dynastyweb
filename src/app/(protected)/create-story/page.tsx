@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/context/AuthContext"
-import { uploadMedia } from "@/utils/mediaUtils"
+import { useAuth } from "@/components/auth"
+import { uploadMedia } from "@/lib/client/utils/mediaUtils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,8 +17,9 @@ import AudioRecorder from "@/components/AudioRecorder"
 import LocationPicker from "@/components/LocationPicker"
 import { useToast } from "@/components/ui/use-toast"
 import { FamilyMemberSelect } from "@/components/FamilyMemberSelect"
-import { createStory } from "@/utils/functionUtils"
-import { supabase } from "@/lib/supabase"
+import { createStory } from "@/lib/client/utils/functionUtils"
+import { supabaseBrowser as supabase } from "@/lib/client/supabase-browser"
+import { useMediaProcessor } from "@/hooks/useMediaProcessor"
 
 type BlockType = "text" | "image" | "video" | "audio"
 
@@ -38,8 +39,9 @@ interface Location {
 
 export default function CreateStoryPage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { currentUser } = useAuth()
   const { toast } = useToast()
+  const { processMedia } = useMediaProcessor()
   const [loading, setLoading] = useState(false)
   const [title, setTitle] = useState("")
   const [subtitle, setSubtitle] = useState("")
@@ -83,7 +85,7 @@ export default function CreateStoryPage() {
 
   // Check if user has a family tree ID
   useEffect(() => {
-    if (!user?.id) {
+    if (!currentUser?.id) {
       console.log("No user ID available");
       return;
     }
@@ -92,7 +94,7 @@ export default function CreateStoryPage() {
       const { data: userData, error } = await supabase
         .from('users')
         .select('family_tree_id')
-        .eq('id', user.id)
+        .eq('id', currentUser.id)
         .single()
 
       if (error || !userData?.family_tree_id) {
@@ -107,7 +109,7 @@ export default function CreateStoryPage() {
     }
 
     checkFamilyTree();
-  }, [user?.id, router, toast]);
+  }, [currentUser?.id, router, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -124,7 +126,7 @@ export default function CreateStoryPage() {
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('family_tree_id')
-      .eq('id', user?.id)
+      .eq('id', currentUser?.id)
       .single()
 
     if (userError || !userData?.family_tree_id) {
@@ -157,11 +159,24 @@ export default function CreateStoryPage() {
           // For media blocks, check if the content is a File (new upload) or URL (already uploaded)
           if (block.content instanceof File) {
             try {
+              // Define the bucket based on media type
+              const bucket = 'stories'
+              
+              // Upload with progress tracking
               const url = await uploadMedia(
                 block.content,
-                storyId,
-                block.type,
                 {
+                  bucket,
+                  path: `${storyId}/`,
+                  processOptions: {
+                    // Apply compression based on media type using WhatsApp-style settings
+                    compress: {
+                      quality: block.type === 'image' ? 75 : undefined,
+                      format: block.type === 'image' ? 'webp' : undefined
+                    },
+                    resize: block.type === 'image' ? 
+                      { width: 1600, height: 1600, fit: 'cover' } : undefined,
+                  },
                   onProgress: (progress) => {
                     setBlocks(currentBlocks =>
                       currentBlocks.map(b =>
@@ -170,19 +185,10 @@ export default function CreateStoryPage() {
                           : b
                       )
                     )
-                  },
-                  onError: (error) => {
-                    setBlocks(currentBlocks =>
-                      currentBlocks.map(b =>
-                        b.id === block.id
-                          ? { ...b, error: error.message }
-                          : b
-                      )
-                    )
-                    throw error // Re-throw to handle in the outer catch
                   }
                 }
               )
+              
               return {
                 data: url,
                 localId: block.id,
@@ -190,6 +196,13 @@ export default function CreateStoryPage() {
               }
             } catch (error) {
               console.error(`Error uploading ${block.type}:`, error)
+              setBlocks(currentBlocks =>
+                currentBlocks.map(b =>
+                  b.id === block.id
+                    ? { ...b, error: (error as Error).message }
+                    : b
+                )
+              )
               throw error
             }
           }
@@ -204,7 +217,7 @@ export default function CreateStoryPage() {
 
       // Create the story using the Cloud Function
       await createStory({
-        authorID: user!.id,
+        authorID: currentUser!.id,
         title: title.trim(),
         subtitle: subtitle.trim() || undefined,
         eventDate: date,
@@ -254,7 +267,7 @@ export default function CreateStoryPage() {
 
   const handleFileSelect = async (id: string, file: File) => {
     // Store the file object directly in the block content
-    // It will be uploaded when the form is submitted
+    // It will be processed and uploaded when the form is submitted
     updateBlock(id, file)
   }
 
@@ -462,9 +475,13 @@ export default function CreateStoryPage() {
                     <div className="space-y-2">
                       <MediaUpload
                         type={block.type}
-                        onFileSelect={(file) => handleFileSelect(block.id, file)}
+                        onFileSelect={(url) => updateBlock(block.id, url)}
                         value={block.content instanceof File ? '' : block.content as string}
                         onRemove={() => updateBlock(block.id, "")}
+                        processMedia={true}
+                        quality="medium"
+                        maxWidth={block.type === 'image' ? 1600 : block.type === 'video' ? 1280 : undefined}
+                        maxHeight={block.type === 'image' ? 1600 : block.type === 'video' ? 720 : undefined}
                       />
                       {block.uploadProgress !== undefined && block.uploadProgress < 100 && (
                         <div className="w-full bg-gray-200 rounded-full h-2.5">

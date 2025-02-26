@@ -1,5 +1,5 @@
 import { createServiceClient } from './supabase-admin'
-import type { StorageBucket } from '../client/storage'
+import type { StorageBucket } from '../shared/types/storage'
 
 // MARK: - Types
 

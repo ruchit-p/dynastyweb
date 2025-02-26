@@ -3,13 +3,13 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { PenSquare, Book, Settings } from "lucide-react"
-import { useAuth } from "@/lib/client/hooks/useAuth"
+import { PenSquare, Book } from "lucide-react"
+import { useAuth } from "@/components/auth"
 import { type Story } from "@/lib/client/utils/storyUtils"
 import { StoryCard } from "@/components/Story"
 import { getUserStories } from "@/app/actions/stories"
-import { HistoryBookPrivacySettings } from "@/components/HistoryBookPrivacySettings"
 import type { HistoryBookPrivacyLevel } from "@/lib/shared/types/story"
+import { HistoryBookSettingsDialog } from "@/components/HistoryBookSettingsDialog"
 
 // Define the enriched story type that includes author and tagged people
 type EnrichedStory = Story & {
@@ -25,7 +25,7 @@ type EnrichedStory = Story & {
 };
 
 export default function HistoryBookPage() {
-  const { user } = useAuth()
+  const { currentUser: user } = useAuth()
   const [stories, setStories] = useState<EnrichedStory[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -65,11 +65,12 @@ export default function HistoryBookPage() {
           stories: userStories.map(s => ({
             id: s.id,
             title: s.title,
-            createdAt: s.createdAt
+            createdAt: s.created_at
           }))
         });
 
-        setStories(userStories as EnrichedStory[]);
+        // Cast the stories to EnrichedStory since we're adding author and taggedPeople
+        setStories(userStories as unknown as EnrichedStory[]);
       } catch (error) {
         console.error('[HistoryBook] Error loading stories:', error);
         if (!mounted) return;
@@ -136,10 +137,13 @@ export default function HistoryBookPage() {
         <div className="flex justify-between my-6 items-center mb-6">
           <h1 className="text-2xl font-bold">My History Book</h1>
           <div className="flex gap-4">
-            <Button variant="outline" className="flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              Settings
-            </Button>
+            <HistoryBookSettingsDialog
+              privacyLevel={privacyLevel}
+              onPrivacyChange={handlePrivacyChange}
+              customAccessMembers={customAccessMembers}
+              onCustomAccessChange={handleCustomAccessChange}
+              isUpdating={isUpdatingPrivacy}
+            />
             <Link href="/create-story">
               <Button>
                 <PenSquare className="mr-2 h-4 w-4" />
@@ -150,13 +154,6 @@ export default function HistoryBookPage() {
         </div>
         
         <div className="mb-6">
-          <HistoryBookPrivacySettings 
-            privacyLevel={privacyLevel}
-            onPrivacyChange={handlePrivacyChange}
-            customAccessMembers={customAccessMembers}
-            onCustomAccessChange={handleCustomAccessChange}
-            isUpdating={isUpdatingPrivacy}
-          />
           {privacyLevel === 'personal' && (
             <div className="mt-4 bg-blue-50 text-blue-700 p-4 rounded-md">
               <p>Your history book is set to Personal. Only you can see it and all its stories.</p>

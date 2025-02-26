@@ -1,0 +1,178 @@
+---
+description: Guidelines for using MCP server tools for problem-solving and data retrieval
+globs: **/*.ts, **/*.tsx, **/*.js, **/*.jsx
+alwaysApply: true
+---
+# Specify the following for Cursor rules
+description: Guidelines for using MCP server tools for problem-solving and data retrieval
+globs: "**/*.ts, **/*.tsx, **/*.js, **/*.jsx"
+---
+
+# MCP Server Tools Usage
+
+## Overview
+
+The Model Context Protocol (MCP) servers provide powerful tools for accessing databases, searching the web, implementing sequential thinking methodology, and performing filesystem operations. This rule provides guidelines for effectively using these tools when solving problems or generating solutions.
+
+## MCP Servers Available
+
+### 1. Supabase Local
+
+Supabase local provides database query capabilities with access to the following database schemas:
+
+- users_database_schema
+- family_trees_database_schema
+- family_tree_members_database_schema
+- family_tree_relationships_database_schema
+- family_tree_nodes_database_schema
+- family_tree_access_database_schema
+- history_books_database_schema
+- stories_database_schema
+- comments_database_schema
+- email_verification_tokens_database_schema
+- password_reset_database_schema
+- notification_preferences_database_schema
+- notifications_database_schema
+
+#### When to Use:
+- When you need to query or understand the database structure
+- To check data relationships before implementing new features
+- To verify how existing data is structured and stored
+- To understand schema constraints and relationships
+
+#### Usage Example:
+```sql
+-- Query example for the MCP Supabase server
+SELECT * FROM users WHERE id = '123';
+```
+
+### 2. Brave Search
+
+Brave Search provides two main tools:
+- brave_web_search: For general web searches to gather information
+- brave_local_search: For finding local businesses and location-based information
+
+#### When to Use:
+- When you need current information not in training data
+- To check latest documentation for libraries or frameworks
+- To gather information about best practices
+- To search for local information when building location-based features
+
+#### Usage Example:
+For web search:
+```
+"latest React server components documentation"
+```
+
+For local search:
+```
+"restaurants near Central Park"
+```
+
+### 3. Sequential Thinking
+
+The Sequential Thinking tool helps break down complex problems into manageable steps through a structured thinking process.
+
+#### When to Use:
+- For complex problem-solving tasks
+- When designing system architecture
+- When planning implementation strategies
+- When debugging complex issues
+- When you need to maintain context over multiple reasoning steps
+
+#### Key Features:
+- Breaks problems into sequential steps
+- Allows for revising previous thoughts
+- Maintains context throughout the reasoning process
+- Enables branching into alternative solutions
+- Helps generate and verify hypotheses
+
+### 4. Filesystem
+
+The Filesystem MCP server provides direct access to the DynastyWeb project files, allowing file operations like reading, writing, and searching. Use full path when trying to use filesystem mcp.
+
+#### When to Use:
+- To read file contents without requiring user to open them
+- To search across multiple files for patterns or references
+- To analyze project structure and dependencies
+- To make targeted file edits
+
+#### Key Features:
+- Reading file contents
+- Writing to files
+- Creating directories
+- Listing directory contents
+- Searching files with pattern matching
+- Getting file metadata
+
+#### Usage Example:
+```
+// Reading a file
+read_file("/projects/dynastyweb/src/lib/logger.ts")
+
+// Searching for files
+search_files("/projects/dynastyweb", "*.tsx", ["node_modules", ".git"])
+```
+
+## Best Practices
+
+1. **Start with Database Understanding**:
+   - Before implementing features, query the relevant database schemas to understand data structure
+   - Use the results to inform your implementation decisions
+
+2. **Enhance with Current Information**:
+   - Use brave_web_search to get the most current information on technologies and best practices
+   - Verify that your implementation aligns with latest standards
+
+3. **Apply Structured Problem-Solving**:
+   - For complex tasks, use sequentialthinking to break down the problem
+   - Start with an outline of steps
+   - Revise thinking as you gather more information
+   - Generate alternative approaches when needed
+
+4. **Leverage Filesystem Access**:
+   - Use file search to find patterns across the codebase
+   - Read files to understand implementation details without interrupting the workflow
+   - Analyze project structure to better understand architecture
+
+5. **Combine Tools for Comprehensive Solutions**:
+   - Query database → Research with Brave → Apply sequential thinking → Analyze filesystem → Implement solution
+   - Use database queries to inform your web searches
+   - Use web search results to refine your sequential thinking
+   - Use filesystem analysis to guide implementation
+
+6. **When Debugging**:
+   - Query database to understand the current state
+   - Use sequential thinking to trace through the problem
+   - Search for similar issues and solutions online
+   - Examine related files to understand code context
+
+## Integration with Development Workflow
+
+### During Planning:
+1. Use Sequential Thinking to break down the feature into implementation steps
+2. Research current best practices with Brave Search
+3. Understand the database schema to plan data operations
+4. Analyze similar implementations in the codebase using filesystem search
+
+### During Implementation:
+1. Query the database to understand the existing data structure
+2. Verify technical approaches with web searches
+3. Use sequential thinking when encountering complex logic problems
+4. Read related files to understand patterns and conventions
+
+### During Testing/Debugging:
+1. Query the database to verify data integrity
+2. Use sequential thinking to trace through execution paths
+3. Search for error messages or similar issues online
+4. Examine log files and related code to pinpoint issues
+
+## Example Workflow
+
+For implementing a new feature:
+1. **Database Understanding**: Query relevant tables to understand data model
+2. **Current Knowledge**: Search for best practices and similar implementations
+3. **Codebase Analysis**: Search through project files for similar patterns
+4. **Problem Breakdown**: Use sequential thinking to outline implementation steps
+5. **Implementation**: Write code based on the gathered information
+6. **Validation**: Query database and test files to verify results 

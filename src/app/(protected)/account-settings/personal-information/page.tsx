@@ -7,13 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Camera, Loader2 } from "lucide-react"
-import { useAuth } from "@/context/AuthContext"
+import { useAuth } from "@/components/auth"
 import { useToast } from "@/components/ui/use-toast"
 import { createClient } from "@/lib/supabase/client"
 import ProtectedRoute from "@/components/ProtectedRoute"
 
 export default function PersonalInformationPage() {
-  const { user, profile, refreshProfile } = useAuth()
+  const { currentUser, refreshUser } = useAuth()
   const { toast } = useToast()
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -25,14 +25,14 @@ export default function PersonalInformationPage() {
   })
 
   useEffect(() => {
-    if (profile) {
+    if (currentUser) {
       setFormData({
-        firstName: profile.first_name,
-        lastName: profile.last_name,
-        phoneNumber: profile.phone_number || "",
+        firstName: currentUser.first_name,
+        lastName: currentUser.last_name,
+        phoneNumber: currentUser.phone_number || "",
       })
     }
-  }, [profile])
+  }, [currentUser])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -46,20 +46,20 @@ export default function PersonalInformationPage() {
   }
 
   const handleSave = async () => {
-    if (!user?.id) return
+    if (!currentUser?.id) return
 
     try {
       setIsSaving(true)
-      const supabase = createClient()
+      const supabase = await createClient()
 
-      let profilePictureUrl = profile?.avatar_url
+      let profilePictureUrl = currentUser?.avatar_url
 
       // Upload new profile picture if one was selected
       if (newProfilePicture) {
         const fileExt = newProfilePicture.name.split('.').pop()
-        const filePath = `${user.id}-${Math.random()}.${fileExt}`
+        const filePath = `${currentUser.id}-${Math.random()}.${fileExt}`
 
-        const { error: uploadError, data } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('avatars')
           .upload(filePath, newProfilePicture)
 
@@ -86,14 +86,14 @@ export default function PersonalInformationPage() {
           avatar_url: profilePictureUrl,
           updated_at: new Date().toISOString()
         })
-        .eq('id', user.id)
+        .eq('id', currentUser.id)
 
       if (updateError) {
         throw updateError
       }
 
       // Refresh profile data
-      await refreshProfile()
+      await refreshUser()
 
       toast({
         title: "Success",
@@ -114,7 +114,7 @@ export default function PersonalInformationPage() {
     }
   }
 
-  if (!profile) {
+  if (!currentUser) {
     return (
       <ProtectedRoute>
         <div className="flex justify-center items-center min-h-[500px]">
@@ -130,7 +130,7 @@ export default function PersonalInformationPage() {
         <div className="flex flex-col items-center mb-6">
           <div className="relative">
             <Image
-              src={newProfilePicture ? URL.createObjectURL(newProfilePicture) : (profile.avatar_url || "/avatar.svg")}
+              src={newProfilePicture ? URL.createObjectURL(newProfilePicture) : (currentUser.avatar_url || "/avatar.svg")}
               alt="Profile picture"
               width={200}
               height={200}
@@ -183,7 +183,7 @@ export default function PersonalInformationPage() {
               id="email"
               name="email"
               type="email"
-              value={user?.email}
+              value={currentUser?.email}
               disabled={true} // Email cannot be changed
               className="bg-gray-50"
             />

@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Fingerprint, Key, Trash, Loader2 } from "lucide-react"
-import { useAuth } from "@/context/AuthContext"
+import { useAuth } from "@/components/auth"
 import { useToast } from "@/components/ui/use-toast"
 import { createClient } from "@/lib/supabase/client"
 import ProtectedRoute from "@/components/ProtectedRoute"
@@ -27,7 +27,7 @@ import { SettingsManager, type PrivacySettings } from "@/utils/settingsManager"
 
 export default function PrivacySecurityPage() {
   const router = useRouter()
-  const { user, profile, signOut } = useAuth()
+  const { currentUser, logout } = useAuth()
   const { toast } = useToast()
   const [settings, setSettings] = useState<PrivacySettings>({
     locationEnabled: true,
@@ -42,11 +42,11 @@ export default function PrivacySecurityPage() {
 
   useEffect(() => {
     const loadSettings = async () => {
-      if (!user?.id) return
+      if (!currentUser?.id) return
 
       try {
         const settingsManager = SettingsManager.getInstance()
-        const userSettings = await settingsManager.loadSettings(user.id)
+        const userSettings = await settingsManager.loadSettings(currentUser.id)
         setSettings(userSettings.privacy)
       } catch (error) {
         console.error("Error loading privacy settings:", error)
@@ -61,7 +61,7 @@ export default function PrivacySecurityPage() {
     }
 
     void loadSettings()
-  }, [user?.id, toast])
+  }, [currentUser?.id, toast])
 
   const handleToggle = (key: keyof PrivacySettings) => {
     if (key === "locationEnabled") {
@@ -74,13 +74,13 @@ export default function PrivacySecurityPage() {
   }
 
   const handleSave = async () => {
-    if (!user?.id) return
+    if (!currentUser?.id) return
 
     try {
       setIsSaving(true)
       const settingsManager = SettingsManager.getInstance()
-      await settingsManager.saveSettings(user.id, {
-        notifications: (await settingsManager.loadSettings(user.id)).notifications,
+      await settingsManager.saveSettings(currentUser.id, {
+        notifications: (await settingsManager.loadSettings(currentUser.id)).notifications,
         privacy: settings,
       })
 
@@ -101,26 +101,26 @@ export default function PrivacySecurityPage() {
   }
 
   const handleDeleteAccount = async () => {
-    if (!user || !profile) return
+    if (!currentUser || !currentUser.profile) return
 
     try {
       setIsDeleting(true)
-      const supabase = createClient()
+      const supabase = await createClient()
 
       // Delete user's profile
       const { error: profileError } = await supabase
         .from('profiles')
         .delete()
-        .eq('id', user.id)
+        .eq('id', currentUser.id)
 
       if (profileError) throw profileError
 
       // Delete user's auth account
-      const { error: authError } = await supabase.auth.admin.deleteUser(user.id)
+      const { error: authError } = await supabase.auth.admin.deleteUser(currentUser.id)
       if (authError) throw authError
 
       // Log out the user
-      await signOut()
+      await logout()
 
       toast({
         title: "Account Deleted",

@@ -2,34 +2,113 @@
 
 import { useRef, useState } from 'react'
 import { toast } from '@/components/ui/use-toast'
-import { uploadFile } from '@/app/actions/storage'
+import { uploadFile, type UploadResult } from '@/app/actions/storage'
 import { StorageBucket } from '@/lib/shared/types/storage'
 
 // MARK: - Types
 export type MediaUploadProps = {
-  type: 'image' | 'video' | 'audio'
+  type: 'image' | 'video' | 'audio' | 'all'
   onFileSelect: (url: string) => void
   value?: string
   onRemove?: () => void
   bucket?: StorageBucket
+  processMedia?: boolean
+  quality?: 'high' | 'medium' | 'low'
+  maxWidth?: number
+  maxHeight?: number
 }
 
 const MEDIA_CONFIG = {
   image: {
-    accept: '.png,.jpg,.jpeg,.gif,.webp',
-    bucket: 'stories' as StorageBucket,
+    accept: '.png,.jpg,.jpeg,.gif,.webp,.avif',
+    bucket: 'media' as StorageBucket,
     maxSize: '10MB'
   },
   video: {
-    accept: '.mp4,.webm,.mov,.avi',
-    bucket: 'stories' as StorageBucket,
+    accept: '.mp4,.webm,.mov,.avi,.mkv',
+    bucket: 'media' as StorageBucket,
     maxSize: '100MB'
   },
   audio: {
-    accept: '.mp3,.wav,.m4a,.aac',
-    bucket: 'stories' as StorageBucket,
+    accept: '.mp3,.wav,.m4a,.aac,.ogg,.flac',
+    bucket: 'media' as StorageBucket,
     maxSize: '50MB'
+  },
+  all: {
+    accept: '.png,.jpg,.jpeg,.gif,.webp,.avif,.mp4,.webm,.mov,.avi,.mkv,.mp3,.wav,.m4a,.aac,.ogg,.flac',
+    bucket: 'media' as StorageBucket,
+    maxSize: '100MB'
   }
+}
+
+// Helper to get media type from file
+function getMediaType(file: File): 'image' | 'video' | 'audio' | null {
+  const type = file.type.split('/')[0];
+  if (type === 'image') return 'image';
+  if (type === 'video') return 'video';
+  if (type === 'audio') return 'audio';
+  
+  // Check by extension if mime type is not reliable
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'].includes(ext || '')) return 'image';
+  if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext || '')) return 'video';
+  if (['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'].includes(ext || '')) return 'audio';
+  
+  return null;
+}
+
+// Get processing parameters based on quality setting
+function getProcessingParams(mediaType: 'image' | 'video' | 'audio', quality: 'high' | 'medium' | 'low', maxWidth?: number, maxHeight?: number) {
+  const params: any = {};
+  
+  if (mediaType === 'image') {
+    params.format = 'webp'; // WebP for best compression/quality ratio
+    
+    // Set quality based on setting
+    if (quality === 'high') params.quality = 90;
+    else if (quality === 'medium') params.quality = 75;
+    else params.quality = 60;
+    
+    // Set max dimensions
+    params.width = maxWidth || 1600;
+    if (maxHeight) params.height = maxHeight;
+    
+    // Enable progressive loading
+    params.progressiveLoad = true;
+    params.stripMetadata = true;
+  } 
+  else if (mediaType === 'video') {
+    // Video bitrate based on quality
+    if (quality === 'high') params.videoBitrate = '2500k';
+    else if (quality === 'medium') params.videoBitrate = '1500k';
+    else params.videoBitrate = '800k';
+    
+    // Audio bitrate based on quality
+    if (quality === 'high') params.audioBitrate = '192k';
+    else if (quality === 'medium') params.audioBitrate = '128k';
+    else params.audioBitrate = '96k';
+    
+    // Resolution based on quality and max dimensions
+    if (quality === 'high') {
+      params.scale = `${maxWidth || 1920}:${maxHeight || 1080}:force_original_aspect_ratio=decrease`;
+    } else if (quality === 'medium') {
+      params.scale = `${maxWidth || 1280}:${maxHeight || 720}:force_original_aspect_ratio=decrease`;
+    } else {
+      params.scale = `${maxWidth || 854}:${maxHeight || 480}:force_original_aspect_ratio=decrease`;
+    }
+    
+    params.stripMetadata = true;
+  }
+  else if (mediaType === 'audio') {
+    // Audio bitrate based on quality
+    if (quality === 'high') params.audioBitrate = '256k';
+    else if (quality === 'medium') params.audioBitrate = '128k';
+    else params.audioBitrate = '96k';
+    
+    params.stripMetadata = true;
+  }
+  
+  return params;
 }
 
 export default function MediaUpload({ 
@@ -37,11 +116,17 @@ export default function MediaUpload({
   onFileSelect, 
   value, 
   onRemove,
-  bucket 
+  bucket,
+  processMedia = true,
+  quality = 'medium',
+  maxWidth,
+  maxHeight
 }: MediaUploadProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [preview, setPreview] = useState<string | null>(value || null)
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [processingMedia, setProcessingMedia] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const config = MEDIA_CONFIG[type]
@@ -73,6 +158,7 @@ export default function MediaUpload({
   const handleFile = async (file: File) => {
     try {
       setIsUploading(true)
+      setUploadProgress(0)
 
       // Check file type
       const fileExtension = file.name.split('.').pop()?.toLowerCase()
@@ -89,21 +175,100 @@ export default function MediaUpload({
         return
       }
 
-      // Upload file
-      const { url, error } = await uploadFile(file, targetBucket)
+      // Get media type for preview and processing
+      const mediaType = getMediaType(file);
+      if (!mediaType && type !== 'all') {
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'File type not supported'
+        })
+        return
+      }
 
-      if (error) {
-        throw new Error(error)
+      // Simulate upload progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          // Cap at 90% until actually complete
+          return prev < 90 ? prev + 5 : prev;
+        });
+      }, 200);
+
+      // Upload file
+      const result = await uploadFile({
+        file,
+        bucket: targetBucket
+      })
+
+      // Clear the progress interval and set to 100%
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
+      if (result.error) {
+        throw new Error(result.error)
+      }
+      
+      const url = result.data?.url || '';
+      if (!url) {
+        throw new Error('Failed to get upload URL')
+      }
+
+      // Process the media if requested
+      let finalUrl = url;
+      if (processMedia && url) {
+        try {
+          setProcessingMedia(true);
+          
+          // Call the new process-media function with the appropriate parameters
+          const fileType = mediaType || 'image'; // Default to image if type is 'all' and couldn't determine
+          const processingParams = getProcessingParams(fileType, quality, maxWidth, maxHeight);
+          
+          const { data, error } = await window.fetch('/api/process-media', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url,
+              options: {
+                type: fileType,
+                params: processingParams
+              }
+            })
+          }).then(res => res.json());
+          
+          if (error) {
+            console.error('Media processing error:', error);
+            // Continue with original URL on processing error
+          } else if (data && data.processedUrl) {
+            finalUrl = data.processedUrl;
+            
+            // Show compression stats if available
+            if (data.compressionRatio) {
+              toast({
+                title: 'Media processed',
+                description: `Compressed by ${data.compressionRatio}`,
+              });
+            }
+          }
+        } catch (processError) {
+          console.error('Failed to process media:', processError);
+          // Continue with original URL on error
+        } finally {
+          setProcessingMedia(false);
+        }
       }
 
       // Update preview
-      if (type === 'image') {
-        setPreview(url)
+      if (mediaType === 'image' || (!mediaType && type === 'all')) {
+        setPreview(finalUrl);
       } else {
-        setPreview(URL.createObjectURL(file))
+        // For video and audio, we can use original file for preview
+        // but return the processed URL for storage
+        setPreview(URL.createObjectURL(file));
       }
 
-      onFileSelect(url)
+      onFileSelect(finalUrl);
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -112,6 +277,7 @@ export default function MediaUpload({
       })
     } finally {
       setIsUploading(false)
+      setUploadProgress(0)
     }
   }
 
@@ -124,11 +290,24 @@ export default function MediaUpload({
     if (onRemove) onRemove()
   }
 
+  const getUploadStatus = () => {
+    if (processingMedia) return 'Processing media...';
+    if (isUploading) return `Uploading... ${Math.round(uploadProgress)}%`;
+    return (
+      <>
+        <span className="font-semibold">Click to upload</span> or drag and drop
+        <p className="text-xs text-gray-500">
+          {type === 'all' ? 'Media' : type.toUpperCase()} (max {config.maxSize})
+        </p>
+      </>
+    );
+  };
+
   return (
     <div
       className={`relative border-2 border-dashed rounded-lg p-4 text-center cursor-pointer
         ${isDragging ? 'border-primary bg-primary/10' : 'border-gray-300'}
-        ${isUploading ? 'opacity-50 cursor-wait' : ''}`}
+        ${isUploading || processingMedia ? 'opacity-50 cursor-wait' : ''}`}
       onDragEnter={handleDrag}
       onDragLeave={handleDrag}
       onDragOver={handleDrag}
@@ -141,30 +320,31 @@ export default function MediaUpload({
         accept={config.accept}
         className="hidden"
         onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-        disabled={isUploading}
+        disabled={isUploading || processingMedia}
       />
 
       {preview ? (
         <div className="relative">
-          {type === 'image' && (
+          {/* Render different previews based on media type */}
+          {(type === 'image' || (type === 'all' && preview.match(/\.(jpe?g|png|gif|webp|avif)$/i))) && (
             <img
               src={preview}
               alt="Preview"
               className="max-w-full h-auto rounded"
             />
           )}
-          {type === 'video' && (
+          {(type === 'video' || (type === 'all' && preview.match(/\.(mp4|webm|mov|avi|mkv)$/i))) && (
             <video
               src={preview}
               controls
               className="max-w-full h-auto rounded"
             />
           )}
-          {type === 'audio' && (
+          {(type === 'audio' || (type === 'all' && preview.match(/\.(mp3|wav|m4a|aac|ogg|flac)$/i))) && (
             <audio
               src={preview}
               controls
-              className="max-w-full"
+              className="w-full"
             />
           )}
           <button
@@ -206,16 +386,7 @@ export default function MediaUpload({
             />
           </svg>
           <div className="text-sm text-gray-600">
-            {isUploading ? (
-              'Uploading...'
-            ) : (
-              <>
-                <span className="font-semibold">Click to upload</span> or drag and drop
-                <p className="text-xs text-gray-500">
-                  {type.toUpperCase()} (max {config.maxSize})
-                </p>
-              </>
-            )}
+            {getUploadStatus()}
           </div>
         </div>
       )}

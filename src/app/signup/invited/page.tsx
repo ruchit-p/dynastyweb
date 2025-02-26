@@ -4,61 +4,91 @@ import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
-import { format } from "date-fns"
-import { Calendar as CalendarIcon, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Loader2 } from "lucide-react"
 import { useAuth } from "@/lib/client/hooks/useAuth"
-import { signupFormSchema, type SignupFormData, validateFormData } from "@/lib/validation"
-import { cn } from "@/lib/utils"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { EnhancedCalendar } from "@/components/ui/enhanced-calendar"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+import AuthForm, { AuthField } from "@/components/auth/AuthForm"
+import { DateOfBirthPicker } from "@/components/ui/date-of-birth-picker"
+import { GenderSelect } from "@/components/ui/gender-select"
+import { Input } from "@/components/ui/input"
 
-interface PrefillData {
-  firstName: string;
-  lastName: string;
-  dateOfBirth?: Date;
-  gender?: string;
-  phoneNumber?: string;
-  relationship?: string;
+// Define the types we need based on what the API returns
+interface AuthResult {
+  success: boolean;
+  error?: string;
 }
 
-interface InvitedSignupFormData extends SignupFormData {
-  invitationId: string;
-  token: string;
-}
+// Custom signup fields for the invited user flow
+const INVITED_SIGNUP_FIELDS: AuthField[] = [
+  {
+    name: 'firstName',
+    label: 'First name',
+    type: 'text',
+    placeholder: 'Enter your first name',
+    required: true,
+    autoComplete: 'given-name'
+  },
+  {
+    name: 'lastName',
+    label: 'Last name',
+    type: 'text',
+    placeholder: 'Enter your last name',
+    required: true,
+    autoComplete: 'family-name'
+  },
+  {
+    name: 'email',
+    label: 'Email address',
+    type: 'email',
+    placeholder: 'Enter your email',
+    required: true,
+    autoComplete: 'email'
+  },
+  {
+    name: 'phone',
+    label: 'Phone number',
+    type: 'tel',
+    placeholder: 'Enter your phone number',
+    required: false,
+    autoComplete: 'tel'
+  },
+  {
+    name: 'password',
+    label: 'Password',
+    type: 'password',
+    placeholder: 'Choose a password',
+    required: true,
+    autoComplete: 'new-password'
+  },
+  {
+    name: 'confirmPassword',
+    label: 'Confirm password',
+    type: 'password',
+    placeholder: 'Confirm your password',
+    required: true,
+    autoComplete: 'new-password'
+  }
+];
 
 export default function InvitedSignupPage() {
-  const [formData, setFormData] = useState<InvitedSignupFormData>({
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { signUpWithInvitation, verifyInvitation } = useAuth()
+  const [formValues, setFormValues] = useState<Record<string, unknown>>({
     email: "",
     password: "",
     confirmPassword: "",
     firstName: "",
     lastName: "",
     phone: "",
-    dateOfBirth: new Date(),
-    gender: "other",
     invitationId: "",
-    token: "",
+    token: ""
   })
-  const [errors, setErrors] = useState<{ [key: string]: string }>({})
-  const [isLoading, setIsLoading] = useState(false)
-  const [prefillData, setPrefillData] = useState<PrefillData | null>(null)
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const { signUpWithInvitation, verifyInvitation } = useAuth()
+  const [dateOfBirth, setDateOfBirth] = useState<Date | undefined>()
+  const [gender, setGender] = useState<string>("")
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  const [isVerifying, setIsVerifying] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     const token = searchParams.get("token")
@@ -69,83 +99,148 @@ export default function InvitedSignupPage() {
       return
     }
 
-    setFormData((prev: InvitedSignupFormData) => ({ ...prev, token, invitationId: id }))
+    setFormValues((prev) => ({ ...prev, token, invitationId: id }))
     
     const verifyAndPrefill = async () => {
       try {
-        const result = await verifyInvitation(token, id)
-        if (result.success && result.prefillData) {
-          setPrefillData(result.prefillData)
-          setFormData((prev: InvitedSignupFormData) => ({
+        setIsVerifying(true)
+        // Type assertion to handle the API return type
+        const result = await verifyInvitation(token, id) as unknown as { 
+          success: boolean;
+          prefillData?: {
+            firstName: string;
+            lastName: string;
+            dateOfBirth?: Date;
+            gender?: string;
+            phoneNumber?: string;
+          };
+          inviteeEmail?: string;
+        }
+        
+        if (result?.success && result?.prefillData) {
+          setFormValues((prev) => ({
             ...prev,
-            firstName: result.prefillData.firstName || "",
-            lastName: result.prefillData.lastName || "",
-            dateOfBirth: result.prefillData.dateOfBirth ? new Date(result.prefillData.dateOfBirth) : new Date(),
-            gender: (result.prefillData.gender === "male" || result.prefillData.gender === "female" || result.prefillData.gender === "other") 
-              ? result.prefillData.gender 
-              : "other",
-            phone: result.prefillData.phoneNumber || "",
+            firstName: result.prefillData?.firstName || "",
+            lastName: result.prefillData?.lastName || "",
+            phone: result.prefillData?.phoneNumber || "",
             email: result.inviteeEmail || "",
           }))
+          
+          // Set date of birth and gender separately
+          if (result.prefillData?.dateOfBirth) {
+            setDateOfBirth(new Date(result.prefillData.dateOfBirth))
+          }
+          
+          if (result.prefillData?.gender === "male" || 
+              result.prefillData?.gender === "female" || 
+              result.prefillData?.gender === "other") {
+            setGender(result.prefillData.gender)
+          }
         }
-      } catch {
+      } catch (error) {
         // Error handling is done by AuthContext
+        console.error("Error verifying invitation:", error);
         router.push("/signup")
+      } finally {
+        setIsVerifying(false)
       }
     }
 
     verifyAndPrefill()
   }, [searchParams, router, verifyInvitation])
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setFormData((prev: InvitedSignupFormData) => ({ ...prev, [name]: value }))
-    // Clear error when user starts typing
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: "" }))
-    }
-  }
-
-  const handleGenderChange = (value: "male" | "female" | "other") => {
-    setFormData((prev: InvitedSignupFormData) => ({ ...prev, gender: value }))
-    if (errors.gender) {
-      setErrors((prev) => ({ ...prev, gender: "" }))
-    }
-  }
-
-  const handleDateChange = (date: Date | undefined) => {
-    if (date) {
-      setFormData((prev: InvitedSignupFormData) => ({ ...prev, dateOfBirth: date }))
-      if (errors.dateOfBirth) {
-        setErrors((prev) => ({ ...prev, dateOfBirth: "" }))
-      }
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setErrors({})
-
-    // Validate form data
-    const validation = validateFormData(signupFormSchema, formData)
-    if (!validation.success) {
-      const newErrors: { [key: string]: string } = {}
-      validation.errors?.forEach((error) => {
-        newErrors[error.field] = error.message
-      })
-      setErrors(newErrors)
-      setIsLoading(false)
-      return
-    }
-
+    e.preventDefault();
+    
     try {
-      await signUpWithInvitation(formData)
-      // Navigation and toast notifications are handled by AuthContext
-    } finally {
-      setIsLoading(false)
+      // Get all form values including manually added firstName and lastName
+      const form = e.target as HTMLFormElement;
+      const formData = new FormData(form);
+      
+      // Update formValues with any changed fields in the form
+      const updatedFormValues = { ...formValues };
+      Array.from(formData.entries()).forEach(([key, value]) => {
+        if (typeof value === 'string') {
+          updatedFormValues[key] = value;
+        }
+      });
+      
+      // Validate passwords match
+      if (updatedFormValues.password !== updatedFormValues.confirmPassword) {
+        setFormErrors(prev => ({
+          ...prev,
+          confirmPassword: 'Passwords do not match'
+        }));
+        return;
+      }
+
+      // Validate date of birth and gender
+      if (!dateOfBirth) {
+        setFormErrors(prev => ({
+          ...prev,
+          dateOfBirth: 'Please select your date of birth'
+        }));
+        return;
+      }
+
+      if (!gender) {
+        setFormErrors(prev => ({
+          ...prev,
+          gender: 'Please select your gender'
+        }));
+        return;
+      }
+
+      setIsSubmitting(true);
+
+      // Prepare the complete form data with proper types for the backend
+      const completeFormData = {
+        email: updatedFormValues.email as string,
+        password: updatedFormValues.password as string,
+        firstName: updatedFormValues.firstName as string,
+        lastName: updatedFormValues.lastName as string,
+        dateOfBirth: dateOfBirth!.toISOString(),  // Convert Date to ISO string for backend
+        gender: gender as "male" | "female" | "other",
+        invitationId: updatedFormValues.invitationId as string,
+        token: updatedFormValues.token as string,
+        phone: updatedFormValues.phone as string,
+      };
+
+      // Use auth service to sign up with invitation and handle the response type
+      const result = await signUpWithInvitation(completeFormData) as unknown as AuthResult;
+      
+      if (!result.success) {
+        setFormErrors(prev => ({
+          ...prev,
+          form: result.error || 'Failed to sign up with invitation'
+        }));
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // Success - let the auth service handle redirection
+    } catch (error) {
+      console.error('Invitation signup error:', error);
+      setFormErrors(prev => ({
+        ...prev,
+        form: error instanceof Error 
+          ? error.message 
+          : 'An unexpected error occurred during signup'
+      }));
+      setIsSubmitting(false);
     }
-  }
+  };
+
+  const handleAuthFormSubmit = async (formData: Record<string, unknown>) => {
+    // Update our form values with the auth form data
+    setFormValues(prev => ({
+      ...prev,
+      ...formData
+    }));
+    
+    // We handle the actual submission separately
+    return { success: true };
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -173,212 +268,115 @@ export default function InvitedSignupPage() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            <div>
-              <Label htmlFor="email">Email address</Label>
-              <div className="mt-1">
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={formData.email}
-                  onChange={handleChange}
-                  className={errors.email ? "border-red-500" : ""}
-                  disabled={!!prefillData}
-                />
-                {errors.email && (
-                  <p className="mt-1 text-xs text-red-500">{errors.email}</p>
-                )}
-              </div>
+          {isVerifying ? (
+            <div className="flex justify-center">
+              <p>Verifying invitation...</p>
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="firstName">First name</Label>
-                <div className="mt-1">
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* First and Last Name Row */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
+                    First name
+                  </label>
                   <Input
                     id="firstName"
                     name="firstName"
                     type="text"
                     autoComplete="given-name"
                     required
-                    value={formData.firstName}
-                    onChange={handleChange}
-                    className={errors.firstName ? "border-red-500" : ""}
+                    placeholder="First name"
+                    value={formValues.firstName as string}
+                    onChange={(e) => setFormValues(prev => ({ ...prev, firstName: e.target.value }))}
                   />
-                  {errors.firstName && (
-                    <p className="mt-1 text-xs text-red-500">{errors.firstName}</p>
-                  )}
                 </div>
-              </div>
-
-              <div>
-                <Label htmlFor="lastName">Last name</Label>
-                <div className="mt-1">
+                <div>
+                  <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
+                    Last name
+                  </label>
                   <Input
                     id="lastName"
                     name="lastName"
                     type="text"
                     autoComplete="family-name"
                     required
-                    value={formData.lastName}
-                    onChange={handleChange}
-                    className={errors.lastName ? "border-red-500" : ""}
+                    placeholder="Last name"
+                    value={formValues.lastName as string}
+                    onChange={(e) => setFormValues(prev => ({ ...prev, lastName: e.target.value }))}
                   />
-                  {errors.lastName && (
-                    <p className="mt-1 text-xs text-red-500">{errors.lastName}</p>
-                  )}
                 </div>
               </div>
-            </div>
-
-            <div>
-              <Label htmlFor="phone">Phone number</Label>
-              <div className="mt-1">
-                <Input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  autoComplete="tel"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className={errors.phone ? "border-red-500" : ""}
-                />
-                {errors.phone && (
-                  <p className="mt-1 text-xs text-red-500">{errors.phone}</p>
+              
+              {/* Modified AuthForm without firstName and lastName fields */}
+              <AuthForm
+                fields={INVITED_SIGNUP_FIELDS.filter(field => 
+                  field.name !== 'firstName' && field.name !== 'lastName'
                 )}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="dateOfBirth">Date of birth</Label>
-              <div className="mt-1">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant={"outline"}
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !formData.dateOfBirth && "text-muted-foreground",
-                        errors.dateOfBirth && "border-red-500"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {formData.dateOfBirth ? (
-                        format(formData.dateOfBirth, "PPP")
-                      ) : (
-                        <span>Pick a date</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <EnhancedCalendar
-                      mode="single"
-                      selected={formData.dateOfBirth}
-                      onSelect={handleDateChange}
-                      initialFocus
-                      disabled={(date) => {
-                        const today = new Date();
-                        const birthDate = new Date(date);
-                        
-                        let age = today.getFullYear() - birthDate.getFullYear();
-                        const monthDiff = today.getMonth() - birthDate.getMonth();
-                        
-                        // Adjust age if birthday hasn't occurred this year
-                        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-                          age--;
-                        }
-                        
-                        return age < 13;
-                      }}
-                      fromYear={1900}
-                      toYear={new Date().getFullYear()}
-                    />
-                  </PopoverContent>
-                </Popover>
-                {errors.dateOfBirth && (
-                  <p className="mt-1 text-xs text-red-500">{errors.dateOfBirth}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="gender">Gender</Label>
-              <div className="mt-1">
-                <Select
-                  value={formData.gender}
-                  onValueChange={handleGenderChange}
-                >
-                  <SelectTrigger
-                    className={errors.gender ? "border-red-500" : ""}
-                  >
-                    <SelectValue placeholder="Select gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                {errors.gender && (
-                  <p className="mt-1 text-xs text-red-500">{errors.gender}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <div className="mt-1">
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  value={formData.password}
-                  onChange={handleChange}
-                  className={errors.password ? "border-red-500" : ""}
-                />
-                {errors.password && (
-                  <p className="mt-1 text-xs text-red-500">{errors.password}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="confirmPassword">Confirm password</Label>
-              <div className="mt-1">
-                <Input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className={errors.confirmPassword ? "border-red-500" : ""}
-                />
-                {errors.confirmPassword && (
-                  <p className="mt-1 text-xs text-red-500">{errors.confirmPassword}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
+                onSubmit={handleAuthFormSubmit}
+                submitButtonText=""
+                footer={null}
+                initialValues={formValues}
+                hideSubmitButton={true}
+                renderAsGroup={true}
+              />
+              
+              {/* Date of Birth Picker */}
+              <DateOfBirthPicker
+                value={dateOfBirth}
+                onChange={(date) => {
+                  setDateOfBirth(date);
+                  if (date) {
+                    setFormErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.dateOfBirth;
+                      return newErrors;
+                    });
+                  }
+                }}
+                error={formErrors.dateOfBirth}
+                minAge={13}
+              />
+              
+              {/* Gender Select */}
+              <GenderSelect
+                value={gender}
+                onChange={(value) => {
+                  setGender(value);
+                  if (value) {
+                    setFormErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.gender;
+                      return newErrors;
+                    });
+                  }
+                }}
+                error={formErrors.gender}
+              />
+              
+              {formErrors.form && (
+                <div className="p-3 rounded-md bg-red-50 text-red-500 text-sm">
+                  {formErrors.form}
+                </div>
+              )}
+              
+              {/* Submit Button */}
               <Button
                 type="submit"
-                className="w-full flex justify-center items-center"
-                disabled={isLoading}
+                className="w-full"
+                disabled={isSubmitting}
               >
-                {isLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-                Complete signup
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Please wait
+                  </>
+                ) : (
+                  "Complete signup"
+                )}
               </Button>
-            </div>
-          </form>
+            </form>
+          )}
         </div>
       </div>
     </div>

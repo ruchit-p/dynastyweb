@@ -4,7 +4,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/server/supabase"
 import { withAuth } from "@/lib/server/middleware"
 import { revalidatePath } from 'next/cache'
-import { FamilyTreeRepository } from '@/lib/server/repositories/family-tree'
+import { logger } from "@/lib/server/logger"
 
 // Input validation schemas
 const privacyLevelSchema = z.enum(['public', 'private', 'shared'])
@@ -38,6 +38,9 @@ const addRelationshipSchema = z.object({
 const inviteMemberSchema = z.object({
   treeId: z.string().uuid(),
   inviteeEmail: z.string().email(),
+  inviteeName: z.string().optional(),
+  relationship: z.string().optional(),
+  message: z.string().optional(),
   role: z.enum(['admin', 'editor', 'viewer'])
 })
 
@@ -52,42 +55,57 @@ export const createFamilyTree = withAuth(async (input: CreateFamilyTreeInput) =>
   try {
     const validated = createFamilyTreeSchema.parse(input)
     const supabase = await createClient()
-    const repository = new FamilyTreeRepository(supabase)
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('User not found')
-
-    const tree = await repository.create({
-      name: validated.name,
-      description: validated.description,
-      ownerId: user.id,
-      privacyLevel: validated.privacyLevel
+    // Call the Edge Function to create a family tree
+    const { data, error } = await supabase.functions.invoke('family-tree', {
+      method: 'POST',
+      body: {
+        action: 'create',
+        data: {
+          name: validated.name,
+          description: validated.description,
+          privacyLevel: validated.privacyLevel
+        }
+      }
     })
 
-    // Add owner as admin member
-    await repository.addAccess({
-      treeId: tree.id,
-      userId: user.id,
-      role: 'admin'
-    })
+    if (error) {
+      logger.error({
+        msg: 'Error creating family tree via Edge Function',
+        error: {
+          message: error.message,
+          status: error.status
+        },
+        input: {
+          name: validated.name,
+          privacyLevel: validated.privacyLevel
+        }
+      })
 
-    // Add owner as first member
-    await repository.addMember({
-      treeId: tree.id,
-      userId: user.id,
-      firstName: user.user_metadata.first_name || '',
-      lastName: user.user_metadata.last_name || '',
-      displayName: user.user_metadata.full_name || `${user.user_metadata.first_name} ${user.user_metadata.last_name}`,
-      gender: 'other',
-      isPending: false
-    })
+      throw new Error(`Failed to create family tree: ${error.message}`)
+    }
+
+    if (!data.success || !data.tree) {
+      throw new Error('Invalid response from server')
+    }
+
+    const tree = data.tree
 
     revalidatePath('/family-trees')
     revalidatePath(`/family-tree/${tree.id}`)
 
     return { success: true, tree }
   } catch (error) {
-    console.error('Create family tree error:', error)
+    logger.error({
+      msg: 'Failed to create family tree',
+      error: error instanceof Error ? {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      } : 'Unknown error',
+      endpoint: '/family-tree/create'
+    })
+
     return { error: 'Failed to create family tree' }
   }
 })
@@ -96,14 +114,47 @@ export const createFamilyTree = withAuth(async (input: CreateFamilyTreeInput) =>
 export const getFamilyTree = withAuth(async (id: string) => {
   try {
     const supabase = await createClient()
-    const repository = new FamilyTreeRepository(supabase)
+    
+    // Call the Edge Function to get the family tree
+    const { data, error } = await supabase.functions.invoke('family-tree', {
+      method: 'POST',
+      body: {
+        action: 'get',
+        data: {
+          id
+        }
+      }
+    })
 
-    const tree = await repository.getWithMembers(id)
-    if (!tree) throw new Error('Family tree not found')
+    if (error) {
+      logger.error({
+        msg: 'Error fetching family tree via Edge Function',
+        error: {
+          message: error.message,
+          status: error.status
+        },
+        treeId: id
+      })
 
-    return { success: true, tree }
+      throw new Error(`Failed to get family tree: ${error.message}`)
+    }
+
+    if (!data.success || !data.tree) {
+      throw new Error('Invalid response from server')
+    }
+
+    return { success: true, tree: data.tree }
   } catch (error) {
-    console.error('Get family tree error:', error)
+    logger.error({
+      msg: 'Failed to get family tree',
+      error: error instanceof Error ? {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      } : 'Unknown error',
+      endpoint: '/family-tree/get'
+    })
+
     return { error: 'Failed to get family tree' }
   }
 })
@@ -112,15 +163,43 @@ export const getFamilyTree = withAuth(async (id: string) => {
 export const getUserFamilyTrees = withAuth(async () => {
   try {
     const supabase = await createClient()
-    const repository = new FamilyTreeRepository(supabase)
+    
+    // Call the Edge Function to get user's family trees
+    const { data, error } = await supabase.functions.invoke('family-tree', {
+      method: 'POST',
+      body: {
+        action: 'get-user-trees'
+      }
+    })
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('User not found')
+    if (error) {
+      logger.error({
+        msg: 'Error fetching user family trees via Edge Function',
+        error: {
+          message: error.message,
+          status: error.status
+        }
+      })
 
-    const trees = await repository.getUserTrees(user.id)
-    return { success: true, trees }
+      throw new Error(`Failed to get user family trees: ${error.message}`)
+    }
+
+    if (!data.success || !data.trees) {
+      throw new Error('Invalid response from server')
+    }
+
+    return { success: true, trees: data.trees }
   } catch (error) {
-    console.error('Get user family trees error:', error)
+    logger.error({
+      msg: 'Failed to get user family trees',
+      error: error instanceof Error ? {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      } : 'Unknown error',
+      endpoint: '/family-tree/get-user-trees'
+    })
+
     return { error: 'Failed to get family trees' }
   }
 })
@@ -130,17 +209,58 @@ export const addFamilyMember = withAuth(async (input: AddMemberInput) => {
   try {
     const validated = addMemberSchema.parse(input)
     const supabase = await createClient()
-    const repository = new FamilyTreeRepository(supabase)
-
-    const member = await repository.addMember({
-      ...validated,
-      displayName: `${validated.firstName} ${validated.lastName}`
+    
+    // Call the Edge Function to add a member
+    const { data, error } = await supabase.functions.invoke('family-tree', {
+      method: 'POST',
+      body: {
+        action: 'add-member',
+        data: {
+          treeId: validated.treeId,
+          firstName: validated.firstName,
+          lastName: validated.lastName,
+          displayName: `${validated.firstName} ${validated.lastName}`,
+          dateOfBirth: validated.dateOfBirth,
+          dateOfDeath: validated.dateOfDeath,
+          gender: validated.gender,
+          bio: validated.bio,
+          imageUrl: validated.imageUrl,
+          phoneNumber: validated.phoneNumber,
+          email: validated.email
+        }
+      }
     })
 
+    if (error) {
+      logger.error({
+        msg: 'Error adding family member via Edge Function',
+        error: {
+          message: error.message,
+          status: error.status
+        },
+        treeId: validated.treeId
+      })
+
+      throw new Error(`Failed to add family member: ${error.message}`)
+    }
+
+    if (!data.success || !data.member) {
+      throw new Error('Invalid response from server')
+    }
+
     revalidatePath(`/family-tree/${validated.treeId}`)
-    return { success: true, member }
+    return { success: true, member: data.member }
   } catch (error) {
-    console.error('Add family member error:', error)
+    logger.error({
+      msg: 'Failed to add family member',
+      error: error instanceof Error ? {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      } : 'Unknown error',
+      endpoint: '/family-tree/add-member'
+    })
+
     return { error: 'Failed to add family member' }
   }
 })
@@ -150,55 +270,63 @@ export const addFamilyRelationship = withAuth(async (input: AddRelationshipInput
   try {
     const validated = addRelationshipSchema.parse(input)
     const supabase = await createClient()
-    const repository = new FamilyTreeRepository(supabase)
+    
+    // Call the Edge Function to add a relationship
+    const { data, error } = await supabase.functions.invoke('family-tree', {
+      method: 'POST',
+      body: {
+        action: 'add-relationship',
+        data: {
+          treeId: validated.treeId,
+          fromMemberId: validated.fromMemberId,
+          toMemberId: validated.toMemberId,
+          relationshipType: validated.relationshipType
+        }
+      }
+    })
 
-    const relationship = await repository.addRelationship(validated)
-
-    // If adding a spouse relationship, add the reverse relationship
-    if (validated.relationshipType === 'spouse') {
-      await repository.addRelationship({
-        treeId: validated.treeId,
-        fromMemberId: validated.toMemberId,
-        toMemberId: validated.fromMemberId,
-        relationshipType: 'spouse'
+    if (error) {
+      logger.error({
+        msg: 'Error adding family relationship via Edge Function',
+        error: {
+          message: error.message,
+          status: error.status
+        },
+        treeId: validated.treeId
       })
+
+      throw new Error(`Failed to add family relationship: ${error.message}`)
     }
 
-    // If adding a parent relationship, add the reverse child relationship
-    if (validated.relationshipType === 'parent') {
-      await repository.addRelationship({
-        treeId: validated.treeId,
-        fromMemberId: validated.toMemberId,
-        toMemberId: validated.fromMemberId,
-        relationshipType: 'child'
-      })
-    }
-
-    // If adding a child relationship, add the reverse parent relationship
-    if (validated.relationshipType === 'child') {
-      await repository.addRelationship({
-        treeId: validated.treeId,
-        fromMemberId: validated.toMemberId,
-        toMemberId: validated.fromMemberId,
-        relationshipType: 'parent'
-      })
+    if (!data.success) {
+      throw new Error('Invalid response from server')
     }
 
     revalidatePath(`/family-tree/${validated.treeId}`)
-    return { success: true, relationship }
+    return { success: true, relationship: data.relationship }
   } catch (error) {
-    console.error('Add family relationship error:', error)
+    logger.error({
+      msg: 'Failed to add family relationship',
+      error: error instanceof Error ? {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      } : 'Unknown error',
+      endpoint: '/family-tree/add-relationship'
+    })
+
     return { error: 'Failed to add family relationship' }
   }
 })
 
-// Invite a member to a family tree
-export const inviteFamilyMember = withAuth(async (input: InviteMemberInput) => {
+// Invite member to family tree
+export const inviteMember = withAuth(async (data: InviteMemberInput) => {
   try {
-    const validated = inviteMemberSchema.parse(input)
+    // Validate input data
+    const validated = inviteMemberSchema.parse(data)
+    
+    // Get the supabase client and current user
     const supabase = await createClient()
-    const repository = new FamilyTreeRepository(supabase)
-
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('User not found')
 
@@ -206,18 +334,46 @@ export const inviteFamilyMember = withAuth(async (input: InviteMemberInput) => {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 7)
 
-    const invitation = await repository.createInvitation({
-      treeId: validated.treeId,
-      inviterId: user.id,
-      inviteeEmail: validated.inviteeEmail,
-      role: validated.role,
-      expiresAt: expiresAt.toISOString()
+    // Call the Edge Function to create the invitation
+    const { data: invitationData, error } = await supabase.functions.invoke('invitations/create', {
+      method: 'POST',
+      body: {
+        inviteeEmail: validated.inviteeEmail,
+        inviteeName: validated.inviteeName || validated.inviteeEmail,
+        relationship: validated.relationship,
+        role: validated.role,
+        message: validated.message,
+        expiresAt: expiresAt.toISOString(),
+        treeId: validated.treeId
+      }
     })
+    
+    if (error) {
+      logger.error({
+        msg: 'Error from Edge Function while inviting family member',
+        error: error.message,
+        status: error.status
+      })
+      throw new Error(error.message || 'Failed to invite family member')
+    }
+    
+    if (!invitationData.success) {
+      throw new Error(invitationData.error || 'Failed to create invitation')
+    }
 
     revalidatePath(`/family-tree/${validated.treeId}`)
-    return { success: true, invitation }
+    return { success: true, invitation: invitationData.invitation }
   } catch (error) {
-    console.error('Invite family member error:', error)
+    logger.error({
+      msg: 'Failed to invite family member',
+      error: error instanceof Error ? {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      } : 'Unknown error',
+      endpoint: '/family-tree/invite-member'
+    })
+
     return { error: 'Failed to invite family member' }
   }
 })
@@ -226,36 +382,61 @@ export const inviteFamilyMember = withAuth(async (input: InviteMemberInput) => {
 export const acceptInvitation = withAuth(async (invitationId: string) => {
   try {
     const supabase = await createClient()
-    const repository = new FamilyTreeRepository(supabase)
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('User not found')
 
-    // Update invitation status
-    const invitation = await repository.updateInvitationStatus(invitationId, 'accepted')
-
-    // Add user to family tree
-    await repository.addAccess({
-      treeId: invitation.treeId,
-      userId: user.id,
-      role: invitation.role
+    // Call the Edge Function to update invitation status
+    const { data, error } = await supabase.functions.invoke('invitations/update', {
+      method: 'POST',
+      body: {
+        id: invitationId,
+        status: 'accepted',
+        updatedFields: {
+          accepted_at: new Date().toISOString(),
+          user_id: user.id
+        }
+      }
     })
+    
+    if (error) {
+      logger.error({
+        msg: 'Error from Edge Function while accepting invitation',
+        error: error.message,
+        status: error.status
+      })
+      throw new Error(error.message || 'Failed to accept invitation')
+    }
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to accept invitation')
+    }
 
-    // Add user as member
-    await repository.addMember({
-      treeId: invitation.treeId,
-      userId: user.id,
-      firstName: user.user_metadata.first_name || '',
-      lastName: user.user_metadata.last_name || '',
-      displayName: user.user_metadata.full_name || `${user.user_metadata.first_name} ${user.user_metadata.last_name}`,
-      gender: 'other',
-      isPending: false
+    const invitation = data.invitation
+    
+    // Add user to the family tree members
+    await supabase.functions.invoke('family-tree/add-member', {
+      method: 'POST',
+      body: {
+        treeId: invitation.treeId,
+        userId: user.id,
+        role: invitation.role
+      }
     })
 
     revalidatePath(`/family-tree/${invitation.treeId}`)
     return { success: true }
   } catch (error) {
-    console.error('Accept invitation error:', error)
+    logger.error({
+      msg: 'Failed to accept invitation',
+      error: error instanceof Error ? {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      } : 'Unknown error',
+      endpoint: '/family-tree/accept-invitation'
+    })
+
     return { error: 'Failed to accept invitation' }
   }
 })
@@ -264,12 +445,44 @@ export const acceptInvitation = withAuth(async (invitationId: string) => {
 export const rejectInvitation = withAuth(async (invitationId: string) => {
   try {
     const supabase = await createClient()
-    const repository = new FamilyTreeRepository(supabase)
+    
+    // Call the Edge Function to update invitation status
+    const { data, error } = await supabase.functions.invoke('invitations/update', {
+      method: 'POST',
+      body: {
+        id: invitationId,
+        status: 'rejected',
+        updatedFields: {
+          rejected_at: new Date().toISOString()
+        }
+      }
+    })
+    
+    if (error) {
+      logger.error({
+        msg: 'Error from Edge Function while rejecting invitation',
+        error: error.message,
+        status: error.status
+      })
+      throw new Error(error.message || 'Failed to reject invitation')
+    }
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to reject invitation')
+    }
 
-    await repository.updateInvitationStatus(invitationId, 'rejected')
     return { success: true }
   } catch (error) {
-    console.error('Reject invitation error:', error)
+    logger.error({
+      msg: 'Failed to reject invitation',
+      error: error instanceof Error ? {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      } : 'Unknown error',
+      endpoint: '/family-tree/reject-invitation'
+    })
+
     return { error: 'Failed to reject invitation' }
   }
 }) 

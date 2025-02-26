@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { Database } from '@/lib/shared/types/supabase'
+import logger from '../logger'
 
 if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
   throw new Error('Missing env.NEXT_PUBLIC_SUPABASE_URL')
@@ -22,17 +23,30 @@ export async function createClient() {
       cookies: {
         getAll() {
           const allCookies = cookieStore.getAll()
-          console.log('Server getAll cookies:', allCookies.map(c => c.name))
+          logger.debug({
+            msg: 'Server getAll cookies',
+            cookies: allCookies.map(c => c.name)
+          })
           return allCookies
         },
         setAll(cookiesToSet) {
           try {
-            console.log('Server setAll cookies:', cookiesToSet.map(c => c.name))
+            logger.debug({
+              msg: 'Server setAll cookies',
+              cookies: cookiesToSet.map(c => c.name)
+            })
             cookiesToSet.forEach(({ name, value, options }) => {
               cookieStore.set(name, value, options)
             })
           } catch (error) {
-            console.error('Error setting cookies in server client:', error)
+            logger.error({
+              msg: 'Error setting cookies in server client',
+              error: error instanceof Error ? {
+                message: error.message,
+                stack: error.stack,
+                name: error.name
+              } : 'Unknown error'
+            })
             // The `setAll` method was called from a Server Component.
             // This can be ignored if you have middleware refreshing
             // user sessions.
@@ -45,14 +59,6 @@ export async function createClient() {
       }
     }
   )
-}
-
-/**
- * Legacy function for backward compatibility
- * @deprecated Use createClient() instead
- */
-export async function createServerSupabaseClient() {
-  return createClient()
 }
 
 /**

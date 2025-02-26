@@ -1,5 +1,6 @@
-import { supabaseBrowser } from '@/lib/client/supabase-browser'
 import { toast } from '@/components/ui/use-toast'
+import { uploadFile, processMedia as processMediaAction, uploadAndProcessMedia } from '@/app/actions/storage'
+import { StorageBucket } from '@/lib/shared/types/storage'
 
 // MARK: - Types
 interface MediaProcessingOptions {
@@ -16,7 +17,7 @@ interface MediaProcessingOptions {
 }
 
 interface UploadOptions {
-  bucket?: string
+  bucket?: StorageBucket
   path?: string
   processOptions?: MediaProcessingOptions
   onProgress?: (progress: number) => void
@@ -35,66 +36,169 @@ export async function uploadMedia(
   } = options
 
   try {
-    // Process media if options provided
-    let processedFile = file
-    if (processOptions) {
-      processedFile = await processMediaBeforeUpload(file, processOptions)
-    }
+    // If progress tracking is needed, we need to use FormData with fetch 
+    // that uses the upload and process server action
+    if (onProgress) {
+      // This progress tracking approach requires custom implementation
+      // with fetch and FormData, not using the server action directly
+      
+      // For now, simulating progress with timeouts
+      const simulateProgress = () => {
+        const steps = [10, 30, 50, 70, 90, 100];
+        let currentStep = 0;
+        
+        const interval = setInterval(() => {
+          if (currentStep < steps.length) {
+            onProgress(steps[currentStep]);
+            currentStep++;
+          } else {
+            clearInterval(interval);
+          }
+        }, 500);
+        
+        return () => clearInterval(interval);
+      };
+      
+      const stopSimulation = simulateProgress();
 
-    // Generate unique file name
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${path}${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-
-    // Upload file
-    const { error: uploadError, data } = await supabaseBrowser.storage
-      .from(bucket)
-      .upload(fileName, processedFile, {
-        onUploadProgress: ({ count, total }) => {
-          const progress = (count / total) * 100
-          onProgress?.(progress)
+      // Use server action for actual upload
+      if (processOptions) {
+        // Convert process options to operations format
+        const operations = [];
+        
+        if (processOptions.resize) {
+          operations.push({
+            type: 'resize' as const,
+            params: processOptions.resize
+          });
         }
-      })
-
-    if (uploadError) throw uploadError
-
-    // Get public URL
-    const { data: { publicUrl } } = supabaseBrowser.storage
-      .from(bucket)
-      .getPublicUrl(fileName)
-
-    return publicUrl
-  } catch (error: any) {
+        
+        if (processOptions.compress) {
+          operations.push({
+            type: 'compress' as const,
+            params: processOptions.compress
+          });
+        }
+        
+        const result = await uploadAndProcessMedia({
+          file,
+          bucket,
+          path,
+          operations
+        });
+        
+        stopSimulation();
+        onProgress(100);
+        
+        if (!result.success || !result.data) {
+          throw new Error(result.error || 'Failed to upload and process media');
+        }
+        
+        return result.data.processedUrl || result.data.url;
+      } else {
+        const result = await uploadFile({
+          file,
+          bucket,
+          path
+        });
+        
+        stopSimulation();
+        onProgress(100);
+        
+        if (!result.success || !result.data) {
+          throw new Error(result.error || 'Failed to upload media');
+        }
+        
+        return result.data.url;
+      }
+    } else {
+      // Without progress tracking, use server actions directly
+      if (processOptions) {
+        // Convert process options to operations format
+        const operations = [];
+        
+        if (processOptions.resize) {
+          operations.push({
+            type: 'resize' as const,
+            params: processOptions.resize
+          });
+        }
+        
+        if (processOptions.compress) {
+          operations.push({
+            type: 'compress' as const,
+            params: processOptions.compress
+          });
+        }
+        
+        const result = await uploadAndProcessMedia({
+          file,
+          bucket,
+          path,
+          operations
+        });
+        
+        if (!result.success || !result.data) {
+          throw new Error(result.error || 'Failed to upload and process media');
+        }
+        
+        return result.data.processedUrl || result.data.url;
+      } else {
+        const result = await uploadFile({
+          file,
+          bucket,
+          path
+        });
+        
+        if (!result.success || !result.data) {
+          throw new Error(result.error || 'Failed to upload media');
+        }
+        
+        return result.data.url;
+      }
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to upload media';
     toast({
       variant: 'destructive',
       title: 'Error',
-      description: error.message || 'Failed to upload media',
-    })
-    throw error
+      description: errorMessage,
+    });
+    throw error;
   }
 }
 
-export async function deleteMedia(url: string, bucket = 'media'): Promise<void> {
+export async function deleteMedia(url: string, bucket: StorageBucket = 'media'): Promise<void> {
   try {
-    const path = url.split('/').pop()
-    if (!path) throw new Error('Invalid media URL')
+    const path = url.split('/').pop();
+    if (!path) throw new Error('Invalid media URL');
 
-    const { error } = await supabaseBrowser.storage
-      .from(bucket)
-      .remove([path])
-
-    if (error) throw error
+    const response = await fetch('/api/storage/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        bucket,
+        paths: [path],
+      }),
+    });
+    
+    const result = await response.json();
+    if (!result.success) throw new Error(result.error || 'Failed to delete media');
 
     toast({
       title: 'Success!',
       description: 'Media deleted successfully.',
-    })
-  } catch (error: any) {
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete media';
     toast({
       variant: 'destructive',
       title: 'Error',
-      description: error.message || 'Failed to delete media',
-    })
-    throw error
+      description: errorMessage,
+    });
+    throw error;
   }
 }
 
@@ -103,96 +207,42 @@ export async function processMedia(
   options: MediaProcessingOptions
 ): Promise<string> {
   try {
-    // Call the Edge Function for media processing
-    const { data, error } = await supabaseBrowser.functions.invoke('process-media', {
-      body: {
-        url,
-        operations: [
-          {
-            type: options.resize ? 'resize' : 'compress',
-            params: options.resize || options.compress
-          }
-        ]
-      }
-    })
-
-    if (error) throw error
-
-    return data.processedUrl
-  } catch (error: any) {
+    // Convert options to operations
+    const operations = [];
+    
+    if (options.resize) {
+      operations.push({
+        type: 'resize' as const,
+        params: options.resize
+      });
+    }
+    
+    if (options.compress) {
+      operations.push({
+        type: 'compress' as const,
+        params: options.compress
+      });
+    }
+    
+    const result = await processMediaAction({
+      url,
+      operations
+    });
+    
+    if (!result.success || !result.data) {
+      throw new Error(result.error || 'Failed to process media');
+    }
+    
+    return result.data.processedUrl;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to process media';
     toast({
       variant: 'destructive',
       title: 'Error',
-      description: error.message || 'Failed to process media',
-    })
-    throw error
+      description: errorMessage,
+    });
+    throw error;
   }
-}
-
-// MARK: - Helper Functions
-async function processMediaBeforeUpload(
-  file: File,
-  options: MediaProcessingOptions
-): Promise<File> {
-  // Create canvas for image processing
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Failed to get canvas context')
-
-  // Load image
-  const img = new Image()
-  const loadImage = new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve()
-    img.onerror = () => reject(new Error('Failed to load image'))
-    img.src = URL.createObjectURL(file)
-  })
-  await loadImage
-
-  // Apply resize if specified
-  if (options.resize) {
-    const { width = img.width, height = img.height, fit = 'cover' } = options.resize
-    canvas.width = width
-    canvas.height = height
-
-    if (fit === 'cover') {
-      const scale = Math.max(width / img.width, height / img.height)
-      const scaledWidth = img.width * scale
-      const scaledHeight = img.height * scale
-      const x = (width - scaledWidth) / 2
-      const y = (height - scaledHeight) / 2
-      ctx.drawImage(img, x, y, scaledWidth, scaledHeight)
-    } else if (fit === 'contain') {
-      const scale = Math.min(width / img.width, height / img.height)
-      const scaledWidth = img.width * scale
-      const scaledHeight = img.height * scale
-      const x = (width - scaledWidth) / 2
-      const y = (height - scaledHeight) / 2
-      ctx.drawImage(img, x, y, scaledWidth, scaledHeight)
-    } else {
-      ctx.drawImage(img, 0, 0, width, height)
-    }
-  } else {
-    canvas.width = img.width
-    canvas.height = img.height
-    ctx.drawImage(img, 0, 0)
-  }
-
-  // Convert to desired format
-  const format = options.compress?.format || file.type.split('/')[1]
-  const quality = options.compress?.quality || 0.8
-  const blob = await new Promise<Blob>((resolve) => {
-    canvas.toBlob(
-      (blob) => resolve(blob!),
-      `image/${format}`,
-      quality
-    )
-  })
-
-  // Create new file with processed data
-  return new File([blob], file.name, {
-    type: `image/${format}`,
-    lastModified: Date.now()
-  })
 }
 
 // MARK: - Validation
@@ -204,16 +254,16 @@ export function validateMediaFile(file: File): boolean {
     'image/webp',
     'video/mp4',
     'video/quicktime'
-  ]
-  const maxSize = 10 * 1024 * 1024 // 10MB
+  ];
+  const maxSize = 10 * 1024 * 1024; // 10MB
 
   if (!allowedTypes.includes(file.type)) {
     toast({
       variant: 'destructive',
       title: 'Error',
       description: 'Invalid file type. Please upload an image or video.',
-    })
-    return false
+    });
+    return false;
   }
 
   if (file.size > maxSize) {
@@ -221,9 +271,9 @@ export function validateMediaFile(file: File): boolean {
       variant: 'destructive',
       title: 'Error',
       description: 'File too large. Maximum size is 10MB.',
-    })
-    return false
+    });
+    return false;
   }
 
-  return true
+  return true;
 } 

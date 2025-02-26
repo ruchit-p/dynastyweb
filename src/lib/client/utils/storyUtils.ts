@@ -1,5 +1,9 @@
 import { createStory, updateStory, deleteStory, getUserStories, getAccessibleStories } from '@/app/actions/stories'
 import type { CreateStoryInput, UpdateStoryInput } from '@/app/actions/stories'
+import { createLogger } from '@/lib/client/logger'
+
+// Create a logger for story utilities
+const logger = createLogger('storyUtils')
 
 export type Story = {
   id: string
@@ -122,18 +126,26 @@ export function searchStories(stories: Story[], query: string): Story[] {
 // MARK: - Story Actions
 export async function fetchUserStories(userId: string): Promise<Story[]> {
   try {
-    return await getUserStories(userId)
+    const stories = await getUserStories(userId)
+    return stories
   } catch (error) {
-    console.error('Error fetching user stories:', error)
+    logger.error('Error fetching user stories', {
+      userId,
+      error: error instanceof Error ? error.message : String(error)
+    })
     return []
   }
 }
 
 export async function fetchAccessibleStories(userId: string): Promise<Story[]> {
   try {
-    return await getAccessibleStories(userId)
+    const stories = await getAccessibleStories(userId)
+    return stories
   } catch (error) {
-    console.error('Error fetching accessible stories:', error)
+    logger.error('Error fetching accessible stories', {
+      userId,
+      error: error instanceof Error ? error.message : String(error)
+    })
     return []
   }
 }
@@ -142,56 +154,106 @@ type ActionResult<T> = { success: true; story: T } | { error: string }
 
 export async function createNewStory(storyData: Story) {
   try {
-    const result = await createStory({
+    logger.debug('Creating new story', {
       title: storyData.title,
-      content: JSON.stringify(storyData.blocks),
-      familyTreeId: storyData.familyTreeId,
-      mediaUrls: getStoryMedia(storyData),
-      tags: storyData.peopleInvolved
-    } satisfies CreateStoryInput) as ActionResult<Story>
+      authorId: storyData.authorID,
+      privacy: storyData.privacy,
+      blocksCount: storyData.blocks.length
+    })
     
-    if ('error' in result) {
-      throw new Error(result.error)
+    const transformedData: CreateStoryInput = {
+      title: storyData.title,
+      subtitle: storyData.subtitle || '',
+      event_date: storyData.eventDate || null,
+      location: storyData.location || null, 
+      privacy: storyData.privacy,
+      custom_access_members: storyData.customAccessMembers || [],
+      blocks: storyData.blocks,
+      family_tree_id: storyData.familyTreeId,
+      people_involved: storyData.peopleInvolved || []
     }
     
-    return result.story
+    const result = await createStory(transformedData)
+    
+    if (result.success) {
+      logger.info('Story created successfully', { 
+        storyId: result.story.id,
+        authorId: storyData.authorID
+      })
+      return { success: true, story: result.story }
+    }
+    
+    logger.warn('Failed to create story', { error: result.error })
+    return { error: result.error }
   } catch (error) {
-    console.error('Error creating story:', error)
-    throw error
+    logger.error('Error creating story', {
+      title: storyData.title,
+      authorId: storyData.authorID,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    return { error: error instanceof Error ? error.message : 'Unknown error occurred' }
   }
 }
 
 export async function updateExistingStory(storyData: Story) {
   try {
-    const result = await updateStory({
+    logger.debug('Updating story', {
+      storyId: storyData.id,
+      title: storyData.title
+    })
+    
+    const transformedData: UpdateStoryInput = {
       id: storyData.id,
       title: storyData.title,
-      content: JSON.stringify(storyData.blocks),
-      mediaUrls: getStoryMedia(storyData),
-      tags: storyData.peopleInvolved
-    } satisfies UpdateStoryInput) as ActionResult<Story>
-    
-    if ('error' in result) {
-      throw new Error(result.error)
+      subtitle: storyData.subtitle || '',
+      event_date: storyData.eventDate || null,
+      location: storyData.location || null,
+      privacy: storyData.privacy,
+      custom_access_members: storyData.customAccessMembers || [],
+      blocks: storyData.blocks,
+      people_involved: storyData.peopleInvolved || []
     }
     
-    return result.story
+    const result = await updateStory(transformedData)
+    
+    if (result.success) {
+      logger.info('Story updated successfully', { storyId: storyData.id })
+      return { success: true, story: result.story }
+    }
+    
+    logger.warn('Failed to update story', { 
+      storyId: storyData.id, 
+      error: result.error 
+    })
+    return { error: result.error }
   } catch (error) {
-    console.error('Error updating story:', error)
-    throw error
+    logger.error('Error updating story', {
+      storyId: storyData.id,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    return { error: error instanceof Error ? error.message : 'Unknown error occurred' }
   }
 }
 
 export async function removeStory(storyId: string) {
   try {
-    const result = await deleteStory(storyId) as ActionResult<void>
-    if ('error' in result) {
-      throw new Error(result.error)
+    logger.debug('Removing story', { storyId })
+    
+    const result = await deleteStory(storyId)
+    
+    if (result.success) {
+      logger.info('Story deleted successfully', { storyId })
+      return { success: true, story: result.story }
     }
-    return true
+    
+    logger.warn('Failed to delete story', { storyId, error: result.error })
+    return { error: result.error }
   } catch (error) {
-    console.error('Error deleting story:', error)
-    throw error
+    logger.error('Error deleting story', {
+      storyId,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    return { error: error instanceof Error ? error.message : 'Unknown error occurred' }
   }
 }
 

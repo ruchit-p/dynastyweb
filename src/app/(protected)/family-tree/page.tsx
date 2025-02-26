@@ -1,11 +1,19 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/components/auth';
 import { useToast } from '@/components/ui/use-toast';
 import calcTree from "relatives-tree";
 import type { Node, ExtNode, Connector } from 'relatives-tree/lib/types';
-import { getFamilyTreeData, createFamilyMember, deleteFamilyMember } from "@/lib/client/utils/functionUtils";
+import { 
+  getFamilyTreeData, 
+  createFamilyMember as createFamilyMemberApi, 
+  deleteFamilyMember as deleteFamilyMemberApi, 
+  Gender as ApiGender,
+  UserData,
+  CreateMemberOptions,
+  convertToRelativesTreeFormat
+} from "@/lib/api/family-tree";
 import FamilyNode from '@/components/FamilyNode';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { Spinner } from '@/components/ui/spinner';
@@ -38,11 +46,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
+import { createLogger } from '@/lib/client/logger';
 
 const WIDTH = 150;
 const HEIGHT = 150;
 
-type RelationType = 'parent' | 'spouse' | 'child';
+type RelationType = 'parent' | 'spouse' | 'child' | 'sibling';
 
 interface AddMemberFormData {
   firstName: string;
@@ -56,18 +65,6 @@ interface AddMemberFormData {
   connectToExistingParent?: boolean;
 }
 
-// Custom node type that extends the base Node type
-interface CustomNode extends Omit<Node, 'placeholder'> {
-  attributes?: {
-    displayName: string;
-    profilePicture?: string;
-    familyTreeId: string;
-    isBloodRelated: boolean;
-    status?: string;
-    treeOwnerId?: string;
-  };
-}
-
 // Extended User type that includes the required properties
 interface ExtendedUser {
   id: string;
@@ -76,7 +73,28 @@ interface ExtendedUser {
   last_name?: string;
   display_name?: string;
   email?: string;
+  family_tree_id?: string;
 }
+
+// Extended node type with custom attributes
+interface ExtendedNodeAttributes {
+  familyTreeId?: string;
+  displayName?: string;
+  isBloodRelated?: boolean;
+  treeOwnerId?: string;
+  status?: string;
+  phone?: string;
+  email?: string;
+  dateOfBirth?: Date;
+  [key: string]: unknown;
+}
+
+interface ExtendedNodeWithAttributes extends ExtNode {
+  attributes?: ExtendedNodeAttributes;
+}
+
+// Create component-specific logger
+const logger = createLogger('FamilyTreePage');
 
 export default function FamilyTreePage() {
   const { currentUser } = useAuth();
@@ -84,7 +102,7 @@ export default function FamilyTreePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [treeData, setTreeData] = useState<Node[]>([]);
-  const [selectedNode, setSelectedNode] = useState<ExtNode | null>(null);
+  const [selectedNode, setSelectedNode] = useState<ExtendedNodeWithAttributes | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [relationType, setRelationType] = useState<RelationType | null>(null);
   const [formData, setFormData] = useState<AddMemberFormData>({
@@ -106,52 +124,113 @@ export default function FamilyTreePage() {
   const treeContainerRef = useRef<HTMLDivElement>(null);
   const DEBUG_MODE = false; // Debug flag - set to true to enable debug features
 
-  // Update rootNode when user changes
-  useEffect(() => {
-    if (currentUser?.id) {
-      setRootNode(currentUser.id);
-    }
-  }, [currentUser?.id]);
-
   const fetchFamilyTreeData = useCallback(async () => {
     if (!currentUser?.id) {
+      logger.warn('No current user ID available', { 
+        component: 'FamilyTreePage',
+        method: 'fetchFamilyTreeData'
+      });
       setLoading(false);
       return;
     }
 
     try {
       setLoading(true);
-      console.log('Fetching family tree data for user:', currentUser.id);
-      const { treeNodes } = await getFamilyTreeData(currentUser.id);
+      logger.debug('Fetching family tree data', { 
+        userId: currentUser.id, 
+        method: 'fetchFamilyTreeData'
+      });
       
-      if (!treeNodes || treeNodes.length === 0) {
-        console.log('No tree nodes returned from API');
-        toast({
-          title: "Empty Family Tree",
-          description: "Your family tree doesn't have any members yet. Add your first family member to get started.",
-          variant: "default",
-        });
+      // Get the family tree ID from user or fall back to user ID
+      const familyTreeId = (currentUser as ExtendedUser).family_tree_id || currentUser.id;
+      
+      // Fetch tree data from API
+      const data = await getFamilyTreeData(familyTreeId);
+      
+      logger.debug('Family tree data fetched successfully', {
+        userId: currentUser.id,
+        nodeCount: data.nodes?.length || 0,
+        method: 'fetchFamilyTreeData'
+      });
+      
+      if (data && data.nodes && data.nodes.length > 0) {
+        // Use the converter function to properly format nodes
+        const convertedNodes = convertToRelativesTreeFormat(data.nodes);
+        
+        // Update state with properly formatted data
+        setTreeData(convertedNodes as unknown as Node[]);
+        
+        // Set root node ID from the API response or default to first node
+        if (data.rootId) {
+          setRootNode(data.rootId);
+        } else if (convertedNodes.length > 0) {
+          setRootNode(convertedNodes[0].id);
+        }
       } else {
-        console.log(`Loaded ${treeNodes.length} family tree nodes`);
+        // Handle empty tree case
+        setTreeData([]);
+        logger.debug('No family tree nodes found', { 
+          userId: currentUser.id, 
+          method: 'fetchFamilyTreeData'
+        });
       }
-      
-      setTreeData(treeNodes || []); // Handle potential undefined
     } catch (error) {
-      console.error('Error loading family tree:', error);
+      logger.error('Error fetching family tree data', {
+        userId: currentUser?.id,
+        error: error instanceof Error ? error.message : String(error),
+        method: 'fetchFamilyTreeData'
+      });
+      
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to load family tree. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to load family tree data. Please try again.",
         variant: "destructive",
       });
-      setTreeData([]); // Reset tree data on error
+      setTreeData([]);
     } finally {
       setLoading(false);
     }
-  }, [currentUser?.id, toast]);
+  }, [currentUser, toast]);
 
+  // Add debug logging for currentUser changes
   useEffect(() => {
-    void fetchFamilyTreeData();
+    if (currentUser) {
+      logger.debug('Current user state updated', {
+        userId: currentUser.id,
+        isAuthenticated: !!currentUser,
+        emailVerified: currentUser.email_confirmed_at ? true : false,
+        component: 'FamilyTreePage'
+      });
+    } else {
+      logger.debug('Current user is null or undefined', {
+        component: 'FamilyTreePage'
+      });
+    }
+  }, [currentUser]);
+  
+  // Original data fetching effect
+  useEffect(() => {
+    fetchFamilyTreeData();
   }, [fetchFamilyTreeData]);
+
+  // Debug effect to track currentUser changes
+  useEffect(() => {
+    if (DEBUG_MODE) {
+      console.log('currentUser state changed:', {
+        userId: currentUser?.id || 'no user',
+        hasUser: !!currentUser,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, [currentUser, DEBUG_MODE]);
+
+  // Update rootNode when user changes
+  useEffect(() => {
+    if (currentUser?.id) {
+      console.log('Setting root node to current user:', currentUser.id);
+      setRootNode(currentUser.id);
+    }
+  }, [currentUser?.id]);
 
   // Calculate optimal zoom level to fit the entire tree
   const calculateOptimalZoom = useCallback(() => {
@@ -388,7 +467,7 @@ export default function FamilyTreePage() {
       });
     }
     
-    setSelectedNode(node);
+    setSelectedNode(node as ExtendedNodeWithAttributes);
     setRootNode(node.id);
   };
 
@@ -420,7 +499,7 @@ export default function FamilyTreePage() {
     const isLeaf = isLeafMember(fullNode);
     
     // If the member has an account (status !== 'pending'), only tree owner can delete
-    const memberData = (fullNode as CustomNode).attributes;
+    const memberData = (fullNode as ExtendedNodeWithAttributes).attributes;
     const hasAccount = memberData?.status && memberData.status !== 'pending';
     const isOwner = currentUser?.id === memberData?.treeOwnerId;
 
@@ -442,33 +521,28 @@ export default function FamilyTreePage() {
   };
 
   const handleDeleteMember = async () => {
-    if (!selectedNode || !currentUser || selectedNode.id === currentUser.id) return;
-    const node = selectedNode as CustomNode;
-
-    if (!canDeleteMember(selectedNode)) {
-      setDeleteError("Cannot delete members who have children. Please remove all children first.");
-      return;
-    }
-
+    if (!selectedNode || !currentUser) return;
+    
     try {
       setSaving(true);
       
-      if (!node.attributes?.familyTreeId) {
-        throw new Error('Family tree ID not found');
-      }
-
-      await deleteFamilyMember(
-        node.id,
-        node.attributes.familyTreeId,
-        currentUser.id
-      );
-
+      // Get the family tree ID from the selected node or user
+      const familyTreeId = 
+        selectedNode.attributes?.familyTreeId || 
+        ((currentUser as ExtendedUser).family_tree_id || currentUser.id);
+      
+      // Call the API to delete the member
+      await deleteFamilyMemberApi(selectedNode.id, familyTreeId);
+      
       toast({
         title: "Member Deleted",
         description: "The family member has been removed from the tree.",
       });
+      
+      // Refresh the tree data
       await fetchFamilyTreeData();
       setShowDeleteDialog(false);
+      setSelectedNode(null);
     } catch (error) {
       console.error("Error deleting family member:", error);
       toast({
@@ -478,16 +552,14 @@ export default function FamilyTreePage() {
       });
     } finally {
       setSaving(false);
-      setSelectedNode(null);
       setDeleteError(null);
     }
   };
 
   const handleSave = async () => {
     if (!selectedNode || !currentUser || !relationType) return;
-    const node = selectedNode as CustomNode;
-
-    // Validate required fields
+    
+    // Form validation
     if (!formData.firstName.trim()) {
       toast({
         title: "Error",
@@ -515,7 +587,13 @@ export default function FamilyTreePage() {
       return;
     }
 
-    if (!node.attributes?.familyTreeId) {
+    // Find the family tree ID from the selected node or user
+    const familyTreeId = 
+      selectedNode.attributes?.familyTreeId || 
+      (currentUser as ExtendedUser).family_tree_id || 
+      currentUser.id;
+    
+    if (!familyTreeId) {
       toast({
         title: "Error",
         description: "Family tree ID not found. Please try again.",
@@ -527,31 +605,35 @@ export default function FamilyTreePage() {
     try {
       setSaving(true);
 
-      // Create the new family member using the Cloud Function
-      const userData = {
+      // Create the new family member using the API
+      const userData: UserData = {
+        familyTreeId,
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         displayName: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
-        dateOfBirth: formData.dateOfBirth || new Date(),
-        gender: formData.gender,
-        status: 'pending',
-        familyTreeId: node.attributes.familyTreeId,
-        phone: formData.phone?.trim(),
-        email: formData.email?.trim(),
+        gender: formData.gender === 'male' ? ApiGender.male : ApiGender.female,
+        attributes: {
+          dateOfBirth: formData.dateOfBirth || new Date(),
+          status: 'pending',
+          phone: formData.phone?.trim(),
+          email: formData.email?.trim(),
+        }
       };
 
-      await createFamilyMember(
+      const options: CreateMemberOptions = {
+        connectToChildren: formData.connectToChildren,
+        connectToSpouse: formData.connectToSpouse,
+        connectToExistingParent: formData.connectToExistingParent,
+      };
+
+      await createFamilyMemberApi(
         userData,
         relationType,
-        node.id,
-        {
-          connectToChildren: formData.connectToChildren,
-          connectToSpouse: formData.connectToSpouse,
-          connectToExistingParent: formData.connectToExistingParent,
-        }
+        selectedNode.id,
+        options
       );
 
-      // Fetch updated tree data before closing the sheet
+      // Refresh the tree data
       await fetchFamilyTreeData();
       
       toast({
@@ -559,7 +641,7 @@ export default function FamilyTreePage() {
         description: "New family member has been added to the tree.",
       });
 
-      // Reset form and close sheet after data is refreshed
+      // Reset form and close sheet
       setFormData({
         firstName: '',
         lastName: '',
@@ -578,7 +660,7 @@ export default function FamilyTreePage() {
       console.error("Error adding family member:", error);
       toast({
         title: "Error",
-        description: "Failed to add family member. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to add family member. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -609,6 +691,41 @@ export default function FamilyTreePage() {
   const handleZoomOut = () => {
     setScale(prev => Math.max(prev - 0.1, 0.1));
   };
+
+  // Add a debug handler to test the new API directly
+  const testDirectApi = useCallback(async () => {
+    if (!currentUser?.id) {
+      toast({
+        title: "Error",
+        description: "No user found.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      
+      // Use the new API module to fetch family tree data
+      const familyTreeId = (currentUser as ExtendedUser).family_tree_id || currentUser.id;
+      const data = await getFamilyTreeData(familyTreeId);
+      
+      console.log('Direct API response:', data);
+      toast({
+        title: "API Test Success",
+        description: `Retrieved ${data.nodes?.length || 0} nodes from the API`,
+      });
+    } catch (error) {
+      console.error('Error testing API:', error);
+      toast({
+        title: "API Test Failed",
+        description: error instanceof Error ? error.message : "Failed to call the API directly",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser, toast]);
 
   // Function to render the tree based on the current state
   const renderTree = () => {
@@ -655,10 +772,11 @@ export default function FamilyTreePage() {
                   
                   const data = await response.json();
                   
-                  // Now set the node with the new tree ID
+                  // Set up the initial user node with the new tree ID
+                  const user = currentUser as ExtendedUser;
                   const userNode = {
-                    id: currentUser.id,
-                    gender: (currentUser as ExtendedUser).gender || 'other',
+                    id: user.id,
+                    gender: user.gender === 'male' ? 'male' : 'female',
                     left: 0, top: 0,
                     hasSubTree: false,
                     parents: [],
@@ -667,15 +785,18 @@ export default function FamilyTreePage() {
                     children: [],
                     attributes: {
                       familyTreeId: data.treeId,
-                      first_name: (currentUser as ExtendedUser).first_name || '',
-                      last_name: (currentUser as ExtendedUser).last_name || '',
-                      display_name: (currentUser as ExtendedUser).display_name || `${(currentUser as ExtendedUser).first_name || ''} ${(currentUser as ExtendedUser).last_name || ''}`,
+                      displayName: user.display_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.id,
                       isBloodRelated: true,
-                      treeOwnerId: currentUser.id
+                      treeOwnerId: user.id
                     }
                   };
                   
-                  setSelectedNode(userNode as ExtNode);
+                  // Update the user's family tree ID in the database if needed
+                  if (!user.family_tree_id) {
+                    // You might want to add an API call here to update the user's family_tree_id
+                  }
+                  
+                  setSelectedNode(userNode as ExtendedNodeWithAttributes);
                   setRelationType('child');
                   setIsSheetOpen(true);
                   
@@ -704,23 +825,25 @@ export default function FamilyTreePage() {
       );
     }
 
+    // Calculate tree layout only if treeData is available
+    const treeLayout = treeData && treeData.length > 0 
+      ? calcTree(treeData, {
+          rootId: rootNode,
+          placeholders: false
+        })
+      : null;
+
     return (
       <div 
         ref={treeContainerRef}
         className="absolute inset-0 overflow-hidden"
         onWheel={handleWheel}
       >
-        <div 
+        <div
           className="tree-wrapper absolute"
           style={{
-            width: `${calcTree(treeData, {
-              rootId: rootNode,
-              placeholders: false
-            }).canvas.width * WIDTH}px`,
-            height: `${calcTree(treeData, {
-              rootId: rootNode,
-              placeholders: false
-            }).canvas.height * HEIGHT}px`,
+            width: treeLayout ? `${treeLayout.canvas.width * WIDTH}px` : '0px',
+            height: treeLayout ? `${treeLayout.canvas.height * HEIGHT}px` : '0px',
             transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
             transition: 'transform 0.2s ease-out',
             transformOrigin: '0 0',
@@ -729,10 +852,7 @@ export default function FamilyTreePage() {
           }}
         >
           {/* Render connectors first so they appear behind nodes */}
-          {calcTree(treeData, {
-            rootId: rootNode,
-            placeholders: false
-          }).connectors.map((connector: Connector, index: number) => {
+          {treeLayout && treeLayout.connectors.map((connector: Connector, index: number) => {
             const [x1, y1, x2, y2] = connector;
             const key = `connector-${index}`;
 
@@ -775,10 +895,7 @@ export default function FamilyTreePage() {
           })}
 
           {/* Render nodes on top of connectors */}
-          {calcTree(treeData, {
-            rootId: rootNode,
-            placeholders: false
-          }).nodes.map((node: ExtNode) => (
+          {treeLayout && treeLayout.nodes.map((node: ExtNode) => (
             <div
               key={node.id}
               onMouseDown={(e) => {
@@ -1153,6 +1270,21 @@ export default function FamilyTreePage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Add Debug button if debug mode is enabled */}
+        {DEBUG_MODE && (
+          <div className="absolute top-4 right-4 z-50">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={testDirectApi}
+              disabled={loading}
+              className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800"
+            >
+              Test Direct API
+            </Button>
+          </div>
+        )}
       </main>
     </ProtectedRoute>
   );

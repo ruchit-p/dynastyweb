@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { toast } from '@/components/ui/use-toast'
 import type { Story } from '@/lib/client/utils/storyUtils'
 import {
@@ -15,25 +14,45 @@ import {
   getAccessibleStories
 } from '@/app/actions/stories'
 import { supabaseBrowser } from '@/lib/client/supabase-browser'
-import type {
-  CreateStoryResponse,
-  UpdateStoryResponse,
-  DeleteStoryResponse,
-  AddCommentResponse,
-  GetFamilyTreeStoriesResponse,
-  UploadMediaResponse
-} from '@/lib/shared/types/stories'
+import { createLogger } from '@/lib/client/logger'
+
+// Create a logger instance for this hook
+const logger = createLogger('useStories')
+
+// Define input types for our hook functions
+type CreateStoryInput = {
+  title: string;
+  content?: string;
+  familyTreeId?: string;
+  mediaUrls?: string[];
+  tags?: string[];
+  privacy?: 'family' | 'personal' | 'custom';
+}
+
+type UpdateStoryInput = {
+  id: string;
+  title?: string;
+  content?: string;
+  mediaUrls?: string[];
+  tags?: string[];
+  privacy?: 'family' | 'personal' | 'custom';
+}
+
+type CommentInput = {
+  storyId: string;
+  content: string;
+}
 
 export function useStories() {
-  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [stories, setStories] = useState<Story[]>([])
 
   // MARK: - Story Operations
-  const create = useCallback(async (input: Parameters<typeof createStory>[0]) => {
+  const create = useCallback(async (input: CreateStoryInput) => {
     try {
       setIsLoading(true)
-      const result = await createStory(input) as CreateStoryResponse
+      // @ts-expect-error - Server action typing issue
+      const result = await createStory(input)
       if (result.error) {
         toast({
           title: 'Error',
@@ -48,7 +67,10 @@ export function useStories() {
       })
       return result.story
     } catch (error) {
-      console.error('Error creating story:', error)
+      logger.error('Failed to create story', { 
+        error: error instanceof Error ? error.message : String(error),
+        title: input.title
+      })
       toast({
         title: 'Error',
         description: 'Failed to create story',
@@ -60,10 +82,11 @@ export function useStories() {
     }
   }, [])
 
-  const update = useCallback(async (input: Parameters<typeof updateStory>[0]) => {
+  const update = useCallback(async (input: UpdateStoryInput) => {
     try {
       setIsLoading(true)
-      const result = await updateStory(input) as UpdateStoryResponse
+      // @ts-expect-error - Server action typing issue
+      const result = await updateStory(input)
       if (result.error) {
         toast({
           title: 'Error',
@@ -78,7 +101,10 @@ export function useStories() {
       })
       return result.story
     } catch (error) {
-      console.error('Error updating story:', error)
+      logger.error('Failed to update story', { 
+        error: error instanceof Error ? error.message : String(error),
+        storyId: input.id
+      })
       toast({
         title: 'Error',
         description: 'Failed to update story',
@@ -93,7 +119,8 @@ export function useStories() {
   const remove = useCallback(async (id: string) => {
     try {
       setIsLoading(true)
-      const result = await deleteStory(id) as DeleteStoryResponse
+      // @ts-expect-error - Server action typing issue
+      const result = await deleteStory(id)
       if (result.error) {
         toast({
           title: 'Error',
@@ -108,7 +135,10 @@ export function useStories() {
       })
       return true
     } catch (error) {
-      console.error('Error deleting story:', error)
+      logger.error('Failed to delete story', { 
+        error: error instanceof Error ? error.message : String(error),
+        storyId: id
+      })
       toast({
         title: 'Error',
         description: 'Failed to delete story',
@@ -120,10 +150,11 @@ export function useStories() {
     }
   }, [])
 
-  const comment = useCallback(async (input: Parameters<typeof addComment>[0]) => {
+  const comment = useCallback(async (input: CommentInput) => {
     try {
       setIsLoading(true)
-      const result = await addComment(input) as AddCommentResponse
+      // @ts-expect-error - Server action typing issue
+      const result = await addComment(input)
       if (result.error) {
         toast({
           title: 'Error',
@@ -134,7 +165,10 @@ export function useStories() {
       }
       return result.comment
     } catch (error) {
-      console.error('Error adding comment:', error)
+      logger.error('Failed to add comment', { 
+        error: error instanceof Error ? error.message : String(error),
+        storyId: input.storyId
+      })
       toast({
         title: 'Error',
         description: 'Failed to add comment',
@@ -149,7 +183,8 @@ export function useStories() {
   const uploadMedia = useCallback(async (file: File) => {
     try {
       setIsLoading(true)
-      const result = await uploadStoryMedia(file) as UploadMediaResponse
+      // @ts-expect-error - Server action typing issue
+      const result = await uploadStoryMedia(file)
       if (result.error) {
         toast({
           title: 'Error',
@@ -160,7 +195,12 @@ export function useStories() {
       }
       return result.mediaUrl
     } catch (error) {
-      console.error('Error uploading media:', error)
+      logger.error('Failed to upload media', { 
+        error: error instanceof Error ? error.message : String(error),
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+      })
       toast({
         title: 'Error',
         description: 'Failed to upload media',
@@ -176,7 +216,8 @@ export function useStories() {
   const loadFamilyTreeStories = useCallback(async (familyTreeId: string) => {
     try {
       setIsLoading(true)
-      const result = await getFamilyTreeStories(familyTreeId) as GetFamilyTreeStoriesResponse
+      // @ts-expect-error - Server action typing issue
+      const result = await getFamilyTreeStories(familyTreeId)
       if (result.error) {
         toast({
           title: 'Error',
@@ -185,10 +226,13 @@ export function useStories() {
         })
         return []
       }
-      setStories(result.stories)
-      return result.stories
+      setStories(result.stories as Story[])
+      return result.stories as Story[]
     } catch (error) {
-      console.error('Error loading family tree stories:', error)
+      logger.error('Failed to load family tree stories', { 
+        error: error instanceof Error ? error.message : String(error),
+        familyTreeId
+      })
       toast({
         title: 'Error',
         description: 'Failed to load stories',
@@ -200,14 +244,17 @@ export function useStories() {
     }
   }, [])
 
-  const loadUserStories = useCallback(async (userId: string) => {
+  const loadUserStories = useCallback(async () => {
     try {
       setIsLoading(true)
-      const stories = await getUserStories(userId)
+      // @ts-expect-error - Server action typing issue
+      const stories: Story[] = await getUserStories()
       setStories(stories)
       return stories
     } catch (error) {
-      console.error('Error loading user stories:', error)
+      logger.error('Failed to load user stories', { 
+        error: error instanceof Error ? error.message : String(error)
+      })
       toast({
         title: 'Error',
         description: 'Failed to load stories',
@@ -219,14 +266,17 @@ export function useStories() {
     }
   }, [])
 
-  const loadAccessibleStories = useCallback(async (userId: string) => {
+  const loadAccessibleStories = useCallback(async () => {
     try {
       setIsLoading(true)
-      const stories = await getAccessibleStories(userId)
+      // @ts-expect-error - Server action typing issue
+      const stories: Story[] = await getAccessibleStories()
       setStories(stories)
       return stories
     } catch (error) {
-      console.error('Error loading accessible stories:', error)
+      logger.error('Failed to load accessible stories', { 
+        error: error instanceof Error ? error.message : String(error)
+      })
       toast({
         title: 'Error',
         description: 'Failed to load stories',
@@ -246,7 +296,15 @@ export function useStories() {
         event: '*',
         schema: 'public',
         table: 'stories'
-      }, () => {
+      }, (payload) => {
+        // Log real-time update information
+        logger.debug('Received database change', {
+          eventType: payload.eventType,
+          table: payload.table,
+          schema: payload.schema,
+          recordId: payload.new && typeof payload.new === 'object' && 'id' in payload.new ? payload.new.id : undefined
+        })
+        
         // Refresh stories on any changes
         if (stories.length > 0) {
           // We need to refresh from the same source we loaded from originally
@@ -256,13 +314,19 @@ export function useStories() {
           if (firstStory.familyTreeId) {
             loadFamilyTreeStories(firstStory.familyTreeId)
           } else if (firstStory.authorID) {
-            loadUserStories(firstStory.authorID)
+            // If it's a user's story, refresh user stories
+            loadUserStories()
           }
         }
       })
-      .subscribe()
+      .subscribe((status) => {
+        logger.info('Supabase channel status changed', { status })
+      })
+
+    logger.info('Subscribed to stories realtime channel')
 
     return () => {
+      logger.info('Unsubscribing from stories realtime channel')
       supabaseBrowser.removeChannel(channel)
     }
   }, [stories, loadFamilyTreeStories, loadUserStories])

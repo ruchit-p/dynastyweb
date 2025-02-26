@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { useAuth } from "@/context/AuthContext"
+import { useAuth } from "@/components/auth"
 import { Button } from "@/components/ui/button"
 import { CalendarIcon, MapPin, Lock, Users, Trash2, Edit } from "lucide-react"
 import { format } from "date-fns"
@@ -49,7 +49,7 @@ interface StoryData {
 export default function StoryDetailsPage() {
   const { id } = useParams()
   const router = useRouter()
-  const { user } = useAuth()
+  const { currentUser } = useAuth()
   const { toast } = useToast()
   const [story, setStory] = useState<StoryData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -94,7 +94,7 @@ export default function StoryDetailsPage() {
   }, [id, toast])
 
   const handleDelete = async () => {
-    if (!story || !id || !user) return;
+    if (!story || !id || !currentUser) return;
     
     try {
       setDeleting(true);
@@ -103,7 +103,7 @@ export default function StoryDetailsPage() {
         .from('stories')
         .delete()
         .eq('id', id)
-        .eq('author_id', user.id)
+        .eq('author_id', currentUser.id)
 
       if (error) throw error
 
@@ -147,7 +147,7 @@ export default function StoryDetailsPage() {
             <h1 className="text-3xl font-bold mb-2">{story.title}</h1>
             {story.subtitle && <h2 className="text-xl text-gray-600">{story.subtitle}</h2>}
           </div>
-          {user?.id === story.author_id && (
+          {currentUser?.id === story.author_id && (
             <div className="flex gap-2">
               <Button 
                 variant="outline" 

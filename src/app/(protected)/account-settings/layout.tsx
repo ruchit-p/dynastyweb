@@ -7,7 +7,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { User, Bell, Lock, HelpCircle, LogOut, ChevronRight } from "lucide-react"
-import { useAuth } from "@/context/AuthContext"
+import { useAuth } from "@/components/auth"
 import { useToast } from "@/components/ui/use-toast"
 import ProtectedRoute from "@/components/ProtectedRoute"
 
@@ -51,7 +51,7 @@ export default function AccountSettingsLayout({
   children: React.ReactNode
 }) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const { signOut } = useAuth()
+  const { logout } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
   const pathname = usePathname()
@@ -59,7 +59,7 @@ export default function AccountSettingsLayout({
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true)
-      await signOut()
+      await logout()
       toast({
         title: "Logged out successfully",
         description: "You have been logged out of your account.",

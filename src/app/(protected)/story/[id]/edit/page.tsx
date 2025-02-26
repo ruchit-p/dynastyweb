@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { useAuth } from "@/context/AuthContext"
+import { useAuth } from "@/components/auth"
 import { useToast } from "@/components/ui/use-toast"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -46,7 +46,7 @@ interface StoryBlock {
 export default function EditStoryPage() {
   const { id } = useParams()
   const router = useRouter()
-  const { user } = useAuth()
+  const { currentUser } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [title, setTitle] = useState("")
@@ -61,7 +61,7 @@ export default function EditStoryPage() {
 
   useEffect(() => {
     const fetchStory = async () => {
-      if (!id || !user) return
+      if (!id || !currentUser) return
 
       try {
         const { data: storyData, error } = await supabaseBrowser
@@ -83,7 +83,7 @@ export default function EditStoryPage() {
         }
         
         // Verify ownership
-        if (storyData.author_id !== user.id) {
+        if (storyData.author_id !== currentUser.id) {
           toast({
             variant: "destructive",
             title: "Error",
@@ -122,7 +122,7 @@ export default function EditStoryPage() {
     }
 
     fetchStory()
-  }, [id, user, router, toast])
+  }, [id, currentUser, router, toast])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -136,7 +136,7 @@ export default function EditStoryPage() {
       return
     }
 
-    if (!id || !user) {
+    if (!id || !currentUser) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -215,7 +215,7 @@ export default function EditStoryPage() {
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
-        .eq('author_id', user.id)
+        .eq('author_id', currentUser.id)
 
       if (updateError) throw updateError
 
@@ -257,11 +257,6 @@ export default function EditStoryPage() {
   }
 
   const handleFileSelect = async (id: string, file: File) => {
-    updateBlock(id, file)
-  }
-
-  const handleAudioRecord = async (id: string, blob: Blob) => {
-    const file = new File([blob], `audio_${Date.now()}.wav`, { type: 'audio/wav' })
     updateBlock(id, file)
   }
 

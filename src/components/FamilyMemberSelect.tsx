@@ -5,8 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { supabaseBrowser } from '@/lib/client/supabase-browser'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '@/components/auth'
 import { Spinner } from '@/components/ui/spinner'
+import { createLogger } from '@/lib/client/logger'
+
+// Create component-specific logger
+const logger = createLogger('FamilyMemberSelect')
 
 interface FamilyMember {
   id: string
@@ -34,9 +38,14 @@ export function FamilyMemberSelect({
 
   useEffect(() => {
     const fetchFamilyMembers = async () => {
-      if (!user) return
+      if (!user) {
+        logger.debug('No user available, skipping fetch')
+        setLoading(false)
+        return
+      }
 
       try {
+        logger.debug('Fetching family members', { userId: user.id })
         setLoading(true)
 
         // First get the user's family tree ID
@@ -48,9 +57,15 @@ export function FamilyMemberSelect({
 
         if (userError) throw userError
         if (!userData?.family_tree_id) {
-          console.error('No family tree ID found')
+          logger.error('No family tree ID found', { userId: user.id })
+          setLoading(false)
           return
         }
+
+        logger.debug('Retrieved family tree ID', { 
+          userId: user.id, 
+          familyTreeId: userData.family_tree_id 
+        })
 
         // Get the family tree members
         const { data: familyTreeData, error: treeError } = await supabase
@@ -69,7 +84,11 @@ export function FamilyMemberSelect({
 
         if (treeError) throw treeError
         if (!familyTreeData?.users) {
-          console.error('No family tree members found')
+          logger.error('No family tree members found', { 
+            userId: user.id, 
+            familyTreeId: userData.family_tree_id 
+          })
+          setLoading(false)
           return
         }
 
@@ -79,9 +98,18 @@ export function FamilyMemberSelect({
           displayName: user.full_name || `${user.first_name} ${user.last_name}`.trim()
         }))
 
+        logger.info('Family members fetched successfully', { 
+          userId: user.id, 
+          familyTreeId: userData.family_tree_id,
+          membersCount: members.length
+        })
+
         setFamilyMembers(members)
       } catch (error) {
-        console.error('Error fetching family members:', error)
+        logger.error('Error fetching family members', {
+          userId: user?.id,
+          error: error instanceof Error ? error.message : String(error)
+        })
       } finally {
         setLoading(false)
       }
@@ -94,6 +122,13 @@ export function FamilyMemberSelect({
     const newSelection = selectedMembers.includes(value)
       ? selectedMembers.filter(id => id !== value)
       : [...selectedMembers, value]
+    
+    logger.debug('Member selection toggled', {
+      memberId: value,
+      isAdding: !selectedMembers.includes(value),
+      newCount: newSelection.length
+    })
+    
     onMemberSelect(newSelection)
   }
 

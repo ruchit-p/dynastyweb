@@ -1,5 +1,5 @@
 // MARK: - Types
-export type StorageBucket = 'avatars' | 'stories' | 'documents'
+export type StorageBucket = 'profile-photos' | 'media' | 'temp' | 'stories'
 
 export type StorageConfig = {
   maxSize: number
@@ -9,22 +9,48 @@ export type StorageConfig = {
 
 // MARK: - Constants
 export const STORAGE_CONFIG: Record<StorageBucket, StorageConfig> = {
-  avatars: {
+  'profile-photos': {
     maxSize: 5 * 1024 * 1024, // 5MB
     allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
     cacheControl: '3600',
   },
   stories: {
-    maxSize: 50 * 1024 * 1024, // 50MB
-    allowedTypes: ['image/jpeg', 'image/png', 'image/webp', 'video/mp4'],
+    maxSize: 100 * 1024 * 1024, // 100MB
+    allowedTypes: [
+      // Images
+      'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif',
+      // Videos
+      'video/mp4', 'video/webm', 'video/quicktime',
+      // Audio
+      'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3', 'audio/aac', 'audio/flac', 'audio/x-m4a'
+    ],
     cacheControl: '3600',
   },
-  documents: {
-    maxSize: 10 * 1024 * 1024, // 10MB
+  temp: {
+    maxSize: 100 * 1024 * 1024, // 100MB
     allowedTypes: [
+      // Images
+      'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif',
+      // Videos
+      'video/mp4', 'video/webm', 'video/quicktime',
+      // Audio
+      'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3', 'audio/aac', 'audio/flac', 'audio/x-m4a',
+      // Documents
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ],
+    cacheControl: '3600',
+  },
+  media: {
+    maxSize: 200 * 1024 * 1024, // 200MB
+    allowedTypes: [
+      // Images
+      'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif',
+      // Videos
+      'video/mp4', 'video/webm', 'video/quicktime',
+      // Audio
+      'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3', 'audio/aac', 'audio/flac', 'audio/x-m4a'
     ],
     cacheControl: '3600',
   },

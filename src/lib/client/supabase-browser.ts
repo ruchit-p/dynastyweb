@@ -21,14 +21,6 @@ export function createClient() {
 }
 
 /**
- * Legacy function for backward compatibility
- * @deprecated Use createClient() instead
- */
-export function createClientSupabaseClient() {
-  return createClient()
-}
-
-/**
  * Singleton instance of the browser client for use across components
  * Import this when you need a browser-side Supabase client
  */

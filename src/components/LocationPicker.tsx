@@ -6,6 +6,7 @@ import "leaflet/dist/leaflet.css"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, MapPin } from "lucide-react"
+import { createLogger } from "@/lib/client/logger"
 
 interface LocationPickerProps {
   onLocationSelect: (location: { lat: number; lng: number; address: string }) => void
@@ -36,6 +37,9 @@ const customIcon = new Icon({
   popupAnchor: [1, -34],
   shadowSize: [41, 41]
 })
+
+// Create a logger instance for this component
+const logger = createLogger('LocationPicker')
 
 export default function LocationPicker({ onLocationSelect, defaultLocation, isOpen, onClose }: LocationPickerProps) {
   const [map, setMap] = useState<LeafletMap | null>(null)
@@ -113,7 +117,11 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
           setIsLoadingLocation(false)
         },
         (error) => {
-          console.log("Geolocation error or denied:", error)
+          logger.warn("Geolocation error or denied", { 
+            error: error instanceof Error ? error.message : String(error),
+            errorCode: error.code,
+            fallbackLocation: 'Chicago'
+          })
           // Fall back to Chicago if there's an error or permission denied
           if (map) {
             map.setView([CHICAGO_LOCATION.lat, CHICAGO_LOCATION.lng], 13)

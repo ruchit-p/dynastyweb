@@ -1,0 +1,275 @@
+---
+description: Guidelines for using Pino logger in Next.js applications
+globs: **/*.ts, **/*.tsx, **/*.js, **/*.jsx
+alwaysApply: false
+---
+# Specify the following for Cursor rules
+description: Guidelines for using Pino logger in Next.js applications
+globs: "**/*.ts, **/*.tsx, **/*.js, **/*.jsx"
+---
+
+# Pino Logger Usage
+
+## Overview
+
+Pino is a low-overhead JSON logger for Node.js. This rule provides guidelines for consistent and effective use of Pino logger throughout the application for error tracking, performance monitoring, and debugging.
+
+## 🚨 CRITICAL RULES 🚨
+
+1. **ALWAYS** use structured logging by passing objects as the first parameter
+2. **NEVER** log sensitive information like passwords, tokens, or personal data
+3. **ALWAYS** add context to error logs for better debugging
+4. Tag critical errors with `mcp: true` for MCP server monitoring
+5. Use appropriate log levels consistently: debug for development, info for general, error for issues
+
+## Configuration
+
+### Base Configuration
+
+```typescript
+import pino from 'pino';
+
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
+const logger = pino({
+  level: isDevelopment ? 'debug' : 'info',
+  transport: isDevelopment
+    ? {
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          translateTime: 'SYS:standard',
+          ignore: 'pid,hostname',
+        },
+      }
+    : undefined,
+  base: {
+    env: process.env.NODE_ENV,
+  },
+});
+
+export default logger;
+```
+
+### TypeScript Type Safety
+
+When working with context objects, use appropriate TypeScript types:
+
+```typescript
+// Preferred approach with specific types
+export const trackError = (error: Error, context: Record<string, unknown> = {}) => {
+  logger.error(
+    {
+      error: {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      },
+      ...context,
+    },
+    'Error tracked'
+  );
+};
+
+// Avoid using any
+// export const trackError = (error: Error, context: Record<string, any> = {}) => { ... }
+```
+
+## Log Levels
+
+- **trace**: Detailed information only used when analyzing a very specific issue
+- **debug**: Information useful for debugging, only enabled in development
+- **info**: General information about application flow
+- **warn**: Warning events that might cause issues
+- **error**: Error events that still allow the application to continue
+- **fatal**: Critical errors that cause the application to stop
+
+```typescript
+// Debug level for detailed development info
+logger.debug({
+  msg: 'Middleware execution start',
+  url: request.nextUrl.pathname,
+});
+
+// Info level for normal operation
+logger.info({
+  msg: 'Middleware execution complete',
+  url: request.nextUrl.pathname,
+  executionTime: `${executionTime}ms`,
+});
+
+// Error level for application errors
+logger.error(
+  {
+    error: {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    },
+    component: 'AuthService',
+    userId: user.id,
+  },
+  'Authentication failed'
+);
+```
+
+## Error Tracking
+
+### Standard Error Logging Pattern
+
+Always include these properties when logging errors:
+
+```typescript
+export const trackError = (error: Error, context: Record<string, unknown> = {}) => {
+  logger.error(
+    {
+      error: {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      },
+      ...context,
+    },
+    'Error tracked'
+  );
+};
+```
+
+### Critical Error Tagging
+
+Tag critical errors for MCP server monitoring:
+
+```typescript
+export const logToMCP = async (error: Error, context: Record<string, unknown> = {}) => {
+  logger.error(
+    {
+      error: {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      },
+      mcp: true, // Tag for MCP server integration
+      ...context,
+    },
+    'MCP Error Report'
+  );
+};
+```
+
+## Performance Monitoring
+
+Measure and log execution times for critical operations:
+
+```typescript
+function measureOperation(operationName: string) {
+  const startTime = Date.now();
+  return () => {
+    const executionTime = Date.now() - startTime;
+    logger.info({
+      msg: `${operationName} completed`,
+      executionTime: `${executionTime}ms`,
+      operation: operationName,
+    });
+    return executionTime;
+  };
+}
+
+// Usage example
+async function processData() {
+  const endMeasurement = measureOperation('Data processing');
+  
+  // ... data processing code ...
+  
+  const executionTime = endMeasurement();
+  return executionTime;
+}
+```
+
+## Best Practices
+
+1. **Use Structured Logging**: Always log objects rather than formatted strings
+   ```typescript
+   // Good
+   logger.info({ user: userId, action: 'login' }, 'User logged in');
+   
+   // Avoid
+   logger.info(`User ${userId} logged in`);
+   ```
+
+2. **Add Context**: Include relevant context with each log
+   ```typescript
+   logger.info({
+     component: 'AuthService',
+     user: userId,
+     method: 'POST',
+     endpoint: '/api/auth/login',
+   }, 'Authentication successful');
+   ```
+
+3. **Use Log Levels Consistently**: Follow the standard log level hierarchy
+
+4. **Avoid Console.log**: Replace all `console.log` calls with appropriate logger methods
+
+5. **Log at Boundaries**: Log at application boundaries (API routes, middleware, services)
+
+6. **Store Logs for Analysis**: Configure log storage and rotation in production
+
+## Common Anti-Patterns
+
+1. ❌ **Logging sensitive information**
+   ```typescript
+   // BAD - Never log passwords or tokens
+   logger.info({ password, token }, 'User credentials');
+   ```
+
+2. ❌ **Using console.log alongside Pino**
+   ```typescript
+   // BAD - Use Pino consistently
+   console.log('User logged in');
+   ```
+
+3. ❌ **String concatenation in logs**
+   ```typescript
+   // BAD - Hard to parse and search
+   logger.info('User ' + userId + ' performed action ' + action);
+   ```
+
+4. ❌ **Inconsistent log levels**
+   ```typescript
+   // BAD - Using error for non-error events
+   logger.error('User successfully logged in');
+   ```
+
+5. ❌ **Logging without context**
+   ```typescript
+   // BAD - No context information
+   logger.error('Something went wrong');
+   ```
+
+## Integration with Error Handler
+
+Use the error handler to properly categorize and log errors:
+
+```typescript
+import logger, { trackError, logToMCP } from './logger';
+
+const handleError = async (error: ErrorWithCode, context?: Record<string, unknown> = {}) => {
+  // Track all errors
+  trackError(error, context);
+  
+  // Send critical errors to MCP
+  const isCritical = error.code === 'DATABASE_ERROR' || 
+                    error.statusCode === 500 ||
+                    error instanceof DatabaseError;
+  
+  if (isCritical) {
+    await logToMCP(error, context);
+  }
+  
+  // Return formatted error for API responses
+  return {
+    message: error.message,
+    code: error.code || 'UNKNOWN_ERROR',
+    statusCode: error.statusCode || 500
+  };
+}; 

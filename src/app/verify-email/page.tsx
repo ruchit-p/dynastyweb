@@ -3,16 +3,51 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
 import { Mail, CheckCircle, Clock, RefreshCw, AlertTriangle } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { createClient } from "@/lib/supabase"
-import { authService, type AuthError } from "@/lib/client/services/auth-service"
+import { authService } from "@/lib/client/services/auth-service"
+import { AuthStatus } from "@/components/auth"
 
 const VERIFICATION_EXPIRY_TIME = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
 const RESEND_COOLDOWN = 60 // Cooldown period in seconds
+
+// Utility for showing countdown timer
+function ExpiryCountdown({ expiryTime, onExpire }: { expiryTime: number, onExpire: () => void }) {
+  const [timeLeft, setTimeLeft] = useState<string>("")
+  
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const now = Date.now()
+      const difference = expiryTime - now
+      
+      if (difference <= 0) {
+        onExpire()
+        setTimeLeft("Expired")
+        return
+      }
+      
+      // Calculate hours, minutes, seconds
+      const hours = Math.floor(difference / (1000 * 60 * 60))
+      const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((difference % (1000 * 60)) / 1000)
+      
+      // Format the time string
+      setTimeLeft(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`)
+    }
+    
+    calculateTimeLeft()
+    const timer = setInterval(calculateTimeLeft, 1000)
+    
+    return () => clearInterval(timer)
+  }, [expiryTime, onExpire])
+  
+  return <span>{timeLeft}</span>
+}
 
 export default function VerifyEmailPage() {
   const router = useRouter()
@@ -30,7 +65,7 @@ export default function VerifyEmailPage() {
     const checkVerification = async () => {
       try {
         setIsLoading(true)
-        const supabase = createClient()
+        const supabase = await createClient()
         const { data: { user }, error } = await supabase.auth.getUser()
 
         if (error) {
@@ -187,12 +222,19 @@ export default function VerifyEmailPage() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
         <div className="flex justify-center">
-          <Image
-            src="/dynasty.png"
-            alt="Dynasty Logo"
-            width={60}
-            height={60}
-          />
+          <Link href="/">
+            <Image
+              src="/dynasty.png"
+              alt="Dynasty Logo"
+              width={60}
+              height={60}
+              className="cursor-pointer hover:opacity-90 transition-opacity"
+            />
+          </Link>
+        </div>
+        
+        <div className="absolute top-4 right-4">
+          <AuthStatus hideWhenNotAuthenticated={false} />
         </div>
         
         {isVerified ? (
@@ -249,28 +291,32 @@ export default function VerifyEmailPage() {
             </div>
             
             <div className="space-y-2">
-              <p className="text-sm text-gray-600">
-                Didn&apos;t receive the email? Check your spam folder or request a new verification link.
-              </p>
-              <Button 
+              <Button
                 onClick={handleResendVerification}
-                disabled={resendCooldown > 0 || isResending}
+                disabled={isResending || resendCooldown > 0}
+                variant="outline"
                 className="w-full"
               >
-                {resendCooldown > 0 
-                  ? `Resend in ${resendCooldown}s` 
-                  : isResending 
-                    ? 'Sending...' 
-                    : 'Resend Verification Email'
-                }
+                {isResending ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : resendCooldown > 0 ? (
+                  <>
+                    Resend in {resendCooldown}s
+                  </>
+                ) : (
+                  <>
+                    Resend verification email
+                  </>
+                )}
               </Button>
-            </div>
-            
-            <div className="text-center">
+              
               <Button
-                variant="link"
                 onClick={() => router.push('/login')}
-                className="text-sm font-medium text-[#0A5C36]"
+                variant="link"
+                className="w-full text-[#0A5C36]"
               >
                 Return to login
               </Button>
@@ -280,35 +326,4 @@ export default function VerifyEmailPage() {
       </div>
     </div>
   )
-}
-
-// Helper component to display countdown
-function ExpiryCountdown({ expiryTime, onExpire }: { expiryTime: number, onExpire: () => void }) {
-  const [timeLeft, setTimeLeft] = useState<string>("")
-  
-  useEffect(() => {
-    const calculateTimeLeft = () => {
-      const now = Date.now()
-      const difference = expiryTime - now
-      
-      if (difference <= 0) {
-        setTimeLeft("Expired")
-        onExpire()
-        return
-      }
-      
-      const hours = Math.floor((difference / (1000 * 60 * 60)) % 24)
-      const minutes = Math.floor((difference / 1000 / 60) % 60)
-      const seconds = Math.floor((difference / 1000) % 60)
-      
-      setTimeLeft(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`)
-    }
-    
-    calculateTimeLeft()
-    const timer = setInterval(calculateTimeLeft, 1000)
-    
-    return () => clearInterval(timer)
-  }, [expiryTime, onExpire])
-  
-  return <span>{timeLeft}</span>
 } 
