@@ -1,5 +1,5 @@
 import { toast } from '@/components/ui/use-toast'
-import { uploadFile, processMedia as processMediaAction, uploadAndProcessMedia } from '@/app/actions/storage'
+import { uploadFile, processMedia as processMediaAction, uploadAndProcessMedia, deleteFile } from '@/app/actions/storage'
 import { StorageBucket } from '@/lib/shared/types/storage'
 
 // MARK: - Types
@@ -173,19 +173,15 @@ export async function deleteMedia(url: string, bucket: StorageBucket = 'media'):
     const path = url.split('/').pop();
     if (!path) throw new Error('Invalid media URL');
 
-    const response = await fetch('/api/storage/delete', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        bucket,
-        paths: [path],
-      }),
+    // Use the server action instead of fetch
+    const result = await deleteFile({
+      bucket,
+      paths: [path]
     });
     
-    const result = await response.json();
-    if (!result.success) throw new Error(result.error || 'Failed to delete media');
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to delete media');
+    }
 
     toast({
       title: 'Success!',

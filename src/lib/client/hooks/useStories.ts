@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from '@/components/ui/use-toast'
-import type { Story } from '@/lib/client/utils/storyUtils'
+import type { Story } from '@/lib/shared/types/story'
 import {
   createStory,
   updateStory,

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useCallback } from 'react'
-import { useAuth } from './useAuth'
+import { useAuth } from '@/components/auth'
 import { createLogger } from '@/lib/client/logger'
 
 // Create logger for this hook
@@ -21,7 +21,7 @@ export interface RealtimeData {
 type RealtimeCallback = (data: RealtimeData) => void
 
 export function useRealtimeUpdates(callback: RealtimeCallback) {
-  const { user } = useAuth()
+  const { currentUser: user } = useAuth()
 
   const setupEventSource = useCallback(() => {
     if (!user) {

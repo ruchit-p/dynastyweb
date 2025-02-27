@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth"
-import { uploadMedia } from "@/lib/client/utils/mediaUtils"
+import { uploadFile, uploadAndProcessMedia } from "@/app/actions/storage"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,9 +17,8 @@ import AudioRecorder from "@/components/AudioRecorder"
 import LocationPicker from "@/components/LocationPicker"
 import { useToast } from "@/components/ui/use-toast"
 import { FamilyMemberSelect } from "@/components/FamilyMemberSelect"
-import { createStory } from "@/lib/client/utils/functionUtils"
+import { createStory } from "@/app/actions/stories"
 import { supabaseBrowser as supabase } from "@/lib/client/supabase-browser"
-import { useMediaProcessor } from "@/hooks/useMediaProcessor"
 
 type BlockType = "text" | "image" | "video" | "audio"
 
@@ -41,7 +40,6 @@ export default function CreateStoryPage() {
   const router = useRouter()
   const { currentUser } = useAuth()
   const { toast } = useToast()
-  const { processMedia } = useMediaProcessor()
   const [loading, setLoading] = useState(false)
   const [title, setTitle] = useState("")
   const [subtitle, setSubtitle] = useState("")
@@ -82,34 +80,6 @@ export default function CreateStoryPage() {
       );
     }
   }, []);
-
-  // Check if user has a family tree ID
-  useEffect(() => {
-    if (!currentUser?.id) {
-      console.log("No user ID available");
-      return;
-    }
-
-    const checkFamilyTree = async () => {
-      const { data: userData, error } = await supabase
-        .from('users')
-        .select('family_tree_id')
-        .eq('id', currentUser.id)
-        .single()
-
-      if (error || !userData?.family_tree_id) {
-        console.error("No family tree ID found in user document");
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "You need to be part of a family tree to create stories. Please create or join a family tree first."
-        });
-        router.push("/family-tree");
-      }
-    }
-
-    checkFamilyTree();
-  }, [currentUser?.id, router, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -163,31 +133,61 @@ export default function CreateStoryPage() {
               const bucket = 'stories'
               
               // Upload with progress tracking
-              const url = await uploadMedia(
-                block.content,
-                {
+              let result;
+              
+              // Apply compression based on media type using WhatsApp-style settings
+              const operations = [];
+              
+              if (block.type === 'image') {
+                operations.push({
+                  type: 'resize' as const,
+                  params: { width: 1600, height: 1600, fit: 'cover' }
+                });
+                
+                operations.push({
+                  type: 'compress' as const,
+                  params: { quality: 75, format: 'webp' }
+                });
+              }
+              
+              // Set up progress tracking callback
+              const updateProgress = (progress: number) => {
+                setBlocks(currentBlocks =>
+                  currentBlocks.map(b =>
+                    b.id === block.id
+                      ? { ...b, uploadProgress: progress }
+                      : b
+                  )
+                );
+              };
+              
+              // Start with 10% to show activity
+              updateProgress(10);
+              
+              if (operations.length > 0) {
+                result = await uploadAndProcessMedia({
+                  file: block.content,
                   bucket,
                   path: `${storyId}/`,
-                  processOptions: {
-                    // Apply compression based on media type using WhatsApp-style settings
-                    compress: {
-                      quality: block.type === 'image' ? 75 : undefined,
-                      format: block.type === 'image' ? 'webp' : undefined
-                    },
-                    resize: block.type === 'image' ? 
-                      { width: 1600, height: 1600, fit: 'cover' } : undefined,
-                  },
-                  onProgress: (progress) => {
-                    setBlocks(currentBlocks =>
-                      currentBlocks.map(b =>
-                        b.id === block.id
-                          ? { ...b, uploadProgress: progress }
-                          : b
-                      )
-                    )
-                  }
-                }
-              )
+                  operations
+                });
+              } else {
+                result = await uploadFile({
+                  file: block.content,
+                  bucket,
+                  path: `${storyId}/`
+                });
+              }
+              
+              // Complete progress
+              updateProgress(100);
+              
+              if (!result.success || !result.data) {
+                throw new Error(result.error || 'Failed to upload media');
+              }
+              
+              // Handle the URL regardless of whether it's from uploadFile or uploadAndProcessMedia
+              const url = result.data.url;
               
               return {
                 data: url,
@@ -215,19 +215,33 @@ export default function CreateStoryPage() {
         })
       )
 
-      // Create the story using the Cloud Function
-      await createStory({
-        authorID: currentUser!.id,
-        title: title.trim(),
-        subtitle: subtitle.trim() || undefined,
-        eventDate: date,
-        location: location || undefined,
-        privacy: privacy,
-        customAccessMembers: privacy === "custom" ? customAccessMembers : undefined,
-        blocks: processedBlocks,
-        familyTreeId: userData.family_tree_id,
-        peopleInvolved: taggedMembers
-      });
+      // Create the story using the server action
+      const formData = new FormData();
+      formData.append('title', title.trim());
+      if (subtitle.trim()) formData.append('subtitle', subtitle.trim());
+      if (date) formData.append('event_date', date.toISOString());
+      if (location) formData.append('location', JSON.stringify(location));
+      formData.append('privacy', privacy);
+      
+      if (privacy === 'custom' && customAccessMembers.length > 0) {
+        formData.append('custom_access_members', JSON.stringify(customAccessMembers));
+      }
+      
+      formData.append('familyTreeId', userData.family_tree_id);
+      
+      if (taggedMembers.length > 0) {
+        formData.append('people_involved', JSON.stringify(taggedMembers));
+      }
+      
+      // Append blocks data
+      formData.append('blocks', JSON.stringify(processedBlocks));
+      
+      // Call the server action
+      const result = await createStory(formData);
+      
+      if (result.error) {
+        throw new Error(result.error);
+      }
       
       toast({
         title: "Success",
@@ -263,12 +277,6 @@ export default function CreateStoryPage() {
 
   const removeBlock = (id: string) => {
     setBlocks(blocks.filter(block => block.id !== id))
-  }
-
-  const handleFileSelect = async (id: string, file: File) => {
-    // Store the file object directly in the block content
-    // It will be processed and uploaded when the form is submitted
-    updateBlock(id, file)
   }
 
   const handleAudioRecord = async (id: string, blob: Blob) => {
@@ -478,7 +486,6 @@ export default function CreateStoryPage() {
                         onFileSelect={(url) => updateBlock(block.id, url)}
                         value={block.content instanceof File ? '' : block.content as string}
                         onRemove={() => updateBlock(block.id, "")}
-                        processMedia={true}
                         quality="medium"
                         maxWidth={block.type === 'image' ? 1600 : block.type === 'video' ? 1280 : undefined}
                         maxHeight={block.type === 'image' ? 1600 : block.type === 'video' ? 720 : undefined}

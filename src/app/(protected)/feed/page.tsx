@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useAuth } from "@/lib/client/hooks/useAuth"
-import { type Story } from "@/lib/client/utils/storyUtils"
+import { useAuth } from "@/components/auth"
+import { type Story } from "@/lib/shared/types/story"
 import { Button } from "@/components/ui/button"
 import { PenSquare, BookOpen } from "lucide-react"
 import { StoryCard } from "@/components/Story"

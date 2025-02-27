@@ -31,7 +31,7 @@ export class SettingsManager {
     return SettingsManager.instance
   }
 
-  async loadSettings(userId: string): Promise<UserSettings> {
+  async loadSettings(): Promise<UserSettings> {
     try {
       // Call the server action to load settings
       const { success, data, error } = await loadUserSettings()
@@ -48,7 +48,7 @@ export class SettingsManager {
     }
   }
 
-  async saveSettings(userId: string, settings: UserSettings): Promise<void> {
+  async saveSettings(settings: UserSettings): Promise<void> {
     if (this.debounceTimeout) {
       clearTimeout(this.debounceTimeout)
     }

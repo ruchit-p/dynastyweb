@@ -1,5 +1,5 @@
 import type { HistoryBook } from '@/lib/shared/types/story'
-import type { Story } from './storyUtils'
+import type { Story } from '@/lib/shared/types/story'
 
 // MARK: - History Book Privacy
 

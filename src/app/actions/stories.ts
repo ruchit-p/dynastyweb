@@ -3,7 +3,8 @@
 import { z } from "zod"
 import { createClient } from "@/lib/server/supabase"
 import { revalidatePath } from 'next/cache'
-import type { Story } from '@/lib/shared/types/story'
+import type { Story, Comment } from '@/lib/shared/types/story'
+import type { ServerActionResult } from '@/lib/shared/types/actions'
 import { logger } from '@/lib/server/logger'
 import { measureAsync } from '@/lib/performance'
 import { v4 as uuidv4 } from 'uuid'
@@ -37,7 +38,7 @@ export type CreateStoryInput = z.infer<typeof CreateStorySchema>
 export type UpdateStoryInput = z.infer<typeof UpdateStorySchema>
 
 // Create a new story
-export async function createStory(formData: FormData) {
+export async function createStory(formData: FormData): Promise<ServerActionResult<{story: Story}>> {
   return await measureAsync('actions.stories.createStory', async () => {
     const requestId = uuidv4()
     try {
@@ -179,7 +180,7 @@ export async function createStory(formData: FormData) {
 }
 
 // Update a story
-export async function updateStory(formData: FormData) {
+export async function updateStory(formData: FormData): Promise<ServerActionResult<{story: Story}>> {
   return await measureAsync('actions.stories.updateStory', async () => {
     const requestId = uuidv4()
     try {
@@ -307,7 +308,7 @@ export async function updateStory(formData: FormData) {
 }
 
 // Delete a story
-export async function deleteStory(formData: FormData) {
+export async function deleteStory(formData: FormData): Promise<ServerActionResult<void>> {
   return await measureAsync('actions.stories.deleteStory', async () => {
     const requestId = uuidv4()
     try {
@@ -374,7 +375,7 @@ export async function deleteStory(formData: FormData) {
 }
 
 // Add a comment to a story
-export async function addComment(formData: FormData) {
+export async function addComment(formData: FormData): Promise<ServerActionResult<{comment: Comment}>> {
   return await measureAsync('actions.stories.addComment', async () => {
     const requestId = uuidv4()
     try {
@@ -448,7 +449,7 @@ export async function addComment(formData: FormData) {
 }
 
 // Get comments for a story
-export async function getStoryComments(storyId: string) {
+export async function getStoryComments(storyId: string): Promise<ServerActionResult<{comments: Comment[]}>> {
   return await measureAsync('actions.stories.getStoryComments', async () => {
     const requestId = uuidv4()
     try {
@@ -512,7 +513,7 @@ export async function getStoryComments(storyId: string) {
 }
 
 // Get stories for a family tree
-export async function getFamilyTreeStories(formData: FormData) {
+export async function getFamilyTreeStories(formData: FormData): Promise<ServerActionResult<{stories: Story[]}>> {
   return await measureAsync('actions.stories.getFamilyTreeStories', async () => {
     const requestId = uuidv4()
     try {
@@ -579,7 +580,7 @@ export async function getFamilyTreeStories(formData: FormData) {
 }
 
 // MARK: - Media Upload
-export async function uploadStoryMedia(formData: FormData) {
+export async function uploadStoryMedia(formData: FormData): Promise<ServerActionResult<{mediaUrl: string}>> {
   return await measureAsync('actions.stories.uploadStoryMedia', async () => {
     const requestId = uuidv4()
     try {
@@ -672,7 +673,7 @@ export async function uploadStoryMedia(formData: FormData) {
  * Fetches a list of stories for a specific user
  * @returns A list of stories
  */
-export async function getUserStories(): Promise<Story[]> {
+export async function getUserStories(): Promise<ServerActionResult<{stories: Story[]}>> {
   return await measureAsync('actions.stories.getUserStories', async () => {
     const requestId = uuidv4()
     try {
@@ -696,7 +697,11 @@ export async function getUserStories(): Promise<Story[]> {
           error: error.message,
           status: error.status
         })
-        return []
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch user stories',
+          data: { stories: [] }
+        }
       }
       
       const stories = data?.stories || []
@@ -707,7 +712,12 @@ export async function getUserStories(): Promise<Story[]> {
         storiesCount: stories.length
       })
       
-      return stories as Story[]
+      return {
+        success: true,
+        data: {
+          stories: stories as Story[]
+        }
+      }
     } catch (error) {
       logger.error({
         msg: 'Failed to fetch user stories',
@@ -718,7 +728,11 @@ export async function getUserStories(): Promise<Story[]> {
           name: error.name
         } : String(error)
       })
-      return []
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch user stories',
+        data: { stories: [] }
+      }
     }
   })
 }
@@ -727,7 +741,7 @@ export async function getUserStories(): Promise<Story[]> {
  * Fetches a list of stories that a user can access
  * @returns A list of stories that the user can access
  */
-export async function getAccessibleStories(): Promise<Story[]> {
+export async function getAccessibleStories(): Promise<ServerActionResult<{stories: Story[]}>> {
   return await measureAsync('actions.stories.getAccessibleStories', async () => {
     const requestId = uuidv4()
     try {
@@ -751,7 +765,11 @@ export async function getAccessibleStories(): Promise<Story[]> {
           error: error.message,
           status: error.status
         })
-        return []
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch accessible stories',
+          data: { stories: [] }
+        }
       }
       
       const stories = data?.stories || []
@@ -762,7 +780,12 @@ export async function getAccessibleStories(): Promise<Story[]> {
         storiesCount: stories.length
       })
       
-      return stories as Story[]
+      return {
+        success: true,
+        data: {
+          stories: stories as Story[]
+        }
+      }
     } catch (error) {
       logger.error({
         msg: 'Failed to fetch accessible stories',
@@ -773,7 +796,11 @@ export async function getAccessibleStories(): Promise<Story[]> {
           name: error.name
         } : String(error)
       })
-      return []
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch accessible stories',
+        data: { stories: [] }
+      }
     }
   })
 } 

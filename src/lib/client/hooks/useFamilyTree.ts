@@ -1,85 +1,43 @@
 import { useCallback, useState } from 'react'
 import { toast } from '@/components/ui/use-toast'
-import { useAuth } from './useAuth'
+import { useAuth } from '@/components/auth/AuthContext'
 import {
-  createFamilyTree,
-  updateFamilyTree,
-  deleteFamilyTree,
-  addMember,
-  getFamilyTree,
-  getUserFamilyTrees,
-} from '@/app/actions/family-tree'
+  FamilyTree,
+  createFamilyTree as apiCreateFamilyTree,
+  updateFamilyTree as apiUpdateFamilyTree,
+  deleteFamilyTree as apiDeleteFamilyTree,
+  addMember as apiAddMember,
+  getFamilyTree as apiGetFamilyTree,
+  getUserFamilyTrees as apiGetUserFamilyTrees,
+  PrivacyLevel,
+  MemberRole
+} from '@/lib/api/familyTreeApi'
 
 // MARK: - Types
-export type FamilyMember = {
-  id: string
-  full_name: string
-  avatar_url?: string
-  role: 'admin' | 'editor' | 'viewer'
-}
-
-export type FamilyTree = {
-  id: string
-  name: string
-  description?: string
-  owner_id: string
-  created_at: string
-  updated_at: string
-  privacy_level: 'private' | 'shared' | 'public'
-  owner: {
-    id: string
-    full_name: string
-    avatar_url?: string
-  }
-  members: {
-    user: {
-      id: string
-      full_name: string
-      avatar_url?: string
-    }
-    role: 'admin' | 'editor' | 'viewer'
-  }[]
-}
+export type { FamilyTree, MemberRole, PrivacyLevel } from '@/lib/api/familyTreeApi'
 
 type CreateFamilyTreeData = {
   name: string
   description?: string
-  privacyLevel: 'private' | 'shared' | 'public'
+  privacyLevel: PrivacyLevel
 }
 
 type UpdateFamilyTreeData = {
   id: string
   name?: string
   description?: string
-  privacyLevel?: 'private' | 'shared' | 'public'
+  privacyLevel?: PrivacyLevel
 }
 
 type AddMemberData = {
   familyTreeId: string
   email: string
-  role: 'viewer' | 'editor' | 'admin'
-}
-
-type FamilyTreeResponse = {
-  role: 'admin' | 'editor' | 'viewer'
-  family_tree: {
-    id: string
-    name: string
-    description: string | null
-    privacy_level: 'private' | 'shared' | 'public'
-    owner: {
-      id: string
-      full_name: string
-      avatar_url: string | null
-    }
-    created_at: string
-    updated_at: string
-  }
+  role: MemberRole
 }
 
 // MARK: - Hook
 export function useFamilyTree() {
-  const { user } = useAuth()
+  const { currentUser: user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [trees, setTrees] = useState<FamilyTree[]>([])
   const [currentTree, setCurrentTree] = useState<FamilyTree | null>(null)
@@ -97,13 +55,13 @@ export function useFamilyTree() {
 
     setLoading(true)
     try {
-      const result = await createFamilyTree({
+      const result = await apiCreateFamilyTree({
         name: data.name,
         description: data.description,
         privacyLevel: data.privacyLevel,
       })
       
-      if ('error' in result) {
+      if (result.error) {
         throw new Error(result.error)
       }
 
@@ -137,9 +95,9 @@ export function useFamilyTree() {
 
     setLoading(true)
     try {
-      const result = await updateFamilyTree({ id, ...data })
+      const result = await apiUpdateFamilyTree({ id, ...data })
       
-      if ('error' in result) {
+      if (result.error) {
         throw new Error(result.error)
       }
 
@@ -148,7 +106,7 @@ export function useFamilyTree() {
         description: 'Family tree updated successfully.',
       })
 
-      if (currentTree?.id === id) {
+      if (currentTree?.id === id && result.familyTree) {
         setCurrentTree(result.familyTree)
       }
       return result.familyTree
@@ -176,9 +134,9 @@ export function useFamilyTree() {
 
     setLoading(true)
     try {
-      const result = await deleteFamilyTree(id)
+      const result = await apiDeleteFamilyTree(id)
       
-      if ('error' in result) {
+      if (result.error) {
         throw new Error(result.error)
       }
 
@@ -214,13 +172,13 @@ export function useFamilyTree() {
 
     setLoading(true)
     try {
-      const result = await addMember({
+      const result = await apiAddMember({
         familyTreeId: data.familyTreeId,
         email: data.email,
         role: data.role,
       })
       
-      if ('error' in result) {
+      if (result.error) {
         throw new Error(result.error)
       }
 
@@ -228,12 +186,15 @@ export function useFamilyTree() {
         title: 'Success!',
         description: 'Invitation sent successfully.',
       })
+      
+      return { success: true }
     } catch (error) {
       toast({
         variant: 'destructive',
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to invite member',
       })
+      return { success: false }
     } finally {
       setLoading(false)
     }
@@ -251,13 +212,15 @@ export function useFamilyTree() {
 
     setLoading(true)
     try {
-      const result = await getFamilyTree(id)
+      const result = await apiGetFamilyTree(id)
       
-      if ('error' in result) {
+      if (result.error) {
         throw new Error(result.error)
       }
 
-      setCurrentTree(result.familyTree)
+      if (result.familyTree) {
+        setCurrentTree(result.familyTree)
+      }
       return result.familyTree
     } catch (error) {
       toast({
@@ -278,47 +241,21 @@ export function useFamilyTree() {
         title: 'Error',
         description: 'You must be logged in to view family trees',
       })
-      return
+      return []
     }
 
     setLoading(true)
     try {
-      const result = await getUserFamilyTrees()
+      const result = await apiGetUserFamilyTrees()
       
-      if ('error' in result) {
+      if (result.error) {
         throw new Error(result.error)
       }
 
-      // Transform the data structure
-      const transformedTrees: FamilyTree[] = (result.familyTrees || [])
-        .filter((item): item is { role: string; family_tree: any } => (
-          item &&
-          typeof item === 'object' &&
-          'family_tree' in item &&
-          item.family_tree &&
-          typeof item.family_tree === 'object'
-        ))
-        .map(item => {
-          const tree = item.family_tree
-          return {
-            id: String(tree.id),
-            name: String(tree.name),
-            description: tree.description ? String(tree.description) : undefined,
-            owner_id: String(tree.owner?.id),
-            created_at: String(tree.created_at),
-            updated_at: String(tree.updated_at),
-            privacy_level: (tree.privacy_level || 'private') as 'private' | 'shared' | 'public',
-            owner: {
-              id: String(tree.owner?.id),
-              full_name: String(tree.owner?.full_name),
-              avatar_url: tree.owner?.avatar_url ? String(tree.owner.avatar_url) : undefined,
-            },
-            members: [], // We'll load members when viewing a specific tree
-          }
-        })
-
-      setTrees(transformedTrees)
-      return transformedTrees
+      const familyTrees = result.familyTrees || []
+      setTrees(familyTrees)
+      
+      return familyTrees
     } catch (error) {
       toast({
         variant: 'destructive',

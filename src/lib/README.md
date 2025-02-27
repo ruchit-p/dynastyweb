@@ -177,7 +177,7 @@ The `client/` directory contains code specifically for browser environments. Thi
 ```typescript
 // Client-side imports
 import { supabaseBrowser } from '@/lib/client/supabase-browser'
-import { useAuth } from '@/lib/client/hooks/useAuth'
+import { useAuth } from '@/components/auth'
 import { useStories } from '@/lib/client/hooks/useStories'
 ```
 
