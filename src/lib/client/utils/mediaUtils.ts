@@ -1,55 +1,68 @@
 import { toast } from '@/components/ui/use-toast'
-import { uploadFile, processMedia as processMediaAction, uploadAndProcessMedia, deleteFile } from '@/app/actions/storage'
 import { StorageBucket } from '@/lib/shared/types/storage'
+import { 
+  uploadFile, 
+  deleteFile, 
+  uploadAndProcessMedia
+} from '@/lib/client/services/storage'
+import { createLogger } from '@/lib/client/logger'
+import { callEdgeFunction } from '@/lib/api-client'
+
+// Create a logger for media utilities
+const mediaLogger = createLogger('mediaUtils')
 
 // MARK: - Types
-interface MediaProcessingOptions {
-  resize?: {
-    width?: number
-    height?: number
-    fit?: 'cover' | 'contain' | 'fill'
-  }
-  compress?: {
-    quality?: number
-    format?: 'jpeg' | 'webp' | 'png'
-  }
-  metadata?: Record<string, string>
-}
 
-interface UploadOptions {
-  bucket?: StorageBucket
-  path?: string
-  processOptions?: MediaProcessingOptions
-  onProgress?: (progress: number) => void
+// Type for tracking upload progress
+export type UploadProgressCallback = (progress: number) => void
+
+// Type for upload options
+export interface UploadOptions {
+  bucket?: StorageBucket;
+  path?: string;
+  processOptions?: {
+    resize?: {
+      width?: number;
+      height?: number;
+      quality?: number;
+    };
+    compress?: {
+      quality?: number;
+      format?: string;
+    };
+  };
+  onProgress?: UploadProgressCallback;
 }
 
 // MARK: - Media Operations
 export async function uploadMedia(
   file: File,
-  options: UploadOptions = {}
+  options?: UploadOptions
 ): Promise<string> {
-  const {
-    bucket = 'media',
-    path = '',
-    processOptions,
-    onProgress
-  } = options
+  const { bucket = 'media', path, processOptions, onProgress } = options || {};
 
   try {
-    // If progress tracking is needed, we need to use FormData with fetch 
-    // that uses the upload and process server action
+    mediaLogger.debug('Uploading media', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      bucket,
+      path,
+      hasProcessOptions: !!processOptions
+    });
+
+    // If progress tracking is requested, simulate progress
     if (onProgress) {
-      // This progress tracking approach requires custom implementation
-      // with fetch and FormData, not using the server action directly
+      // Need to track progress, let's simulate it while the upload happens
+      onProgress(0);
       
-      // For now, simulating progress with timeouts
+      let currentStep = 1;
+      const totalSteps = 10;
+      
       const simulateProgress = () => {
-        const steps = [10, 30, 50, 70, 90, 100];
-        let currentStep = 0;
-        
         const interval = setInterval(() => {
-          if (currentStep < steps.length) {
-            onProgress(steps[currentStep]);
+          if (currentStep < totalSteps) {
+            onProgress(Math.min(95, (currentStep / totalSteps) * 100));
             currentStep++;
           } else {
             clearInterval(interval);
@@ -61,40 +74,29 @@ export async function uploadMedia(
       
       const stopSimulation = simulateProgress();
 
-      // Use server action for actual upload
+      // Use storage service for actual upload
       if (processOptions) {
-        // Convert process options to operations format
-        const operations = [];
-        
-        if (processOptions.resize) {
-          operations.push({
-            type: 'resize' as const,
-            params: processOptions.resize
-          });
-        }
-        
-        if (processOptions.compress) {
-          operations.push({
-            type: 'compress' as const,
-            params: processOptions.compress
-          });
-        }
-        
+        // Convert process options to storage service format
         const result = await uploadAndProcessMedia({
           file,
           bucket,
           path,
-          operations
+          processOptions: {
+            type: 'image',
+            quality: processOptions.compress?.quality ? 
+              (processOptions.compress.quality > 80 ? 'high' : 
+               processOptions.compress.quality > 50 ? 'medium' : 'low') : 'medium',
+            maxWidth: processOptions.resize?.width,
+            maxHeight: processOptions.resize?.height,
+            format: processOptions.compress?.format,
+            stripMetadata: true,
+          }
         });
         
         stopSimulation();
         onProgress(100);
         
-        if (!result.success || !result.data) {
-          throw new Error(result.error || 'Failed to upload and process media');
-        }
-        
-        return result.data.processedUrl || result.data.url;
+        return result.processedUrl || result.url;
       } else {
         const result = await uploadFile({
           file,
@@ -105,44 +107,29 @@ export async function uploadMedia(
         stopSimulation();
         onProgress(100);
         
-        if (!result.success || !result.data) {
-          throw new Error(result.error || 'Failed to upload media');
-        }
-        
-        return result.data.url;
+        return result.url;
       }
     } else {
-      // Without progress tracking, use server actions directly
+      // Without progress tracking, use storage service directly
       if (processOptions) {
-        // Convert process options to operations format
-        const operations = [];
-        
-        if (processOptions.resize) {
-          operations.push({
-            type: 'resize' as const,
-            params: processOptions.resize
-          });
-        }
-        
-        if (processOptions.compress) {
-          operations.push({
-            type: 'compress' as const,
-            params: processOptions.compress
-          });
-        }
-        
+        // Convert process options to storage service format
         const result = await uploadAndProcessMedia({
           file,
           bucket,
           path,
-          operations
+          processOptions: {
+            type: 'image',
+            quality: processOptions.compress?.quality ? 
+              (processOptions.compress.quality > 80 ? 'high' : 
+               processOptions.compress.quality > 50 ? 'medium' : 'low') : 'medium',
+            maxWidth: processOptions.resize?.width,
+            maxHeight: processOptions.resize?.height,
+            format: processOptions.compress?.format,
+            stripMetadata: true,
+          }
         });
         
-        if (!result.success || !result.data) {
-          throw new Error(result.error || 'Failed to upload and process media');
-        }
-        
-        return result.data.processedUrl || result.data.url;
+        return result.processedUrl || result.url;
       } else {
         const result = await uploadFile({
           file,
@@ -150,93 +137,146 @@ export async function uploadMedia(
           path
         });
         
-        if (!result.success || !result.data) {
-          throw new Error(result.error || 'Failed to upload media');
-        }
-        
-        return result.data.url;
+        return result.url;
       }
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to upload media';
-    toast({
-      variant: 'destructive',
-      title: 'Error',
-      description: errorMessage,
-    });
-    throw error;
-  }
-}
-
-export async function deleteMedia(url: string, bucket: StorageBucket = 'media'): Promise<void> {
-  try {
-    const path = url.split('/').pop();
-    if (!path) throw new Error('Invalid media URL');
-
-    // Use the server action instead of fetch
-    const result = await deleteFile({
-      bucket,
-      paths: [path]
+    mediaLogger.error('Error uploading media', {
+      fileName: file.name,
+      fileSize: file.size,
+      error: error instanceof Error ? error.message : String(error)
     });
     
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to delete media');
-    }
-
     toast({
-      title: 'Success!',
-      description: 'Media deleted successfully.',
+      variant: "destructive",
+      title: "Failed to upload media",
+      description: error instanceof Error ? error.message : String(error),
     });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to delete media';
-    toast({
-      variant: 'destructive',
-      title: 'Error',
-      description: errorMessage,
-    });
+    
     throw error;
   }
 }
 
+/**
+ * Delete media from a bucket
+ * @param url The URL of the media to delete
+ * @param bucket The bucket to delete from (default: 'media')
+ * @returns true if successful, throws an error otherwise
+ */
+export async function deleteMedia(url: string, bucket: StorageBucket = 'media'): Promise<boolean> {
+  try {
+    // Extract the media path from the URL
+    const urlObj = new URL(url);
+    const pathname = urlObj.pathname;
+    
+    // Find the part after /storage/v1/object/public/{bucket}/
+    const parts = pathname.split('/');
+    const bucketParts = parts.findIndex(p => p === bucket);
+    
+    if (bucketParts === -1) {
+      throw new Error('Invalid media URL, could not extract media path');
+    }
+    
+    const mediaPath = parts.slice(bucketParts + 1).join('/');
+    
+    if (!mediaPath) {
+      throw new Error('Invalid media URL, could not extract media path');
+    }
+    
+    // Delete the file using the storage service
+    await deleteFile({
+      url,
+      bucket
+    });
+    
+    toast({
+      title: "Media deleted",
+      description: "The media has been successfully deleted",
+    });
+    
+    return true;
+  } catch (error) {
+    mediaLogger.error('Error deleting media', {
+      url,
+      bucket,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    
+    toast({
+      variant: "destructive",
+      title: "Failed to delete media",
+      description: error instanceof Error ? error.message : String(error),
+    });
+    
+    throw error;
+  }
+}
+
+/**
+ * Process media with various operations
+ * @param url The URL of the media to process
+ * @param options The processing options
+ * @returns The URL of the processed media
+ */
 export async function processMedia(
   url: string,
-  options: MediaProcessingOptions
+  options: {
+    resize?: {
+      width?: number;
+      height?: number;
+      quality?: number;
+    };
+    compress?: {
+      quality?: number;
+      format?: string;
+    };
+  }
 ): Promise<string> {
   try {
-    // Convert options to operations
-    const operations = [];
-    
-    if (options.resize) {
-      operations.push({
-        type: 'resize' as const,
-        params: options.resize
-      });
-    }
-    
-    if (options.compress) {
-      operations.push({
-        type: 'compress' as const,
-        params: options.compress
-      });
-    }
-    
-    const result = await processMediaAction({
+    mediaLogger.debug('Processing media', {
       url,
-      operations
+      hasResizeOptions: !!options.resize,
+      hasCompressOptions: !!options.compress
     });
     
-    if (!result.success || !result.data) {
-      throw new Error(result.error || 'Failed to process media');
+    // Call the Edge Function through the API client
+    const response = await callEdgeFunction<{ processedUrl?: string }>(
+      'process-media',
+      'POST',
+      {
+        url,
+        options: {
+          type: 'image',
+          params: {
+            quality: options.compress?.quality ? 
+              (options.compress.quality > 80 ? 'high' : 
+               options.compress.quality > 50 ? 'medium' : 'low') : 'medium',
+            width: options.resize?.width,
+            height: options.resize?.height,
+            format: options.compress?.format,
+            stripMetadata: true
+          }
+        }
+      }
+    );
+    
+    if (response.error) {
+      throw new Error(response.error.message || 'Failed to process media');
     }
     
-    return result.data.processedUrl;
+    return response.data?.processedUrl || url;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to process media';
-    toast({
-      variant: 'destructive',
-      title: 'Error',
-      description: errorMessage,
+    mediaLogger.error('Error processing media', {
+      url,
+      error: error instanceof Error ? error.message : String(error)
     });
+    
+    toast({
+      variant: "destructive",
+      title: "Failed to process media",
+      description: error instanceof Error ? error.message : String(error),
+    });
+    
     throw error;
   }
 }

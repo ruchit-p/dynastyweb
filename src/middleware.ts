@@ -15,26 +15,6 @@ const PROTECTED_ROUTES = [
 // Auth routes that should redirect to family tree if already authenticated
 const AUTH_ROUTES = ['/login', '/signup']
 
-// Public routes accessible to all users
-const PUBLIC_ROUTES = [
-  '/login',
-  '/signup',
-  '/verify-email',
-  '/reset-password',
-  '/api',
-  '/_next',
-]
-
-// Private routes requiring authentication
-const PRIVATE_ROUTES = [
-  '/family-tree',
-  '/history-book',
-  '/feed',
-  '/create-story',
-  '/account-settings',
-  '/story',
-]
-
 // This function can be marked `async` if using `await` inside
 export async function middleware(request: NextRequest) {
   const startTime = Date.now()
@@ -45,252 +25,93 @@ export async function middleware(request: NextRequest) {
   })
 
   // Create a response object to modify
-  let supabaseResponse = NextResponse.next({
+  const response = NextResponse.next({
     request,
   })
 
   // Create a Supabase client configured for middleware
-  // The session is automatically refreshed by the Supabase SDK if it's expired
-  // Note: @supabase/ssr automatically refreshes access tokens when they expire (autoRefreshToken is true by default)
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
-          const cookies = request.cookies.getAll()
-          logger.debug({
-            msg: 'Getting all cookies in middleware',
-            cookies: cookies.map(c => c.name)
-          })
-          return cookies
+          return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          // First set the cookies on the request
-          cookiesToSet.forEach(({ name, value }) => {
-            request.cookies.set(name, value)
-          })
-          
-          // Create a fresh response and set cookies there too
-          supabaseResponse = NextResponse.next({
-            request,
-          })
-          
           // Apply each cookie to the response
           cookiesToSet.forEach(({ name, value, options }) => {
-            logger.debug({
-              msg: 'Setting cookie in middleware',
-              cookie: name
-            })
-            supabaseResponse.cookies.set(name, value, options)
+            response.cookies.set(name, value, options)
           })
         },
       },
-      // Explicitly set auth options to ensure token refresh behavior
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true
-      }
     }
   )
 
   // Check if we have a session
-  // This will automatically refresh the access token if it's expired
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-
-  // Log session status
-  if (sessionError) {
-    logger.error({
-      msg: 'Error getting session in middleware',
-      error: {
-        message: sessionError.message,
-        name: sessionError.name,
-        stack: sessionError.stack
-      }
-    })
-  }
-  
-  // Log token expiry info for debugging
-  if (session && session.expires_at) {
-    const expiresAt = session.expires_at;
-    const now = Math.floor(Date.now() / 1000);
-    const expiresIn = expiresAt - now;
-    
-    logger.debug({
-      msg: 'Token expiry info',
-      expiresIn: `${expiresIn} seconds`,
-      expiresAt: new Date(expiresAt * 1000).toISOString(),
-      now: new Date(now * 1000).toISOString(),
-      tokenRefreshed: expiresIn < 3600, // Token was refreshed if expiry is more than an hour away
-    });
-  }
+  const { data: { session } } = await supabase.auth.getSession()
   
   try {
-    if (session) {
-      // If we have a valid session
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      const userId = user?.id || null
-      const email = user?.email || null
-      const emailConfirmed = user?.email_confirmed_at ? 'yes' : 'no'
-
-      logger.debug({
-        msg: 'Session check in middleware',
-        hasSession: !!session,
-        hasUser: !!user,
-        userId,
-        email: email ? `${email.substring(0, 3)}***@${email.split('@')[1]}` : null, // Partial email for privacy
-        emailConfirmed,
-      })
-
-      // For public routes that don't need auth, e.g., login page
-      if (PUBLIC_ROUTES.some((route: string) => request.nextUrl.pathname.startsWith(route))) {
-        // If user is logged in, redirect to home page or dashboard
-        if (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup') {
-          logger.info({
-            msg: 'Redirecting authenticated user from auth page',
-            from: request.nextUrl.pathname,
-            to: '/family-tree',
-            userId
-          })
-          return NextResponse.redirect(new URL('/family-tree', request.url))
-        }
-      }
-
-      // Check if we're accessing auth pages (login/signup)
-      const isAuthPage = AUTH_ROUTES.some(route => 
-        request.nextUrl.pathname === route
-      );
-      
-      logger.debug({
-        msg: 'Auth page check',
-        isAuthPage,
-        path: request.nextUrl.pathname
-      })
-
-      if (isAuthPage) {
-        if (user) {
-          logger.debug({
-            msg: 'Auth page access with active session',
-            hasUser: !!user,
-            emailConfirmed: !!user?.email_confirmed_at,
-            userId
-          })
-          
-          if (user?.email_confirmed_at) {
-            logger.info({
-              msg: 'Redirecting authenticated user to family tree',
-              from: request.nextUrl.pathname,
-              userId
-            })
-            const redirectUrl = new URL('/family-tree', request.url);
-            return NextResponse.redirect(redirectUrl);
-          } else {
-            logger.info({
-              msg: 'Redirecting unverified user to verification page',
-              from: request.nextUrl.pathname,
-              userId
-            })
-            const redirectUrl = new URL('/verify-email', request.url);
-            return NextResponse.redirect(redirectUrl);
-          }
-        }
-        return supabaseResponse;
-      }
-
-      // Check if we're accessing the verify-email page
-      if (request.nextUrl.pathname === '/verify-email') {
-        logger.debug({
-          msg: 'Verify email page access',
-          path: request.nextUrl.pathname
-        })
-        
-        if (!user) {
-          logger.info({
-            msg: 'No session for verify-email page, redirecting to login'
-          })
-          const redirectUrl = new URL('/login', request.url);
-          return NextResponse.redirect(redirectUrl);
-        }
-
-        logger.debug({
-          msg: 'Verify email user check',
-          hasUser: !!user,
-          emailConfirmed: !!user?.email_confirmed_at,
-          userId
-        })
-        
-        if (user?.email_confirmed_at) {
-          logger.info({
-            msg: 'Email already verified, redirecting to family tree',
-            userId
-          })
-          const redirectUrl = new URL('/family-tree', request.url);
-          return NextResponse.redirect(redirectUrl);
-        }
-
-        return supabaseResponse;
-      }
-
-      // Check if the path is protected
-      const isProtectedPath = PROTECTED_ROUTES.some(route => 
-        request.nextUrl.pathname.startsWith(route)
-      );
-      
-      logger.debug({
-        msg: 'Protected route check',
-        isProtectedPath,
-        path: request.nextUrl.pathname
-      })
-
-      if (isProtectedPath) {
-        if (!user) {
-          logger.info({
-            msg: 'No session for protected route, redirecting to login',
-            path: request.nextUrl.pathname
-          })
-          // Store the current URL as the redirect target
-          const redirectUrl = new URL('/login', request.url);
-          redirectUrl.searchParams.set('redirect', request.nextUrl.pathname);
-          return NextResponse.redirect(redirectUrl);
-        }
-
-        logger.debug({
-          msg: 'Protected route user check',
-          hasUser: !!user,
-          emailConfirmed: !!user?.email_confirmed_at,
-          userId
-        })
-        
-        if (!user?.email_confirmed_at) {
-          logger.info({
-            msg: 'Email not verified for protected route, redirecting to verification',
-            path: request.nextUrl.pathname,
-            userId
-          })
-          const redirectUrl = new URL('/verify-email', request.url);
-          return NextResponse.redirect(redirectUrl);
-        }
-      }
-    } else {
-      // No session found
-      logger.debug({
-        msg: 'No session found in middleware'
-      })
-
-      // Check if the request is for a private route
-      if (PRIVATE_ROUTES.some((route: string) => request.nextUrl.pathname.startsWith(route))) {
+    // Get user if session exists
+    const user = session?.user || null
+    const isAuthenticated = !!session
+    const isEmailVerified = user?.email_confirmed_at ? true : false
+    
+    // Current path
+    const path = request.nextUrl.pathname
+    
+    // Handle auth routes (login/signup)
+    if (AUTH_ROUTES.includes(path)) {
+      if (isAuthenticated && isEmailVerified) {
         logger.info({
-          msg: 'Redirecting unauthenticated user to login',
-          path: request.nextUrl.pathname
+          msg: 'Redirecting authenticated user from auth page',
+          from: path,
+          to: '/family-tree',
+          userId: user?.id
         })
-        // Redirect to login page
+        return NextResponse.redirect(new URL('/family-tree', request.url))
+      }
+      
+      if (isAuthenticated && !isEmailVerified) {
+        logger.info({
+          msg: 'Redirecting unverified user to verification page',
+          from: path,
+          userId: user?.id
+        })
+        return NextResponse.redirect(new URL('/verify-email', request.url))
+      }
+    }
+    
+    // Handle verify-email page
+    if (path === '/verify-email') {
+      if (!isAuthenticated) {
+        return NextResponse.redirect(new URL('/login', request.url))
+      }
+      
+      if (isEmailVerified) {
+        return NextResponse.redirect(new URL('/family-tree', request.url))
+      }
+    }
+    
+    // Handle protected routes
+    if (PROTECTED_ROUTES.some(route => path.startsWith(route))) {
+      if (!isAuthenticated) {
+        logger.info({
+          msg: 'No session for protected route, redirecting to login',
+          path
+        })
         const redirectUrl = new URL('/login', request.url)
-        redirectUrl.searchParams.set('redirect', request.nextUrl.pathname)
+        redirectUrl.searchParams.set('redirect', path)
         return NextResponse.redirect(redirectUrl)
+      }
+      
+      if (!isEmailVerified) {
+        logger.info({
+          msg: 'Email not verified for protected route, redirecting to verification',
+          path,
+          userId: user?.id
+        })
+        return NextResponse.redirect(new URL('/verify-email', request.url))
       }
     }
   } catch (error) {
@@ -312,8 +133,7 @@ export async function middleware(request: NextRequest) {
     executionTime: `${executionTime}ms`,
   })
 
-  // Return the response with the cookies
-  return supabaseResponse
+  return response
 }
 
 export const config = {

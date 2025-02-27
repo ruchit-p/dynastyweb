@@ -2,8 +2,9 @@
 
 import { useRef, useState } from 'react'
 import { toast } from '@/components/ui/use-toast'
-import { uploadFile, type UploadResult } from '@/app/actions/storage'
+import { uploadFile } from '@/lib/client/services/storage'
 import { StorageBucket } from '@/lib/shared/types/storage'
+import { createClient } from '@/lib/supabase'
 
 // MARK: - Types
 export type MediaUploadProps = {
@@ -59,7 +60,7 @@ function getMediaType(file: File): 'image' | 'video' | 'audio' | null {
 
 // Get processing parameters based on quality setting
 function getProcessingParams(mediaType: 'image' | 'video' | 'audio', quality: 'high' | 'medium' | 'low', maxWidth?: number, maxHeight?: number) {
-  const params: any = {};
+  const params: Record<string, unknown> = {};
   
   if (mediaType === 'image') {
     params.format = 'webp'; // WebP for best compression/quality ratio
@@ -204,11 +205,8 @@ export default function MediaUpload({
       clearInterval(progressInterval);
       setUploadProgress(100);
 
-      if (result.error) {
-        throw new Error(result.error)
-      }
-      
-      const url = result.data?.url || '';
+      // Get the URL from the result
+      const url = result.url || '';
       if (!url) {
         throw new Error('Failed to get upload URL')
       }
@@ -219,14 +217,25 @@ export default function MediaUpload({
         try {
           setProcessingMedia(true);
           
-          // Call the new process-media function with the appropriate parameters
+          // Call the Edge Function for media processing
           const fileType = mediaType || 'image'; // Default to image if type is 'all' and couldn't determine
           const processingParams = getProcessingParams(fileType, quality, maxWidth, maxHeight);
           
-          const { data, error } = await window.fetch('/api/process-media', {
+          // Get auth token for edge function call
+          const supabase = createClient()
+          const { data: { session } } = await supabase.auth.getSession()
+          const token = session?.access_token
+
+          // Prepare Edge Function URL
+          const FUNCTIONS_URL = process.env.NEXT_PUBLIC_SUPABASE_URL 
+            ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/process-media`
+            : ''
+          
+          const response = await fetch(FUNCTIONS_URL, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
             },
             body: JSON.stringify({
               url,
@@ -235,21 +244,22 @@ export default function MediaUpload({
                 params: processingParams
               }
             })
-          }).then(res => res.json());
+          });
           
-          if (error) {
-            console.error('Media processing error:', error);
-            // Continue with original URL on processing error
-          } else if (data && data.processedUrl) {
-            finalUrl = data.processedUrl;
-            
-            // Show compression stats if available
-            if (data.compressionRatio) {
-              toast({
-                title: 'Media processed',
-                description: `Compressed by ${data.compressionRatio}`,
-              });
-            }
+          const result = await response.json();
+          
+          if (!response.ok || result.error) {
+            throw new Error(result.error?.message || 'Failed to process media');
+          }
+          
+          finalUrl = result.data?.processedUrl || url;
+          
+          // Show compression stats if available
+          if (result.data?.compressionRatio) {
+            toast({
+              title: 'Media processed',
+              description: `Compressed by ${result.data.compressionRatio}`,
+            });
           }
         } catch (processError) {
           console.error('Failed to process media:', processError);
@@ -269,11 +279,11 @@ export default function MediaUpload({
       }
 
       onFileSelect(finalUrl);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: 'destructive',
         title: 'Upload Error',
-        description: error.message || 'Failed to upload file'
+        description: error instanceof Error ? error.message : 'Failed to upload file'
       })
     } finally {
       setIsUploading(false)

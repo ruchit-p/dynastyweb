@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { toast } from '@/components/ui/use-toast'
+import { createClient } from '@/lib/supabase'
 
 export type MediaType = 'image' | 'video' | 'audio'
 export type QualityLevel = 'high' | 'medium' | 'low'
@@ -13,7 +14,7 @@ export type ProcessMediaOptions = {
   maxHeight?: number
   format?: string
   stripMetadata?: boolean
-  customParams?: Record<string, any>
+  customParams?: Record<string, unknown>
 }
 
 export type ProcessMediaResult = {
@@ -54,11 +55,22 @@ export function useMediaProcessor() {
         })
       }, 500)
 
-      // Call the API
-      const response = await fetch('/api/process-media', {
+      // Get auth token for edge function call
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
+      // Prepare Edge Function URL
+      const FUNCTIONS_URL = process.env.NEXT_PUBLIC_SUPABASE_URL 
+        ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/process-media`
+        : ''
+      
+      // Call the Edge Function
+      const response = await fetch(FUNCTIONS_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
           url,
@@ -82,18 +94,19 @@ export function useMediaProcessor() {
       const result = await response.json()
 
       if (!response.ok || result.error) {
-        throw new Error(result.error || 'Failed to process media')
+        throw new Error(result.error?.message || 'Failed to process media')
       }
 
       return result.data || { processedUrl: url }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Media processing error:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to process media'
       toast({
         variant: 'destructive',
         title: 'Processing Error',
-        description: error.message || 'Failed to process media',
+        description: errorMessage,
       })
-      return { processedUrl: url, error: error.message }
+      return { processedUrl: url, error: errorMessage }
     } finally {
       setIsProcessing(false)
       setProgress(0)

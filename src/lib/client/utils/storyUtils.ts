@@ -1,9 +1,9 @@
-import { createStory, updateStory, deleteStory, getUserStories, getAccessibleStories } from '@/app/actions/stories'
-import { createLogger } from '@/lib/client/logger'
 import type { Story } from '@/lib/shared/types/story'
+import { createLogger } from '@/lib/client/logger'
+import { callEdgeFunction } from '@/lib/api-client'
 
 // Create a logger for story utilities
-const logger = createLogger('storyUtils')
+const storyLogger = createLogger('storyUtils')
 
 // MARK: - Story Validation
 export function validateStoryInput(story: Partial<Story>): string[] {
@@ -13,134 +13,190 @@ export function validateStoryInput(story: Partial<Story>): string[] {
     errors.push('Title is required')
   }
 
-  if (!story.family_tree_id && !story.familyTreeId) {
-    errors.push('Family tree ID is required')
-  }
-
-  if ((story.privacy === 'custom' || story.privacy_level === 'custom') && 
-      (!story.custom_access_members?.length && !story.customAccessMembers?.length)) {
-    errors.push('Custom access members are required for custom privacy')
-  }
-
-  if (story.blocks?.some(block => !block.type || !block.content)) {
-    errors.push('All story blocks must have a type and content')
-  }
-
   return errors
 }
 
 // MARK: - Story Formatting
-export function formatStoryDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+export function formatStoryDate(date?: string): string {
+  if (!date) return ''
+  
+  try {
+    return new Date(date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+  } catch (error) {
+    return date
+  }
 }
 
-// MARK: - Story Privacy
-export function canAccessStory(story: Story, userId: string, familyTreeId?: string): boolean {
-  const storyAuthorId = story.authorID || story.user_id
-  const storyPrivacy = story.privacy || story.privacy_level
-  const storyFamilyTreeId = story.familyTreeId || story.family_tree_id
-  const storyCustomMembers = story.customAccessMembers || story.custom_access_members || []
+// MARK: - Story Access
+export function canAccessStory(story: Story, userId: string): boolean {
+  // The author of the story always has access
+  if (story.user_id === userId || story.authorID === userId) return true
   
-  if (storyAuthorId === userId) return true
-  if (storyPrivacy === 'family' && storyFamilyTreeId === familyTreeId) return true
-  if (storyPrivacy === 'custom' && storyCustomMembers.includes(userId)) return true
+  // For family privacy, everyone with access to the family can see
+  if (story.privacy_level === 'family' || story.privacy === 'family') return true
+  
+  // For personal stories, only the author can see
+  if (story.privacy_level === 'personal' || story.privacy === 'personal') return false
+  
+  // For custom access, check if user is in the custom access list
+  if (story.privacy_level === 'custom' || story.privacy === 'custom') {
+    const members = story.custom_access_members || story.customAccessMembers || []
+    return members.includes(userId)
+  }
+  
   return false
 }
 
-// MARK: - Story Content
+// MARK: - Story Preview
 export function extractStoryPreview(story: Story): string {
-  if (!story.blocks || story.blocks.length === 0) return ''
+  // If there's content, extract the first 150 characters
+  if (story.content) {
+    return story.content.substring(0, 150) + (story.content.length > 150 ? '...' : '')
+  }
   
-  const textBlock = story.blocks.find(block => block.type === 'text')
-  if (!textBlock) return ''
+  // If there are blocks, find the first text block and extract from that
+  if (story.blocks && story.blocks.length > 0) {
+    const textBlock = story.blocks.find(block => block.type === 'text')
+    if (textBlock && textBlock.content) {
+      return textBlock.content.substring(0, 150) + (textBlock.content.length > 150 ? '...' : '')
+    }
+  }
   
-  const text = textBlock.content
-  const maxLength = 150
-  if (text.length <= maxLength) return text
-  
-  return text.substring(0, maxLength) + '...'
+  return 'No preview available'
 }
 
+// MARK: - Story Media
 export function getStoryMedia(story: Story): string[] {
-  if (!story.blocks) return []
+  const media: string[] = []
   
-  return story.blocks
-    .filter(block => ['image', 'video', 'audio'].includes(block.type))
-    .map(block => block.content)
+  // If there are explicit media URLs, use those
+  if (story.media_urls && story.media_urls.length > 0) {
+    return story.media_urls
+  }
+  
+  // Otherwise, extract media from blocks
+  if (story.blocks && story.blocks.length > 0) {
+    story.blocks.forEach(block => {
+      if (block.type === 'image' || block.type === 'video') {
+        media.push(block.content)
+      }
+    })
+  }
+  
+  return media
 }
 
-// MARK: - Story Sorting
-export function sortStoriesByDate(stories: Story[], ascending = false): Story[] {
+// MARK: - Story Filtering and Sorting
+export function sortStoriesByDate(stories: Story[], order: 'asc' | 'desc' = 'desc'): Story[] {
   return [...stories].sort((a, b) => {
-    const dateA = new Date(a.created_at || a.createdAt || '').getTime()
-    const dateB = new Date(b.created_at || b.createdAt || '').getTime()
-    return ascending ? dateA - dateB : dateB - dateA
+    const dateA = a.event_date || a.eventDate || a.created_at
+    const dateB = b.event_date || b.eventDate || b.created_at
+    
+    if (order === 'asc') {
+      return new Date(dateA).getTime() - new Date(dateB).getTime()
+    } else {
+      return new Date(dateB).getTime() - new Date(dateA).getTime()
+    }
   })
 }
 
-// MARK: - Story Filtering
-export function filterStoriesByDateRange(stories: Story[], startDate: Date, endDate: Date): Story[] {
+export function filterStoriesByDateRange(
+  stories: Story[], 
+  startDate?: Date, 
+  endDate?: Date
+): Story[] {
+  if (!startDate && !endDate) return stories
+  
   return stories.filter(story => {
-    const storyDate = new Date(story.created_at || story.createdAt || '')
-    return storyDate >= startDate && storyDate <= endDate
+    const storyDate = new Date(story.event_date || story.eventDate || story.created_at)
+    
+    if (startDate && endDate) {
+      return storyDate >= startDate && storyDate <= endDate
+    } else if (startDate) {
+      return storyDate >= startDate
+    } else if (endDate) {
+      return storyDate <= endDate
+    }
+    
+    return true
   })
 }
 
 export function filterStoriesByAuthor(stories: Story[], authorId: string): Story[] {
   return stories.filter(story => 
-    (story.authorID === authorId) || (story.user_id === authorId)
+    story.user_id === authorId || story.authorID === authorId
   )
 }
 
-export function filterStoriesByPrivacy(stories: Story[], privacy: 'family' | 'personal' | 'custom'): Story[] {
+export function filterStoriesByPrivacy(
+  stories: Story[], 
+  privacy: 'family' | 'personal' | 'custom'
+): Story[] {
   return stories.filter(story => 
-    (story.privacy === privacy) || (story.privacy_level === privacy)
+    story.privacy_level === privacy || story.privacy === privacy
   )
 }
 
-// MARK: - Story Search
 export function searchStories(stories: Story[], query: string): Story[] {
-  const searchTerm = query.toLowerCase()
-  return stories.filter(story => 
-    story.title.toLowerCase().includes(searchTerm) ||
-    (story.blocks?.some(block => 
-      block.type === 'text' && block.content.toLowerCase().includes(searchTerm)
-    ))
-  )
+  if (!query.trim()) return stories
+  
+  const lowerQuery = query.toLowerCase()
+  
+  return stories.filter(story => {
+    // Search in title and subtitle
+    if (story.title.toLowerCase().includes(lowerQuery)) return true
+    if (story.subtitle && story.subtitle.toLowerCase().includes(lowerQuery)) return true
+    
+    // Search in content
+    if (story.content && story.content.toLowerCase().includes(lowerQuery)) return true
+    
+    // Search in blocks
+    if (story.blocks && story.blocks.length > 0) {
+      return story.blocks.some(block => 
+        block.type === 'text' && block.content.toLowerCase().includes(lowerQuery)
+      )
+    }
+    
+    return false
+  })
 }
 
 // MARK: - Story Actions
 export async function fetchUserStories(): Promise<Story[]> {
   try {
-    const result = await getUserStories();
-    if (!result.success || !result.data) {
-      throw new Error(result.error || 'Failed to fetch user stories');
+    const response = await callEdgeFunction('/stories/user')
+    
+    if (!response.data) {
+      throw new Error('Failed to fetch user stories')
     }
-    return result.data.stories as Story[];
+    
+    return response.data.stories
   } catch (error) {
-    logger.error('Error fetching user stories', {
+    storyLogger.error('Error fetching user stories', {
       error: error instanceof Error ? error.message : String(error)
-    });
-    return [];
+    })
+    return []
   }
 }
 
 export async function fetchAccessibleStories(): Promise<Story[]> {
   try {
-    const result = await getAccessibleStories();
-    if (!result.success || !result.data) {
-      throw new Error(result.error || 'Failed to fetch accessible stories');
+    const response = await callEdgeFunction('/stories/accessible')
+    
+    if (!response.data) {
+      throw new Error('Failed to fetch accessible stories')
     }
-    return result.data.stories as Story[];
+    
+    return response.data.stories
   } catch (error) {
-    logger.error('Error fetching accessible stories', {
+    storyLogger.error('Error fetching accessible stories', {
       error: error instanceof Error ? error.message : String(error)
-    });
-    return [];
+    })
+    return []
   }
 }
 
@@ -148,67 +204,65 @@ type ActionResult<T> = { success: true; story: T } | { success: false; error: st
 
 export async function createNewStory(storyData: Partial<Story>): Promise<ActionResult<Story>> {
   try {
-    logger.debug('Creating new story', {
+    storyLogger.debug('Creating new story', {
       title: storyData.title,
       authorId: storyData.user_id || storyData.authorID,
       privacy: storyData.privacy || storyData.privacy_level,
       blocksCount: storyData.blocks?.length
     })
     
-    // Create a FormData object for the server action
-    const formData = new FormData()
-    formData.append('title', storyData.title || '')
-    formData.append('subtitle', storyData.subtitle || '')
+    // Create a request body for the API
+    const requestBody: Record<string, unknown> = {
+      title: storyData.title || '',
+      subtitle: storyData.subtitle || '',
+    }
     
     if (storyData.id) {
-      formData.append('id', storyData.id)
+      requestBody.id = storyData.id
     }
     
     if (storyData.event_date || storyData.eventDate) {
-      const eventDate = storyData.event_date || storyData.eventDate || '';
-      formData.append('event_date', eventDate);
+      requestBody.event_date = storyData.event_date || storyData.eventDate
     }
     
     if (storyData.location) {
-      const locationValue = typeof storyData.location === 'string' 
+      requestBody.location = typeof storyData.location === 'string' 
         ? storyData.location 
-        : JSON.stringify(storyData.location);
-      formData.append('location', locationValue);
+        : JSON.stringify(storyData.location)
     }
     
-    formData.append('privacy', storyData.privacy || storyData.privacy_level || 'family')
+    requestBody.privacy = storyData.privacy || storyData.privacy_level || 'family'
     
     if (storyData.custom_access_members?.length || storyData.customAccessMembers?.length) {
-      const members = storyData.custom_access_members || storyData.customAccessMembers || [];
-      formData.append('custom_access_members', JSON.stringify(members));
+      requestBody.custom_access_members = storyData.custom_access_members || storyData.customAccessMembers
     }
     
     if (storyData.blocks?.length) {
-      formData.append('blocks', JSON.stringify(storyData.blocks));
+      requestBody.blocks = storyData.blocks
     }
     
-    const familyTreeId = storyData.family_tree_id || storyData.familyTreeId || '';
-    formData.append('family_tree_id', familyTreeId);
+    requestBody.family_tree_id = storyData.family_tree_id || storyData.familyTreeId || ''
     
     if (storyData.people_involved?.length || storyData.peopleInvolved?.length) {
-      const people = storyData.people_involved || storyData.peopleInvolved || [];
-      formData.append('people_involved', JSON.stringify(people));
+      requestBody.people_involved = storyData.people_involved || storyData.peopleInvolved
     }
     
-    const response = await createStory(formData)
+    const response = await callEdgeFunction('/stories', requestBody)
     
-    if (response.success && response.data?.story) {
-      logger.info('Story created successfully', { 
+    if (response.data?.story) {
+      storyLogger.info('Story created successfully', {
         storyId: response.data.story.id,
         authorId: storyData.user_id || storyData.authorID
       })
       return { success: true, story: response.data.story }
     }
     
-    logger.warn('Failed to create story', { error: response.error || 'Unknown error' })
-    return { success: false, error: response.error || 'Failed to create story' }
+    storyLogger.warn('Failed to create story', {
+      error: response.error || 'Unknown error'
+    })
+    return { success: false, error: response.error?.message || 'Failed to create story' }
   } catch (error) {
-    logger.error('Error creating story', {
+    storyLogger.error('Error creating story', {
       title: storyData.title,
       authorId: storyData.user_id || storyData.authorID,
       error: error instanceof Error ? error.message : String(error)
@@ -222,68 +276,66 @@ export async function createNewStory(storyData: Partial<Story>): Promise<ActionR
 
 export async function updateExistingStory(storyData: Partial<Story> & { id: string }): Promise<ActionResult<Story>> {
   try {
-    logger.debug('Updating story', {
+    storyLogger.debug('Updating story', {
       storyId: storyData.id,
       title: storyData.title
     })
     
-    // Create a FormData object for the server action
-    const formData = new FormData()
-    formData.append('id', storyData.id)
+    // Create a request body for the API
+    const requestBody: Record<string, unknown> = {
+      id: storyData.id
+    }
     
     if (storyData.title) {
-      formData.append('title', storyData.title)
+      requestBody.title = storyData.title
     }
     
     if (storyData.subtitle) {
-      formData.append('subtitle', storyData.subtitle)
+      requestBody.subtitle = storyData.subtitle
     }
     
     if (storyData.event_date || storyData.eventDate) {
-      const eventDate = storyData.event_date || storyData.eventDate || '';
-      formData.append('event_date', eventDate);
+      requestBody.event_date = storyData.event_date || storyData.eventDate
     }
     
     if (storyData.location) {
-      const locationValue = typeof storyData.location === 'string' 
+      requestBody.location = typeof storyData.location === 'string' 
         ? storyData.location 
-        : JSON.stringify(storyData.location);
-      formData.append('location', locationValue);
+        : JSON.stringify(storyData.location)
     }
     
     if (storyData.privacy || storyData.privacy_level) {
-      const privacy = storyData.privacy || storyData.privacy_level || 'family';
-      formData.append('privacy', privacy);
+      requestBody.privacy = storyData.privacy || storyData.privacy_level
     }
     
     if (storyData.custom_access_members?.length || storyData.customAccessMembers?.length) {
-      const members = storyData.custom_access_members || storyData.customAccessMembers || [];
-      formData.append('custom_access_members', JSON.stringify(members));
+      requestBody.custom_access_members = storyData.custom_access_members || storyData.customAccessMembers
     }
     
     if (storyData.blocks?.length) {
-      formData.append('blocks', JSON.stringify(storyData.blocks));
+      requestBody.blocks = storyData.blocks
     }
     
     if (storyData.people_involved?.length || storyData.peopleInvolved?.length) {
-      const people = storyData.people_involved || storyData.peopleInvolved || [];
-      formData.append('people_involved', JSON.stringify(people));
+      requestBody.people_involved = storyData.people_involved || storyData.peopleInvolved
     }
     
-    const response = await updateStory(formData)
+    const response = await callEdgeFunction(`/stories/${storyData.id}`, requestBody)
     
-    if (response.success && response.data?.story) {
-      logger.info('Story updated successfully', { storyId: storyData.id })
+    if (response.data?.story) {
+      storyLogger.info('Story updated successfully', {
+        storyId: storyData.id
+      })
       return { success: true, story: response.data.story }
     }
     
-    logger.warn('Failed to update story', { 
-      storyId: storyData.id, 
+    storyLogger.warn('Failed to update story', {
+      storyId: storyData.id,
       error: response.error || 'Unknown error'
     })
-    return { success: false, error: response.error || 'Failed to update story' }
+    return { success: false, error: response.error?.message || 'Failed to update story' }
   } catch (error) {
-    logger.error('Error updating story', {
+    storyLogger.error('Error updating story', {
       storyId: storyData.id,
       error: error instanceof Error ? error.message : String(error)
     })
@@ -296,29 +348,29 @@ export async function updateExistingStory(storyData: Partial<Story> & { id: stri
 
 export async function removeStory(storyId: string): Promise<ActionResult<undefined>> {
   try {
-    logger.debug('Removing story', { storyId })
+    storyLogger.debug('Removing story', {
+      storyId
+    })
     
-    // Create a FormData object for the server action
-    const formData = new FormData()
-    formData.append('id', storyId)
+    const response = await callEdgeFunction(`/stories/${storyId}`)
     
-    const response = await deleteStory(formData)
-    
-    if (response.success) {
-      logger.info('Story deleted successfully', { storyId })
+    if (!response.error) {
+      storyLogger.info('Story deleted successfully', {
+        storyId
+      })
       return { success: true, story: undefined }
     }
     
-    logger.warn('Failed to delete story', { 
-      storyId, 
+    storyLogger.warn('Failed to delete story', {
+      storyId,
       error: response.error || 'Unknown error'
     })
     return { 
       success: false, 
-      error: response.error || 'Failed to delete story'
+      error: response.error?.message || 'Failed to delete story'
     }
   } catch (error) {
-    logger.error('Error deleting story', {
+    storyLogger.error('Error deleting story', {
       storyId,
       error: error instanceof Error ? error.message : String(error)
     })

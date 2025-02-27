@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/client/supabase-browser';
 import { Button } from '@/components/ui/button';
-import { signOut } from '@/app/actions/auth';
 import { toast } from '@/components/ui/use-toast';
 import { User } from '@supabase/supabase-js';
+import { authService } from '@/lib/client/services/auth';
 
 interface AuthStatusProps {
   className?: string;
@@ -62,7 +62,7 @@ export default function AuthStatus({
 
   const handleSignOut = async () => {
     try {
-      const result = await signOut();
+      const result = await authService.signOut();
       
       if (result.error) {
         toast({

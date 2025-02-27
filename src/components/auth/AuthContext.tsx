@@ -5,17 +5,12 @@ import { useRouter } from 'next/navigation'
 import type { User, Session } from '@supabase/supabase-js'
 import { toast } from '@/components/ui/use-toast'
 import { 
-  signUp, 
-  signOut, 
-  resetPassword, 
-  verifyInvitation,
-  signUpWithInvitation,
+  authService,
   type SignUpData,
   type InvitedSignUpData,
   type VerifyInvitationResult,
   type SignInData,
-  signIn
-} from '@/app/actions/auth'
+} from '@/lib/client/services/auth'
 import { showVerificationToast } from '@/components/VerificationToast'
 import { createClient } from '@/lib/client/supabase-browser'
 import { createLogger } from '@/lib/client/logger'
@@ -330,47 +325,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * @param data - Sign up data
    */
   const handleSignUp = async (data: SignUpData): Promise<AuthResponse> => {
+    setLoading(true)
+
     try {
       logger.debug('Signing up user', { email: data.email })
       
-      const result = await signUp(data)
+      const result = await authService.signUp(data)
       
       if (result.error) {
-        logger.error('Sign up error', {
+        logger.error('Sign up error', { 
           error: result.error.message,
           code: result.error.code
         })
-        toast({
-          title: 'Unable to sign up',
-          description: result.error.message,
-          variant: 'destructive',
-        })
-      } else if (result.needsEmailVerification) {
-        logger.info('Sign up successful, email verification required', { 
-          email: data.email 
-        })
-        toast({
-          title: 'Verification required',
-          description: 'We sent you an email with a verification link. Please check your inbox.',
-        })
+        
+        return {
+          success: false,
+          error: {
+            message: result.error.message
+          }
+        }
       }
       
-      return result
-    } catch (err) {
-      const error = err as AuthError
-      logger.error('Unexpected sign up error', {
-        error: error.message,
-        code: error.code,
-        stack: err instanceof Error ? err.stack : undefined
+      // For Edge Functions, we need to determine verification status differently
+      // Check if the response indicates email verification is needed
+      const needsEmailVerification = true // Edge Functions always require email verification
+      
+      if (needsEmailVerification) {
+        logger.debug('Email verification required')
+        showVerificationToast()
+      }
+      
+      return {
+        success: true,
+        needsEmailVerification
+      }
+    } catch (error) {
+      logger.error('Unexpected sign up error', { 
+        error: error instanceof Error ? error.message : String(error)
       })
       
-      toast({
-        title: 'Error',
-        description: error.message || 'An unexpected error occurred during sign up.',
-        variant: 'destructive',
-      })
-      
-      throw error
+      return {
+        success: false,
+        error: {
+          message: 'An unexpected error occurred during sign up.'
+        }
+      }
+    } finally {
+      setLoading(false)
     }
   }
   
@@ -382,7 +383,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       logger.debug('Signing up invited user', { email: data.email, invitationId: data.invitationId })
       
-      const result = await signUpWithInvitation(data)
+      const result = await authService.signUpWithInvitation(data)
       
       if (result.error) {
         logger.error('Invited sign up error', {
@@ -429,7 +430,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       logger.debug('Verifying invitation', { invitationId })
       
-      const result = await verifyInvitation(token, invitationId)
+      const result = await authService.verifyInvitation(token, invitationId)
       
       if (result.error) {
         logger.error('Invitation verification error', {
@@ -474,7 +475,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       logger.debug('Logging in user', { email: data.email })
       
-      const result = await signIn(data)
+      const result = await authService.signIn(data)
       
       if (result.error) {
         logger.error('Login error', {
@@ -520,7 +521,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       logger.debug('Logging out user', { userId: user?.id })
       
-      const result = await signOut()
+      const result = await authService.signOut()
       
       if (result.error) {
         logger.error('Logout error', {
@@ -562,7 +563,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       logger.debug('Requesting password reset', { email })
       
-      const result = await resetPassword(email)
+      const result = await authService.resetPassword(email)
       
       if (result.error) {
         logger.error('Password reset error', {

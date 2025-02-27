@@ -5,7 +5,6 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { supabaseBrowser } from '@/lib/client/supabase-browser'
-import { signOut } from '@/app/actions/auth'
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -15,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Bell, Settings, LogOut, Plus, BookOpen, Users, Home, PenSquare } from "lucide-react"
+import { authService } from '@/lib/client/services/auth'
 
 interface User {
   profile_picture: string | null
@@ -66,8 +66,8 @@ export default function Navbar({ user }: NavbarProps) {
 
   const handleSignOut = async () => {
     try {
-      // Use the server action instead of direct client auth
-      const result = await signOut()
+      // Use the client-side auth service instead of server action
+      const result = await authService.signOut()
       if (result.error) throw result.error
       router.push("/login")
     } catch (error) {
