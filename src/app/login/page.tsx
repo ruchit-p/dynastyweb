@@ -7,9 +7,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from "@/components/ui/use-toast"
 import { logger } from "@/lib/logger"
 import { v4 as uuidv4 } from "uuid"
-import { signIn } from "@/app/actions/auth"
+import { useAuth } from "@/components/auth/AuthContext"
 import AuthForm, { LOGIN_FIELDS } from "@/components/auth/AuthForm"
-import { AuthError } from "@supabase/supabase-js"
 
 const showVerificationToast = () => {
   toast({
@@ -21,7 +20,7 @@ const showVerificationToast = () => {
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get('redirect') || '/family-tree';
+  const auth = useAuth();
   const [requestId] = useState(() => uuidv4());
 
   useEffect(() => {
@@ -42,57 +41,26 @@ export default function LoginPage() {
     };
   }, [requestId]);
 
-  const handleSubmit = async (formData: Record<string, string>) => {
-    // Log login attempt with masked email for privacy
-    logger.info({
-      msg: 'Login attempt',
-      component: 'login-page',
-      requestId,
-      email: formData.email.replace(/(.{3})(.*)(@.*)/, '$1***$3') // Mask email for privacy
-    });
-
+  const handleSubmit = async (formData: Record<string, unknown>) => {
     try {
-      const result = await signIn({
-        email: formData.email,
-        password: formData.password
+      // Log login attempt with masked email for privacy
+      logger.info({
+        msg: 'Login attempt',
+        component: 'login-page',
+        requestId,
+        email: String(formData.email).replace(/(.{3})(.*)(@.*)/, '$1***$3') // Mask email for privacy
       });
       
-      if (result.error) {
-        throw result.error;
-      }
+      // Call the login method from AuthContext
+      await auth.login({
+        email: String(formData.email),
+        password: String(formData.password)
+      }, searchParams.get('redirect') || '/family-tree');
       
-      if (result.user) {
-        if (!result.user.email_confirmed_at) {
-          logger.info({
-            msg: 'Email not confirmed, redirecting to verification page',
-            component: 'login-page',
-            requestId,
-            email: formData.email.replace(/(.{3})(.*)(@.*)/, '$1***$3') // Mask email for privacy
-          });
-          
-          router.push('/verify-email');
-          showVerificationToast();
-          return { needsEmailVerification: true };
-        } else {
-          logger.info({
-            msg: 'Login successful, redirecting to destination',
-            component: 'login-page',
-            requestId,
-            userId: result.user.id,
-            redirectPath: redirect
-          });
-          
-          router.push(redirect);
-          toast({
-            title: 'Welcome back!',
-            description: 'Successfully logged in.',
-          });
-          return { success: true, redirectTo: redirect };
-        }
-      }
-      
+      // If we get here, login was successful (auth.login handles redirects)
       return { success: true };
-    } catch (error) {
+    } catch (error: unknown) {
+      // Handle specific error cases
       logger.error({
         msg: 'Login failed',
         component: 'login-page',
@@ -101,25 +69,40 @@ export default function LoginPage() {
           message: error.message,
           name: error.name
         } : String(error),
-        email: formData.email.replace(/(.{3})(.*)(@.*)/, '$1***$3') // Mask email for privacy
       });
       
-      const authError = error as AuthError;
-      if (authError.code === 'email_not_confirmed') {
+      const err = error as { message?: string };
+      
+      if (err.message?.includes('Invalid login credentials')) {
+        toast({
+          title: 'Login failed',
+          description: 'Invalid email or password. Please try again.',
+          variant: 'destructive',
+        });
+        return {
+          error: {
+            message: 'Invalid email or password. Please try again.'
+          }
+        };
+      } else if (err.message?.includes('Email not confirmed')) {
         showVerificationToast();
-        return { 
-          error: { 
-            message: 'Please verify your email first', 
-            code: 'email_not_confirmed' 
+        router.push('/verify-email');
+        return {
+          error: {
+            message: 'Please verify your email first'
           },
           needsEmailVerification: true
         };
       } else {
-        return { 
-          error: { 
-            message: authError.message || 'Invalid email or password',
-            code: authError.code 
-          } 
+        toast({
+          title: 'Login failed',
+          description: err.message || 'An error occurred during sign in.',
+          variant: 'destructive',
+        });
+        return {
+          error: {
+            message: err.message || 'An error occurred during sign in.'
+          }
         };
       }
     }

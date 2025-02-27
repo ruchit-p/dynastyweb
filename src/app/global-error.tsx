@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import { handleError } from '@/lib/error-handler';
 
 export default function GlobalError({
@@ -11,7 +12,8 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Log the error using our error handler
+    // Log the error using our error handler and capture in Sentry
+    Sentry.captureException(error);
     handleError(error, {
       component: 'GlobalError',
       digest: error.digest,
@@ -24,7 +26,7 @@ export default function GlobalError({
       <body>
         <div className="error-container">
           <h2>Something went wrong!</h2>
-          <p>We've logged this error and will work on fixing it.</p>
+          <p>We&apos;ve logged this error and will work on fixing it.</p>
           <button
             onClick={() => reset()}
             className="px-4 py-2 mt-4 text-white bg-blue-500 rounded hover:bg-blue-600"

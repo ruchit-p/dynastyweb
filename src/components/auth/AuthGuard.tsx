@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { createClient } from '@/lib/client/supabase-browser';
+import { createClient } from '@/lib/supabase';
 
 interface AuthGuardProps {
   children: React.ReactNode;

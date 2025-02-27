@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from "@/components/ui/use-toast"
 import { logger } from "@/lib/logger"
 import { v4 as uuidv4 } from "uuid"
-import { signUp } from "@/app/actions/auth"
+import { useAuth } from "@/components/auth/AuthContext"
 import { AuthField } from "@/components/auth/AuthForm"
 import AuthForm from "@/components/auth/AuthForm"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,31 @@ import { Loader2 } from "lucide-react"
 import { DateOfBirthPicker } from "@/components/ui/date-of-birth-picker"
 import { GenderSelect } from "@/components/ui/gender-select"
 import { Input } from "@/components/ui/input"
+import { Calendar } from "@/components/ui/calendar"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { useToast } from "@/components/ui/use-toast"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { cn } from "@/lib/utils"
+import { format } from "date-fns"
+import { CalendarDaysIcon } from "lucide-react"
+import React from "react"
+import { useForm } from "react-hook-form"
+import { generateRequestId } from "@/lib/client/utils/request-id"
 
 // Custom signup fields specific to this application
 const CUSTOM_SIGNUP_FIELDS: AuthField[] = [
@@ -71,6 +96,7 @@ const CUSTOM_SIGNUP_FIELDS: AuthField[] = [
 
 export default function SignupPage() {
   const router = useRouter()
+  const auth = useAuth()
   const [requestId] = useState(() => uuidv4())
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
@@ -126,8 +152,8 @@ export default function SignupPage() {
 
       setIsSubmitting(true);
       
-      // Use server action to sign up
-      const result = await signUp({
+      // Use Auth Context to sign up
+      const result = await auth.signUp({
         email: formValues.email as string,
         password: formValues.password as string,
         firstName: formValues.firstName as string,

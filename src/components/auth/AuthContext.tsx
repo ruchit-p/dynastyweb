@@ -12,7 +12,7 @@ import {
   type SignInData,
 } from '@/lib/client/services/auth'
 import { showVerificationToast } from '@/components/VerificationToast'
-import { createClient } from '@/lib/client/supabase-browser'
+import { createClient } from '@/lib/supabase'
 import { createLogger } from '@/lib/client/logger'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { AuthResponse } from './AuthForm'
