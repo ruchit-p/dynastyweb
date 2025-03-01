@@ -74,10 +74,25 @@ export class SettingsManager {
       this.debounceTimeout = setTimeout(async () => {
         try {
           const docRef = doc(db, "userSettings", userId)
-          await setDoc(docRef, {
-            ...settings,
+          
+          // Create a clean settings object for Firestore
+          // This ensures we don't have any undefined values that could cause issues
+          const cleanSettings = {
+            notifications: {
+              pushEnabled: settings.notifications.pushEnabled ?? defaultSettings.notifications.pushEnabled,
+              emailEnabled: settings.notifications.emailEnabled ?? defaultSettings.notifications.emailEnabled,
+              newMessageEnabled: settings.notifications.newMessageEnabled ?? defaultSettings.notifications.newMessageEnabled,
+              friendRequestsEnabled: settings.notifications.friendRequestsEnabled ?? defaultSettings.notifications.friendRequestsEnabled,
+              eventRemindersEnabled: settings.notifications.eventRemindersEnabled ?? defaultSettings.notifications.eventRemindersEnabled,
+            },
+            privacy: {
+              locationEnabled: settings.privacy.locationEnabled ?? defaultSettings.privacy.locationEnabled,
+              dataRetention: settings.privacy.dataRetention ?? defaultSettings.privacy.dataRetention,
+            },
             updatedAt: serverTimestamp(),
-          })
+          }
+          
+          await setDoc(docRef, cleanSettings)
           resolve()
         } catch (error) {
           console.error("Error saving settings:", error)
