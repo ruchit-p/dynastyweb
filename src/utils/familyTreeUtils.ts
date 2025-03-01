@@ -123,7 +123,6 @@ export const addMemberToTree = async (
       throw new Error('Only admins can add members to the tree');
     }
 
-    // Add member to appropriate arrays
     const updateData: Partial<FamilyTree> = {
       memberUserIds: [...new Set([...treeData.memberUserIds, userId])],
       updatedAt: serverTimestamp(),
@@ -133,6 +132,13 @@ export const addMemberToTree = async (
     if (isAdmin) {
       updateData.adminUserIds = [...new Set([...treeData.adminUserIds, userId])];
     }
+
+    // Remove any undefined values
+    Object.keys(updateData).forEach((key) => {
+      if (updateData[key as keyof typeof updateData] === undefined) {
+        delete updateData[key as keyof typeof updateData];
+      }
+    });
 
     await updateDoc(treeRef, updateData);
   } catch (error) {
@@ -165,11 +171,20 @@ export const updateTreeName = async (
       throw new Error('Only admins can update the tree name');
     }
 
-    await updateDoc(treeRef, {
+    const updateData: Partial<FamilyTree> = {
       treeName: newName,
       updatedAt: serverTimestamp(),
       lastUpdatedBy: currentUserId
+    };
+
+    // Remove any undefined values
+    Object.keys(updateData).forEach((key) => {
+      if (updateData[key as keyof typeof updateData] === undefined) {
+        delete updateData[key as keyof typeof updateData];
+      }
     });
+
+    await updateDoc(treeRef, updateData);
   } catch (error) {
     console.error('Error updating family tree name:', error);
     throw error;
@@ -200,13 +215,21 @@ export const removeMemberFromTree = async (
       throw new Error('Only admins can remove members from the tree');
     }
 
-    // Remove member from both arrays
-    await updateDoc(treeRef, {
+    const updateData: Partial<FamilyTree> = {
       memberUserIds: treeData.memberUserIds.filter(id => id !== userId),
       adminUserIds: treeData.adminUserIds.filter(id => id !== userId),
       updatedAt: serverTimestamp(),
       lastUpdatedBy: currentUserId
+    };
+
+    // Remove any undefined values
+    Object.keys(updateData).forEach((key) => {
+      if (updateData[key as keyof typeof updateData] === undefined) {
+        delete updateData[key as keyof typeof updateData];
+      }
     });
+
+    await updateDoc(treeRef, updateData);
   } catch (error) {
     console.error('Error removing member from family tree:', error);
     throw error;

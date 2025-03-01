@@ -62,16 +62,23 @@ export default function PersonalInformationPage() {
         profilePictureUrl = await getDownloadURL(storageRef)
       }
 
-      // Update Firestore document
-      const userRef = doc(db, "users", currentUser.uid)
-      await updateDoc(userRef, {
+      // Prepare update data
+      const updateData: any = {
         firstName: formData.firstName,
         lastName: formData.lastName,
         phoneNumber: formData.phoneNumber,
         displayName: `${formData.firstName} ${formData.lastName}`.trim(),
-        profilePicture: profilePictureUrl,
         updatedAt: serverTimestamp(),
-      })
+      }
+
+      // Only include profilePicture if it's not undefined
+      if (profilePictureUrl !== undefined) {
+        updateData.profilePicture = profilePictureUrl;
+      }
+
+      // Update Firestore document
+      const userRef = doc(db, "users", currentUser.uid)
+      await updateDoc(userRef, updateData)
 
       // Refresh Firestore user data
       await refreshFirestoreUser()
