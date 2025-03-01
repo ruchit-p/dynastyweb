@@ -156,7 +156,7 @@ export const createStory = async (storyData: {
 }) => {
   try {
     // Try callable function first
-    const functionRef = httpsCallable(functions, 'createStory');
+    const functionRef = httpsCallable(functions, 'createStoryHttp');
     const result = await functionRef(storyData);
     return result.data as { id: string };
   } catch (error) {

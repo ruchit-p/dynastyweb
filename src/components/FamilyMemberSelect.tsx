@@ -92,7 +92,7 @@ export function FamilyMemberSelect({
     } finally {
       setLoading(false);
     }
-  }, [currentUser, removeCurrentUserFromSelection, selectedMembers]);
+  }, [currentUser, removeCurrentUserFromSelection, selectedMembers, onMemberSelect]);
 
   useEffect(() => {
     void fetchFamilyMembers();
