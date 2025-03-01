@@ -48,89 +48,22 @@ export const updateFamilyRelationships = async (
 export const getAccessibleStories = async (userId: string, familyTreeId: string) => {
   try {
     // Try callable function first
-    const functionRef = httpsCallable(functions, 'getAccessibleStories');
+    const functionRef = httpsCallable(functions, 'getAccessibleStoriesHttp');
     const result = await functionRef({ userId, familyTreeId });
     return result.data as { stories: EnrichedStory[] };
   } catch (error) {
     console.warn('[getAccessibleStories] Callable function failed, trying HTTP endpoint:', error);
-    
-    // Fallback to HTTP endpoint
-    try {
-      // Get the current user's ID token
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        throw new Error('User not authenticated');
-      }
-      
-      const idToken = await currentUser.getIdToken();
-      
-      // Construct the URL
-      const url = new URL(`https://${functions.region}-${functions.app.options.projectId}.cloudfunctions.net/getAccessibleStoriesHttp`);
-      url.searchParams.append('familyTreeId', familyTreeId);
-      
-      // Make the fetch request with Authorization header
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP request failed with status ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data as { stories: EnrichedStory[] };
-    } catch (httpError) {
-      console.error('[getAccessibleStories] HTTP endpoint also failed:', httpError);
-      throw httpError;
-    }
   }
 };
 
 export const getUserStories = async (userId: string) => {
   try {
     // Try callable function first
-    const functionRef = httpsCallable(functions, 'getUserStories');
+    const functionRef = httpsCallable(functions, 'getUserStoriesHttp');
     const result = await functionRef({ userId });
     return result.data as { stories: EnrichedStory[] };
   } catch (error) {
     console.warn('[getUserStories] Callable function failed, trying HTTP endpoint:', error);
-    
-    // Fallback to HTTP endpoint
-    try {
-      // Get the current user's ID token
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        throw new Error('User not authenticated');
-      }
-      
-      const idToken = await currentUser.getIdToken();
-      
-      // Construct the URL
-      const url = new URL(`https://${functions.region}-${functions.app.options.projectId}.cloudfunctions.net/getUserStoriesHttp`);
-      
-      // Make the fetch request with Authorization header
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP request failed with status ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data as { stories: EnrichedStory[] };
-    } catch (httpError) {
-      console.error('[getUserStories] HTTP endpoint also failed:', httpError);
-      throw httpError;
-    }
   }
 };
 
@@ -161,40 +94,6 @@ export const createStory = async (storyData: {
     return result.data as { id: string };
   } catch (error) {
     console.warn('[createStory] Callable function failed, trying HTTP endpoint:', error);
-    
-    // Fallback to HTTP endpoint
-    try {
-      // Get the current user's ID token
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        throw new Error('User not authenticated');
-      }
-      
-      const idToken = await currentUser.getIdToken();
-      
-      // Construct the URL
-      const url = new URL(`https://${functions.region}-${functions.app.options.projectId}.cloudfunctions.net/createStoryHttp`);
-      
-      // Make the fetch request with Authorization header
-      const response = await fetch(url.toString(), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(storyData),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP request failed with status ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data as { id: string };
-    } catch (httpError) {
-      console.error('[createStory] HTTP endpoint also failed:', httpError);
-      throw httpError;
-    }
   }
 };
 
@@ -222,90 +121,22 @@ export const updateStory = async (
 ) => {
   try {
     // Try callable function first
-    const functionRef = httpsCallable(functions, 'updateStory');
+    const functionRef = httpsCallable(functions, 'updateStoryHttp');
     const result = await functionRef({ storyId, userId, updates });
     return result.data as { success: boolean };
   } catch (error) {
     console.warn('[updateStory] Callable function failed, trying HTTP endpoint:', error);
-    
-    // Fallback to HTTP endpoint
-    try {
-      // Get the current user's ID token
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        throw new Error('User not authenticated');
-      }
-      
-      const idToken = await currentUser.getIdToken();
-      
-      // Construct the URL
-      const url = new URL(`https://${functions.region}-${functions.app.options.projectId}.cloudfunctions.net/updateStoryHttp`);
-      
-      // Make the fetch request with Authorization header
-      const response = await fetch(url.toString(), {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ storyId, userId, updates }),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP request failed with status ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data as { success: boolean };
-    } catch (httpError) {
-      console.error('[updateStory] HTTP endpoint also failed:', httpError);
-      throw httpError;
-    }
   }
 };
 
 export const deleteStory = async (storyId: string, userId: string) => {
   try {
     // Try callable function first
-    const functionRef = httpsCallable(functions, 'deleteStory');
+    const functionRef = httpsCallable(functions, 'deleteStoryHttp');
     const result = await functionRef({ storyId, userId });
     return result.data as { success: boolean };
   } catch (error) {
     console.warn('[deleteStory] Callable function failed, trying HTTP endpoint:', error);
-    
-    // Fallback to HTTP endpoint
-    try {
-      // Get the current user's ID token
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        throw new Error('User not authenticated');
-      }
-      
-      const idToken = await currentUser.getIdToken();
-      
-      // Construct the URL
-      const url = new URL(`https://${functions.region}-${functions.app.options.projectId}.cloudfunctions.net/deleteStoryHttp`);
-      url.searchParams.append('storyId', storyId);
-      
-      // Make the fetch request with Authorization header
-      const response = await fetch(url.toString(), {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP request failed with status ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data as { success: boolean };
-    } catch (httpError) {
-      console.error('[deleteStory] HTTP endpoint also failed:', httpError);
-      throw httpError;
-    }
   }
 };
 
