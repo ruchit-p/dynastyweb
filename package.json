@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev ",
     "dev:prod": "NODE_ENV=production next dev --turbopack",
-    "dev:emulator": "concurrently \"cd ../dynastyfirebase/functions && npm run build:watch\" \"cd ../dynastyfirebase && firebase emulators:start --import=./emulator-data --export-on-exit\" \"next dev --turbopack\"",
+    "dev:emulator": "concurrently \"cd ../dynastyfirebase/functions && npm run build:watch\" \"cd ../dynastyfirebase && firebase emulators:start --import=./emulator-data --export-on-exit\" \"next dev --turbopack\" --rules",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

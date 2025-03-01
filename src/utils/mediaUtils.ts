@@ -1,5 +1,6 @@
 import { storage } from '@/lib/firebase';
 import { ref, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
+import { getAuth } from 'firebase/auth';
 
 /**
  * Compresses an image by:
@@ -244,10 +245,19 @@ export const uploadMedia = async (
     const filename = `${type}_${Date.now()}_${Math.random().toString(36).substring(2)}.${extension}`;
     const storageRef = ref(storage, `stories/${storyId}/media/${filename}`);
 
+    // Get the current user
+    const auth = getAuth();
+    const userId = auth.currentUser?.uid;
+
     // Upload the compressed file with progress tracking
     return new Promise((resolve, reject) => {
       const uploadTask = uploadBytesResumable(storageRef, compressedBlob, {
-        contentType: contentType
+        contentType: contentType,
+        customMetadata: {
+          uploadedBy: userId || 'unknown',
+          storyId: storyId,
+          mediaType: type
+        }
       });
 
       uploadTask.on(

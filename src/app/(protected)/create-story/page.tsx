@@ -272,21 +272,22 @@ export default function CreateStoryPage() {
   }
 
   const handleLocationSelect = (loc: Location) => {
-    setLocation(loc)
-    setShowLocationPicker(false)
+    setLocation(loc);
+    // Close the location picker after a selection
+    toggleLocationPicker();
   }
 
-  // Toggle location picker with a slight delay to ensure proper mounting
+  // Toggle location picker with improved handling
   const toggleLocationPicker = () => {
     if (showLocationPicker) {
-      setShowLocationPicker(false)
+      setShowLocationPicker(false);
     } else {
-      // First update the key to force a re-render
-      setLocationPickerKey(prev => prev + 1)
-      // Then show the picker in the next frame
+      // Force a re-render with a new key before showing
+      setLocationPickerKey(prev => prev + 1);
+      // Show the picker in the next frame for smooth transition
       requestAnimationFrame(() => {
-        setShowLocationPicker(true)
-      })
+        setShowLocationPicker(true);
+      });
     }
   }
 
@@ -371,15 +372,16 @@ export default function CreateStoryPage() {
                     left: "0",
                     visibility: showLocationPicker ? "visible" : "hidden",
                     opacity: showLocationPicker ? "1" : "0",
-                    transition: "opacity 0.2s ease-in-out"
+                    transition: "opacity 0.3s ease-in-out, visibility 0.3s ease-in-out"
                   }}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <LocationPicker
                     key={locationPickerKey}
                     onLocationSelect={handleLocationSelect}
                     defaultLocation={userLocation || location}
                     isOpen={showLocationPicker}
-                    onClose={() => setShowLocationPicker(false)}
+                    onClose={toggleLocationPicker}
                   />
                 </div>
               )}

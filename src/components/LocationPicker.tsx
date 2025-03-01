@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
-import { Map as LeafletMap, Marker, LatLng, Icon } from "leaflet"
+import { Map as LeafletMap, Marker, Icon } from "leaflet"
 import "leaflet/dist/leaflet.css"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -20,7 +20,7 @@ interface SearchResult {
   display_name: string
 }
 
-// Chicago coordinates
+// Chicago coordinates as default fallback
 const CHICAGO_LOCATION = {
   lat: 41.8781,
   lng: -87.6298
@@ -38,20 +38,27 @@ const customIcon = new Icon({
 })
 
 export default function LocationPicker({ onLocationSelect, defaultLocation, isOpen, onClose }: LocationPickerProps) {
-  const [map, setMap] = useState<LeafletMap | null>(null)
+  // Core state
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [selectedLocation, setSelectedLocation] = useState(defaultLocation)
   const [isDraggingPin, setIsDraggingPin] = useState(false)
   const [isLoadingLocation, setIsLoadingLocation] = useState(false)
+  
+  // Refs
   const mapRef = useRef<HTMLDivElement>(null)
-  const markerRef = useRef<Marker | null>(null)
-  const dragPinRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [hasLocationPermission, setHasLocationPermission] = useState<boolean | null>(null)
+  const dragPinRef = useRef<SVGSVGElement>(null)
+  
+  // Map references - kept in refs to avoid re-renders
   const mapInstanceRef = useRef<LeafletMap | null>(null)
+  const markerRef = useRef<Marker | null>(null)
+  
+  const [hasLocationPermission, setHasLocationPermission] = useState<boolean | null>(null)
 
-  // Cleanup function to properly remove map and marker instances
+  // ===== CORE MAP FUNCTIONALITY =====
+
+  // Clean up map and marker instances to prevent memory leaks
   const cleanupMap = useCallback(() => {
     if (markerRef.current) {
       try {
@@ -64,47 +71,49 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
     
     if (mapInstanceRef.current) {
       try {
-        // Remove all event listeners
         mapInstanceRef.current.off();
-        // Remove the map instance
         mapInstanceRef.current.remove();
       } catch (error) {
         console.error("Error removing map:", error);
       }
       mapInstanceRef.current = null;
-      setMap(null);
     }
   }, []);
 
-  const updateMarker = useCallback((L: typeof import("leaflet"), location: { lat: number; lng: number }) => {
+  // Update the marker position on the map
+  const updateMarker = useCallback((location: { lat: number; lng: number }) => {
     if (!mapInstanceRef.current) return;
-
+    
+    const L = window.L; // Use global L that's already loaded
+    
     if (markerRef.current) {
       markerRef.current.setLatLng([location.lat, location.lng]);
     } else {
       markerRef.current = L.marker([location.lat, location.lng], { icon: customIcon })
         .addTo(mapInstanceRef.current);
     }
+    
     mapInstanceRef.current.setView([location.lat, location.lng], 13);
   }, []);
 
+  // Reverse geocode to get address from coordinates
   const reverseGeocode = useCallback(async (lat: number, lng: number) => {
     try {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
-      )
-      const data = await response.json()
-      const address = data.display_name
-      setSelectedLocation({ lat, lng, address })
-      onLocationSelect({ lat, lng, address })
+      );
+      const data = await response.json();
+      const address = data.display_name;
+      setSelectedLocation({ lat, lng, address });
+      onLocationSelect({ lat, lng, address });
     } catch (error) {
-      console.error("Error reverse geocoding:", error)
+      console.error("Error reverse geocoding:", error);
     }
   }, [onLocationSelect]);
 
   // Get user's location or fall back to Chicago
   const getUserLocation = useCallback(() => {
-    setIsLoadingLocation(true)
+    setIsLoadingLocation(true);
     
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -112,73 +121,41 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
           const userLocation = {
             lat: position.coords.latitude,
             lng: position.coords.longitude
-          }
+          };
           
-          // Update map with user's location
-          if (map) {
-            map.setView([userLocation.lat, userLocation.lng], 13)
-            import("leaflet").then((L) => {
-              updateMarker(L, userLocation)
-              reverseGeocode(userLocation.lat, userLocation.lng)
-            })
+          if (mapInstanceRef.current) {
+            updateMarker(userLocation);
+            reverseGeocode(userLocation.lat, userLocation.lng);
           }
-          setIsLoadingLocation(false)
+          setIsLoadingLocation(false);
         },
         (error) => {
-          console.log("Geolocation error or denied:", error)
-          // Fall back to Chicago if there's an error or permission denied
-          if (map) {
-            map.setView([CHICAGO_LOCATION.lat, CHICAGO_LOCATION.lng], 13)
-            import("leaflet").then((L) => {
-              updateMarker(L, CHICAGO_LOCATION)
-              reverseGeocode(CHICAGO_LOCATION.lat, CHICAGO_LOCATION.lng)
-            })
+          console.log("Geolocation error or denied:", error);
+          // Fall back to Chicago
+          if (mapInstanceRef.current) {
+            updateMarker(CHICAGO_LOCATION);
+            reverseGeocode(CHICAGO_LOCATION.lat, CHICAGO_LOCATION.lng);
           }
-          setIsLoadingLocation(false)
+          setIsLoadingLocation(false);
         }
-      )
+      );
     } else {
       // Fall back to Chicago if geolocation is not supported
-      if (map) {
-        map.setView([CHICAGO_LOCATION.lat, CHICAGO_LOCATION.lng], 13)
-        import("leaflet").then((L) => {
-          updateMarker(L, CHICAGO_LOCATION)
-          reverseGeocode(CHICAGO_LOCATION.lat, CHICAGO_LOCATION.lng)
-        })
+      if (mapInstanceRef.current) {
+        updateMarker(CHICAGO_LOCATION);
+        reverseGeocode(CHICAGO_LOCATION.lat, CHICAGO_LOCATION.lng);
       }
-      setIsLoadingLocation(false)
+      setIsLoadingLocation(false);
     }
-  }, [map, updateMarker, reverseGeocode]);
-
-  // Update selected location when defaultLocation changes
-  useEffect(() => {
-    if (!defaultLocation || !mapInstanceRef.current) return;
-    
-    setSelectedLocation(defaultLocation);
-    mapInstanceRef.current.setView([defaultLocation.lat, defaultLocation.lng], 13);
-    
-    if (markerRef.current) {
-      markerRef.current.setLatLng([defaultLocation.lat, defaultLocation.lng]);
-    } else {
-      import("leaflet").then((L) => {
-        if (mapInstanceRef.current) {
-          markerRef.current = L.marker([defaultLocation.lat, defaultLocation.lng], { icon: customIcon })
-            .addTo(mapInstanceRef.current);
-        }
-      });
-    }
-  }, [defaultLocation]);
+  }, [updateMarker, reverseGeocode]);
 
   // Check location permission status
   useEffect(() => {
+    if (!isOpen) return;
+    
     if ("permissions" in navigator) {
-      navigator.permissions.query({ name: "geolocation" }).then((result) => {
+      navigator.permissions.query({ name: "geolocation" as PermissionName }).then((result) => {
         setHasLocationPermission(result.state === "granted");
-        
-        // If permission is already granted, get location immediately
-        if (result.state === "granted" && !selectedLocation) {
-          getUserLocation();
-        }
         
         // Listen for permission changes
         result.addEventListener("change", () => {
@@ -186,206 +163,234 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
         });
       });
     }
-  }, [selectedLocation, getUserLocation]);
+  }, [isOpen]);
 
+  // Handle clicks outside the component
   useEffect(() => {
-    // Handle clicks outside the component
+    if (!isOpen) return;
+    
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        onClose()
+      if (
+        containerRef.current && 
+        !containerRef.current.contains(event.target as Node) &&
+        !(event.target as Element)?.closest('.leaflet-control') &&
+        !(event.target as Element)?.closest('.leaflet-popup')
+      ) {
+        onClose();
       }
     }
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside)
-    }
-
+    
+    // Delay adding the click handler to avoid immediate closure
+    const timer = setTimeout(() => {
+      document.addEventListener("mousedown", handleClickOutside);
+    }, 500);
+    
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-      cleanupMap()
-    }
-  }, [isOpen, onClose, cleanupMap]);
+      clearTimeout(timer);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen, onClose]);
 
-  // Initialize map when component is mounted and visible
+  // ===== MAP INITIALIZATION AND CLEANUP =====
+  
+  // Initialize and manage the Leaflet map
   useEffect(() => {
-    if (!mapRef.current || !isOpen) {
-      cleanupMap();
+    if (!isOpen || !mapRef.current) {
+      if (!isOpen) {
+        cleanupMap();
+      }
       return;
     }
-
+    
     // Prevent multiple initializations
     if (mapInstanceRef.current) {
       return;
     }
-
-    // Add a small delay to ensure the container is fully rendered
-    const timer = setTimeout(() => {
-      // Import Leaflet dynamically to avoid SSR issues
-      import("leaflet").then((L) => {
-        if (!mapRef.current || !isOpen) return;
-
-        // Ensure the container has dimensions and is visible in the DOM
-        const container = mapRef.current;
-        if (container.clientHeight === 0 || container.clientWidth === 0) {
-          console.warn("Map container has zero dimensions");
-          return;
-        }
-
-        // Make sure container is properly in the DOM
-        if (!document.body.contains(container)) {
-          console.warn("Map container is not in the DOM");
-          return;
-        }
-
-        // Use defaultLocation if available, otherwise use selectedLocation or fall back to Chicago
-        const initialLocation = defaultLocation || selectedLocation || CHICAGO_LOCATION;
+    
+    // Make sure Leaflet is loaded globally just once
+    if (!window.L) {
+      // Create a script tag to load Leaflet
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
+      script.crossOrigin = '';
+      
+      script.onload = initializeMap;
+      
+      document.head.appendChild(script);
+      
+      // Add Leaflet CSS
+      if (!document.querySelector('link[href*="leaflet.css"]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        link.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
+        link.crossOrigin = '';
+        document.head.appendChild(link);
+      }
+    } else {
+      // Leaflet is already loaded, initialize map directly
+      initializeMap();
+    }
+    
+    function initializeMap() {
+      // Ensure the map ref is still valid
+      if (!mapRef.current || !isOpen) return;
+      
+      // Ensure the container has proper dimensions
+      const container = mapRef.current;
+      if (container.clientHeight === 0 || container.clientWidth === 0) {
+        // Try again in 100ms if the container isn't sized yet
+        setTimeout(initializeMap, 100);
+        return;
+      }
+      
+      // Create a new Leaflet map
+      const L = window.L;
+      const initialLocation = defaultLocation || selectedLocation || CHICAGO_LOCATION;
+      
+      try {
+        // Simple, direct initialization with minimal options
+        const map = L.map(container, {
+          center: [initialLocation.lat, initialLocation.lng],
+          zoom: 13,
+          attributionControl: true,
+          zoomControl: true
+        });
         
-        try {
-          // Initialize map with no animation during setup
-          const newMap = L.map(container, {
-            fadeAnimation: false,
-            zoomAnimation: false
-          }).setView([initialLocation.lat, initialLocation.lng], 13);
-          
-          mapInstanceRef.current = newMap;
-          setMap(newMap);
-          
-          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          }).addTo(newMap);
-
-          // Add marker for the initial location
-          markerRef.current = L.marker([initialLocation.lat, initialLocation.lng], { icon: customIcon })
-            .addTo(newMap);
-
-          // Handle map clicks
-          newMap.on("click", (e: { latlng: LatLng }) => {
-            const { lat, lng } = e.latlng;
-            if (markerRef.current) {
-              markerRef.current.setLatLng([lat, lng]);
-            }
-            reverseGeocode(lat, lng);
-          });
-
-          // Only get user location if we don't have a default or selected location
-          if (hasLocationPermission && !defaultLocation && !selectedLocation) {
-            getUserLocation();
-          }
-          
-          // Add resize handler
-          const handleResize = () => {
-            if (newMap && document.body.contains(container)) {
-              // Only call invalidateSize if the map container is still in the DOM
-              newMap.invalidateSize({ animate: false });
-            }
-          };
-          
-          window.addEventListener('resize', handleResize);
-          
-          // Wait until the next frame to invalidate size
-          requestAnimationFrame(() => {
-            if (newMap && document.body.contains(container)) {
-              newMap.invalidateSize({ animate: false });
-            }
-          });
-          
-          // Return cleanup for resize handler in this nested effect
-          return () => {
-            window.removeEventListener('resize', handleResize);
-          };
-        } catch (error) {
-          console.error("Error initializing Leaflet map:", error);
+        // Prevent map interactions from closing the picker
+        container.addEventListener('mousedown', e => e.stopPropagation());
+        container.addEventListener('touchstart', e => e.stopPropagation());
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+        // Add the initial marker
+        markerRef.current = L.marker([initialLocation.lat, initialLocation.lng], { 
+          icon: customIcon,
+          draggable: true
+        }).addTo(map);
+        
+        // Handle marker drag events
+        markerRef.current.on('dragend', function(e) {
+          const marker = e.target;
+          const position = marker.getLatLng();
+          reverseGeocode(position.lat, position.lng);
+        });
+        
+        // Handle map click
+        map.on('click', function(e) {
+          updateMarker({ lat: e.latlng.lat, lng: e.latlng.lng });
+          reverseGeocode(e.latlng.lat, e.latlng.lng);
+        });
+        
+        // Save map reference
+        mapInstanceRef.current = map;
+        
+        // Get user location if needed
+        if (hasLocationPermission && !defaultLocation && !selectedLocation) {
+          getUserLocation();
         }
-      });
-    }, 100); // Small delay to ensure container is ready
-
-    // Cleanup function
+        
+        // Handle window resize
+        const handleResize = () => {
+          if (map && document.body.contains(container)) {
+            map.invalidateSize();
+          }
+        };
+        
+        window.addEventListener('resize', handleResize);
+        
+        // Ensure the map renders correctly
+        setTimeout(() => {
+          if (map && document.body.contains(container)) {
+            map.invalidateSize();
+          }
+        }, 300);
+        
+        // Return cleanup function for this inner effect
+        return () => {
+          window.removeEventListener('resize', handleResize);
+        };
+      } catch (error) {
+        console.error("Error initializing map:", error);
+      }
+    }
+    
+    // Cleanup when the component is unmounted or closed
     return () => {
-      clearTimeout(timer);
       if (!isOpen) {
         cleanupMap();
       }
     };
-  }, [isOpen, cleanupMap, defaultLocation, selectedLocation, hasLocationPermission, getUserLocation, reverseGeocode]);
+  }, [isOpen, defaultLocation, selectedLocation, hasLocationPermission, getUserLocation, cleanupMap, reverseGeocode, updateMarker]);
 
-  // Add a separate effect for handling location updates
+  // Update marker when defaultLocation changes
   useEffect(() => {
-    if (defaultLocation && !selectedLocation) {
-      setSelectedLocation(defaultLocation);
-    }
+    if (!defaultLocation || !mapInstanceRef.current) return;
+    updateMarker(defaultLocation);
+  }, [defaultLocation, updateMarker]);
 
-    if (!selectedLocation && hasLocationPermission) {
-      getUserLocation();
-    }
-
-    if (selectedLocation) {
-      reverseGeocode(selectedLocation.lat, selectedLocation.lng);
-    }
-  }, [defaultLocation, selectedLocation, hasLocationPermission, getUserLocation, reverseGeocode]);
+  // ===== UI INTERACTION HANDLERS =====
 
   const searchAddress = async () => {
+    if (!searchQuery.trim()) return;
+    
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5`
-      )
-      const data = await response.json()
-      setSearchResults(data)
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery.trim())}&limit=5`
+      );
+      const data = await response.json();
+      setSearchResults(data);
     } catch (error) {
-      console.error("Error searching address:", error)
+      console.error("Error searching address:", error);
     }
   }
 
   const handleAddressSelect = (result: SearchResult) => {
-    const lat = parseFloat(result.lat)
-    const lng = parseFloat(result.lon)
+    const lat = parseFloat(result.lat);
+    const lng = parseFloat(result.lon);
     
-    import("leaflet").then((L) => {
-      updateMarker(L, { lat, lng })
-    })
-    
-    setSelectedLocation({ lat, lng, address: result.display_name })
-    onLocationSelect({ lat, lng, address: result.display_name })
-    setSearchResults([])
-    setSearchQuery("")
+    updateMarker({ lat, lng });
+    setSelectedLocation({ lat, lng, address: result.display_name });
+    onLocationSelect({ lat, lng, address: result.display_name });
+    setSearchResults([]);
+    setSearchQuery("");
   }
 
   const handleDragStart = (e: React.DragEvent) => {
-    setIsDraggingPin(true)
-    e.dataTransfer.setData("text/plain", "pin")
+    setIsDraggingPin(true);
+    e.dataTransfer.setData("text/plain", "pin");
     if (e.dataTransfer.setDragImage && dragPinRef.current) {
-      e.dataTransfer.setDragImage(dragPinRef.current, 15, 30)
+      e.dataTransfer.setDragImage(dragPinRef.current, 15, 30);
     }
   }
 
-  const handleDragEnd = () => {
-    setIsDraggingPin(false)
-  }
-
-  const handleMapDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-  }
-
   const handleMapDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    const mapRect = mapRef.current?.getBoundingClientRect()
-    if (!mapRect || !map) return
-
-    const x = e.clientX - mapRect.left
-    const y = e.clientY - mapRect.top
-    const point = map.containerPointToLatLng([x, y])
+    e.preventDefault();
+    if (!mapInstanceRef.current || !mapRef.current) return;
     
-    import("leaflet").then((L) => {
-      updateMarker(L, { lat: point.lat, lng: point.lng })
-      reverseGeocode(point.lat, point.lng)
-    })
+    const mapRect = mapRef.current.getBoundingClientRect();
+    const x = e.clientX - mapRect.left;
+    const y = e.clientY - mapRect.top;
+    
+    // Convert the drop point to lat/lng coordinates
+    const point = mapInstanceRef.current.containerPointToLatLng([x, y]);
+    updateMarker({ lat: point.lat, lng: point.lng });
+    reverseGeocode(point.lat, point.lng);
+    setIsDraggingPin(false);
   }
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
-      e.preventDefault() // Prevent form submission
-      searchAddress()
+      e.preventDefault();
+      searchAddress();
     }
   }
+
+  // ===== COMPONENT RENDER =====
 
   return (
     <div ref={containerRef} className="space-y-4">
@@ -397,8 +402,16 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={handleSearchKeyDown}
+            onClick={(e) => e.stopPropagation()}
           />
-          <Button type="button" variant="outline" onClick={searchAddress}>
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={(e) => {
+              e.stopPropagation();
+              searchAddress();
+            }}
+          >
             <Search className="h-4 w-4" />
           </Button>
         </div>
@@ -421,11 +434,12 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
               minHeight: "300px", 
               width: "100%", 
               position: "relative", 
-              display: "block", 
-              overflow: "hidden" 
+              display: "block",
+              overflow: "hidden"
             }}
-            onDragOver={handleMapDragOver}
+            onDragOver={(e) => e.preventDefault()}
             onDrop={handleMapDrop}
+            onClick={(e) => e.stopPropagation()}
           />
           
           {searchResults.length > 0 && (
@@ -434,7 +448,10 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
                 <button
                   key={index}
                   className="w-full px-4 py-2 text-left hover:bg-gray-100 flex items-center gap-2"
-                  onClick={() => handleAddressSelect(result)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAddressSelect(result);
+                  }}
                 >
                   <MapPin className="h-4 w-4 flex-shrink-0 text-gray-400" />
                   <span className="text-sm line-clamp-2">{result.display_name}</span>
@@ -448,7 +465,7 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
           <div
             draggable
             onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
+            onDragEnd={() => setIsDraggingPin(false)}
             className="cursor-move"
             title="Drag to map"
           >
@@ -480,4 +497,11 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
       )}
     </div>
   )
+}
+
+// Add Leaflet to the Window global for TypeScript
+declare global {
+  interface Window {
+    L: typeof import("leaflet");
+  }
 } 

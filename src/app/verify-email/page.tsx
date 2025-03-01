@@ -39,6 +39,32 @@ export default function VerifyEmailPage() {
     }
   }, [currentUser, loading, router, toast])
 
+  // Add this effect to immediately check verification status when the page loads
+  useEffect(() => {
+    const checkVerificationImmediately = async () => {
+      if (!currentUser) return;
+      
+      try {
+        // Force an immediate token refresh when the page loads
+        await auth.currentUser?.reload();
+        const freshUser = auth.currentUser;
+        
+        if (freshUser?.emailVerified) {
+          toast({
+            title: "Email verified!",
+            description: "Your email has been verified. Redirecting to your family tree...",
+          });
+          router.push("/family-tree");
+        }
+      } catch (error) {
+        console.error("Error checking verification status:", error);
+      }
+    };
+    
+    // Run the check immediately when component mounts or user changes
+    checkVerificationImmediately();
+  }, [currentUser, router, toast]);
+
   // Real-time listener for email verification status
   useEffect(() => {
     if (!currentUser) return
