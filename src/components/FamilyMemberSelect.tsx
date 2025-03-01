@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { Check, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -32,72 +32,86 @@ export function FamilyMemberSelect({
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
   const { currentUser } = useAuth()
 
-  useEffect(() => {
-    const fetchFamilyMembers = async () => {
-      if (!currentUser) return;
+  // Memoize the function that checks and removes current user from selection
+  const removeCurrentUserFromSelection = useCallback((userId: string, members: string[]) => {
+    if (members.includes(userId)) {
+      onMemberSelect(members.filter(id => id !== userId));
+    }
+  }, [onMemberSelect]);
 
-      try {
-        setLoading(true);
-        // First get the user's family tree ID
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        if (!userDoc.exists()) {
-          console.error('User document not found');
-          return;
-        }
+  // Memoize the fetch function to prevent recreation on every render
+  const fetchFamilyMembers = useCallback(async () => {
+    if (!currentUser) return;
 
-        const userData = userDoc.data();
-        const familyTreeId = userData.familyTreeId;
-
-        // Get the family tree document
-        const treeDoc = await getDoc(doc(db, 'familyTrees', familyTreeId));
-        if (!treeDoc.exists()) {
-          console.error('Family tree not found');
-          return;
-        }
-
-        // Fetch all users in the family tree
-        const usersRef = collection(db, 'users');
-        const userDocs = await Promise.all(
-          treeDoc.data().memberUserIds.map((userId: string) => 
-            getDoc(doc(usersRef, userId))
-          )
-        );
-
-        // Transform user data into FamilyMember format
-        const members = userDocs
-          .filter(doc => doc.exists())
-          .map(doc => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              displayName: data.displayName || `${data.firstName} ${data.lastName}`.trim()
-            };
-          })
-          // Filter out the current user
-          .filter(member => member.id !== currentUser.uid);
-
-        setFamilyMembers(members);
-        
-        // Also remove the current user from selectedMembers if they're included
-        if (selectedMembers.includes(currentUser.uid)) {
-          onMemberSelect(selectedMembers.filter(id => id !== currentUser.uid));
-        }
-      } catch (error) {
-        console.error('Error fetching family members:', error);
-      } finally {
-        setLoading(false);
+    try {
+      setLoading(true);
+      // First get the user's family tree ID
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+      if (!userDoc.exists()) {
+        console.error('User document not found');
+        return;
       }
-    };
 
+      const userData = userDoc.data();
+      const familyTreeId = userData.familyTreeId;
+
+      // Get the family tree document
+      const treeDoc = await getDoc(doc(db, 'familyTrees', familyTreeId));
+      if (!treeDoc.exists()) {
+        console.error('Family tree not found');
+        return;
+      }
+
+      // Fetch all users in the family tree
+      const usersRef = collection(db, 'users');
+      const userDocs = await Promise.all(
+        treeDoc.data().memberUserIds.map((userId: string) => 
+          getDoc(doc(usersRef, userId))
+        )
+      );
+
+      // Transform user data into FamilyMember format
+      const members = userDocs
+        .filter(doc => doc.exists())
+        .map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            displayName: data.displayName || `${data.firstName} ${data.lastName}`.trim()
+          };
+        })
+        // Filter out the current user
+        .filter(member => member.id !== currentUser.uid);
+
+      setFamilyMembers(members);
+      
+      // Also remove the current user from selectedMembers if they're included
+      removeCurrentUserFromSelection(currentUser.uid, selectedMembers);
+    } catch (error) {
+      console.error('Error fetching family members:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser, removeCurrentUserFromSelection, selectedMembers]);
+
+  useEffect(() => {
     void fetchFamilyMembers();
-  }, [currentUser]);
+  }, [fetchFamilyMembers]);
 
-  const toggleMember = (value: string) => {
+  // Memoize toggleMember to prevent recreation on every render
+  const toggleMember = useCallback((value: string) => {
     const newSelection = selectedMembers.includes(value)
       ? selectedMembers.filter(id => id !== value)
-      : [...selectedMembers, value]
-    onMemberSelect(newSelection)
-  }
+      : [...selectedMembers, value];
+    onMemberSelect(newSelection);
+  }, [selectedMembers, onMemberSelect]);
+
+  // Memoize the selection status text
+  const selectionText = useMemo(() => {
+    return selectedMembers.length > 0
+      ? `${selectedMembers.length} member${selectedMembers.length === 1 ? '' : 's'} selected`
+      : placeholder;
+  }, [selectedMembers, placeholder]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -108,9 +122,7 @@ export function FamilyMemberSelect({
           aria-expanded={open}
           className={cn("w-full justify-between", className)}
         >
-          {selectedMembers.length > 0
-            ? `${selectedMembers.length} member${selectedMembers.length === 1 ? '' : 's'} selected`
-            : placeholder}
+          {selectionText}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
