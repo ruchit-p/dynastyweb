@@ -1,5 +1,5 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app, auth } from '@/lib/firebase';
+import { app } from '@/lib/firebase';
 import type { Node } from 'relatives-tree/lib/types';
 import type { Story } from './storyUtils';
 
