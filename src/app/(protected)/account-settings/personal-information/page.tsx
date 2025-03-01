@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Camera, Loader2 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore"
+import { doc, updateDoc, serverTimestamp, FieldValue } from "firebase/firestore"
 import { db, storage } from "@/lib/firebase"
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import ProtectedRoute from "@/components/ProtectedRoute"
@@ -63,7 +63,14 @@ export default function PersonalInformationPage() {
       }
 
       // Prepare update data
-      const updateData: any = {
+      const updateData: Partial<{
+        firstName: string;
+        lastName: string;
+        phoneNumber: string | null;
+        displayName: string;
+        updatedAt: FieldValue;
+        profilePicture?: string;
+      }> = {
         firstName: formData.firstName,
         lastName: formData.lastName,
         phoneNumber: formData.phoneNumber,
