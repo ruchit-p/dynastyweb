@@ -44,3 +44,6 @@ firebase-debug.log*
 ui-debug.log*
 firestore-debug.log*
 pubsub-debug.log*
+
+# Sentry Config File
+.env.sentry-build-plugin
