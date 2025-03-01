@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/context/AuthContext"
 import { uploadMedia } from "@/utils/mediaUtils"
@@ -50,6 +50,24 @@ export default function CreateStoryPage() {
   const [blocks, setBlocks] = useState<Block[]>([])
   const [showLocationPicker, setShowLocationPicker] = useState(false)
   const [userLocation, setUserLocation] = useState<Location | null>(null)
+  const [locationPickerKey, setLocationPickerKey] = useState(0)
+
+  // Handle setting members to ensure current user is filtered
+  const setFilteredCustomAccessMembers = useCallback((members: string[]) => {
+    if (currentUser?.uid) {
+      setCustomAccessMembers(members.filter(id => id !== currentUser.uid));
+    } else {
+      setCustomAccessMembers(members);
+    }
+  }, [currentUser?.uid]);
+  
+  const setFilteredTaggedMembers = useCallback((members: string[]) => {
+    if (currentUser?.uid) {
+      setTaggedMembers(members.filter(id => id !== currentUser.uid));
+    } else {
+      setTaggedMembers(members);
+    }
+  }, [currentUser?.uid]);
 
   // Request location permission on page load
   useEffect(() => {
@@ -258,6 +276,20 @@ export default function CreateStoryPage() {
     setShowLocationPicker(false)
   }
 
+  // Toggle location picker with a slight delay to ensure proper mounting
+  const toggleLocationPicker = () => {
+    if (showLocationPicker) {
+      setShowLocationPicker(false)
+    } else {
+      // First update the key to force a re-render
+      setLocationPickerKey(prev => prev + 1)
+      // Then show the picker in the next frame
+      requestAnimationFrame(() => {
+        setShowLocationPicker(true)
+      })
+    }
+  }
+
   const handleDateSelect = (newDate: Date | undefined) => {
     if (newDate) {
       setDate(newDate)
@@ -322,7 +354,7 @@ export default function CreateStoryPage() {
                 type="button"
                 variant="outline"
                 className="w-full justify-start text-left font-normal"
-                onClick={() => setShowLocationPicker(!showLocationPicker)}
+                onClick={toggleLocationPicker}
               >
                 {location ? (
                   <span className="truncate">{location.address}</span>
@@ -331,8 +363,19 @@ export default function CreateStoryPage() {
                 )}
               </Button>
               {showLocationPicker && (
-                <div className="absolute z-10 mt-1 w-[600px] bg-white rounded-lg shadow-lg border p-4">
+                <div 
+                  className="absolute z-10 mt-1 bg-white rounded-lg shadow-lg border p-4"
+                  style={{ 
+                    width: "100%",
+                    maxWidth: "600px",
+                    left: "0",
+                    visibility: showLocationPicker ? "visible" : "hidden",
+                    opacity: showLocationPicker ? "1" : "0",
+                    transition: "opacity 0.2s ease-in-out"
+                  }}
+                >
                   <LocationPicker
+                    key={locationPickerKey}
                     onLocationSelect={handleLocationSelect}
                     defaultLocation={userLocation || location}
                     isOpen={showLocationPicker}
@@ -366,7 +409,7 @@ export default function CreateStoryPage() {
             <Label>Custom Access</Label>
             <FamilyMemberSelect
               selectedMembers={customAccessMembers}
-              onMemberSelect={setCustomAccessMembers}
+              onMemberSelect={setFilteredCustomAccessMembers}
               placeholder="Select family members who can access this story"
             />
           </div>
@@ -376,7 +419,7 @@ export default function CreateStoryPage() {
           <Label>Tag People</Label>
           <FamilyMemberSelect
             selectedMembers={taggedMembers}
-            onMemberSelect={setTaggedMembers}
+            onMemberSelect={setFilteredTaggedMembers}
             placeholder="Tag family members in this story"
           />
         </div>

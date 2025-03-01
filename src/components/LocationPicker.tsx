@@ -54,11 +54,23 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
   // Cleanup function to properly remove map and marker instances
   const cleanupMap = useCallback(() => {
     if (markerRef.current) {
-      markerRef.current.remove();
+      try {
+        markerRef.current.remove();
+      } catch (error) {
+        console.error("Error removing marker:", error);
+      }
       markerRef.current = null;
     }
+    
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.remove();
+      try {
+        // Remove all event listeners
+        mapInstanceRef.current.off();
+        // Remove the map instance
+        mapInstanceRef.current.remove();
+      } catch (error) {
+        console.error("Error removing map:", error);
+      }
       mapInstanceRef.current = null;
       setMap(null);
     }
@@ -206,47 +218,95 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
       return;
     }
 
-    // Import Leaflet dynamically to avoid SSR issues
-    import("leaflet").then((L) => {
-      if (!mapRef.current || !isOpen) return;
+    // Add a small delay to ensure the container is fully rendered
+    const timer = setTimeout(() => {
+      // Import Leaflet dynamically to avoid SSR issues
+      import("leaflet").then((L) => {
+        if (!mapRef.current || !isOpen) return;
 
-      // Use defaultLocation if available, otherwise use selectedLocation or fall back to Chicago
-      const initialLocation = defaultLocation || selectedLocation || CHICAGO_LOCATION;
-      
-      const newMap = L.map(mapRef.current).setView([initialLocation.lat, initialLocation.lng], 13);
-      mapInstanceRef.current = newMap;
-      setMap(newMap);
-      
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-      }).addTo(newMap);
-
-      // Add marker for the initial location
-      markerRef.current = L.marker([initialLocation.lat, initialLocation.lng], { icon: customIcon })
-        .addTo(newMap);
-
-      // Handle map clicks
-      newMap.on("click", (e: { latlng: LatLng }) => {
-        const { lat, lng } = e.latlng;
-        if (markerRef.current) {
-          markerRef.current.setLatLng([lat, lng]);
+        // Ensure the container has dimensions and is visible in the DOM
+        const container = mapRef.current;
+        if (container.clientHeight === 0 || container.clientWidth === 0) {
+          console.warn("Map container has zero dimensions");
+          return;
         }
-        reverseGeocode(lat, lng);
-      });
 
-      // Only get user location if we don't have a default or selected location
-      if (hasLocationPermission && !defaultLocation && !selectedLocation) {
-        getUserLocation();
-      }
-    });
+        // Make sure container is properly in the DOM
+        if (!document.body.contains(container)) {
+          console.warn("Map container is not in the DOM");
+          return;
+        }
+
+        // Use defaultLocation if available, otherwise use selectedLocation or fall back to Chicago
+        const initialLocation = defaultLocation || selectedLocation || CHICAGO_LOCATION;
+        
+        try {
+          // Initialize map with no animation during setup
+          const newMap = L.map(container, {
+            fadeAnimation: false,
+            zoomAnimation: false
+          }).setView([initialLocation.lat, initialLocation.lng], 13);
+          
+          mapInstanceRef.current = newMap;
+          setMap(newMap);
+          
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          }).addTo(newMap);
+
+          // Add marker for the initial location
+          markerRef.current = L.marker([initialLocation.lat, initialLocation.lng], { icon: customIcon })
+            .addTo(newMap);
+
+          // Handle map clicks
+          newMap.on("click", (e: { latlng: LatLng }) => {
+            const { lat, lng } = e.latlng;
+            if (markerRef.current) {
+              markerRef.current.setLatLng([lat, lng]);
+            }
+            reverseGeocode(lat, lng);
+          });
+
+          // Only get user location if we don't have a default or selected location
+          if (hasLocationPermission && !defaultLocation && !selectedLocation) {
+            getUserLocation();
+          }
+          
+          // Add resize handler
+          const handleResize = () => {
+            if (newMap && document.body.contains(container)) {
+              // Only call invalidateSize if the map container is still in the DOM
+              newMap.invalidateSize({ animate: false });
+            }
+          };
+          
+          window.addEventListener('resize', handleResize);
+          
+          // Wait until the next frame to invalidate size
+          requestAnimationFrame(() => {
+            if (newMap && document.body.contains(container)) {
+              newMap.invalidateSize({ animate: false });
+            }
+          });
+          
+          // Return cleanup for resize handler in this nested effect
+          return () => {
+            window.removeEventListener('resize', handleResize);
+          };
+        } catch (error) {
+          console.error("Error initializing Leaflet map:", error);
+        }
+      });
+    }, 100); // Small delay to ensure container is ready
 
     // Cleanup function
     return () => {
+      clearTimeout(timer);
       if (!isOpen) {
         cleanupMap();
       }
     };
-  }, [isOpen, cleanupMap]);
+  }, [isOpen, cleanupMap, defaultLocation, selectedLocation, hasLocationPermission, getUserLocation, reverseGeocode]);
 
   // Add a separate effect for handling location updates
   useEffect(() => {
@@ -356,7 +416,14 @@ export default function LocationPicker({ onLocationSelect, defaultLocation, isOp
           )}
           <div
             ref={mapRef}
-            className="h-[300px] rounded-lg border"
+            className="h-[300px] w-full rounded-lg border"
+            style={{ 
+              minHeight: "300px", 
+              width: "100%", 
+              position: "relative", 
+              display: "block", 
+              overflow: "hidden" 
+            }}
             onDragOver={handleMapDragOver}
             onDrop={handleMapDrop}
           />

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
@@ -60,6 +60,23 @@ export default function EditStoryPage() {
   const [blocks, setBlocks] = useState<Block[]>([])
   const [showLocationPicker, setShowLocationPicker] = useState(false)
 
+  // Handle setting members to ensure current user is filtered
+  const setFilteredCustomAccessMembers = useCallback((members: string[]) => {
+    if (currentUser?.uid) {
+      setCustomAccessMembers(members.filter(id => id !== currentUser.uid));
+    } else {
+      setCustomAccessMembers(members);
+    }
+  }, [currentUser?.uid]);
+  
+  const setFilteredTaggedMembers = useCallback((members: string[]) => {
+    if (currentUser?.uid) {
+      setTaggedMembers(members.filter(id => id !== currentUser.uid));
+    } else {
+      setTaggedMembers(members);
+    }
+  }, [currentUser?.uid]);
+
   useEffect(() => {
     const fetchStory = async () => {
       if (!id || !currentUser) return
@@ -95,8 +112,8 @@ export default function EditStoryPage() {
         setDate(storyData.eventDate ? new Date(storyData.eventDate.seconds * 1000) : new Date())
         setLocation(storyData.location)
         setPrivacy(storyData.privacy === "privateAccess" ? "personal" : storyData.privacy)
-        setCustomAccessMembers(storyData.customAccessMembers || [])
-        setTaggedMembers(storyData.peopleInvolved || [])
+        setFilteredCustomAccessMembers(storyData.customAccessMembers || [])
+        setFilteredTaggedMembers(storyData.peopleInvolved || [])
 
         // Convert story blocks to form blocks
         const formBlocks = storyData.blocks.map((block: StoryBlock) => ({
@@ -118,7 +135,7 @@ export default function EditStoryPage() {
     }
 
     fetchStory()
-  }, [id, currentUser, router, toast])
+  }, [id, currentUser, router, toast, setFilteredCustomAccessMembers, setFilteredTaggedMembers])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -204,16 +221,22 @@ export default function EditStoryPage() {
       )
 
       // Update the story using the Cloud Function
-      await updateStory(id as string, currentUser.uid, {
-        title: title.trim(),
-        subtitle: subtitle.trim() || undefined,
-        eventDate: date,
-        location,
-        privacy: privacy === "personal" ? "privateAccess" : privacy,
-        customAccessMembers: privacy === "custom" ? customAccessMembers : undefined,
-        blocks: processedBlocks,
-        peopleInvolved: taggedMembers
-      });
+      await updateStory(
+        id as string,
+        currentUser.uid,
+        {
+          title: title.trim(),
+          subtitle: subtitle.trim() || undefined,
+          eventDate: date,
+          location,
+          privacy: privacy === "personal" ? "privateAccess" : privacy,
+          customAccessMembers: privacy === "custom" ? 
+            customAccessMembers.filter(uid => uid !== currentUser.uid) : 
+            undefined,
+          blocks: processedBlocks,
+          peopleInvolved: taggedMembers.filter(uid => uid !== currentUser.uid)
+        }
+      );
       
       toast({
         title: "Success",
@@ -381,7 +404,7 @@ export default function EditStoryPage() {
             <Label>Custom Access</Label>
             <FamilyMemberSelect
               selectedMembers={customAccessMembers}
-              onMemberSelect={setCustomAccessMembers}
+              onMemberSelect={setFilteredCustomAccessMembers}
               placeholder="Select family members who can access this story"
             />
           </div>
@@ -391,7 +414,7 @@ export default function EditStoryPage() {
           <Label>Tag People</Label>
           <FamilyMemberSelect
             selectedMembers={taggedMembers}
-            onMemberSelect={setTaggedMembers}
+            onMemberSelect={setFilteredTaggedMembers}
             placeholder="Tag family members in this story"
           />
         </div>

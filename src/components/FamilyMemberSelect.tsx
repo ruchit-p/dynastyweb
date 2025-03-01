@@ -72,9 +72,16 @@ export function FamilyMemberSelect({
               id: doc.id,
               displayName: data.displayName || `${data.firstName} ${data.lastName}`.trim()
             };
-          });
+          })
+          // Filter out the current user
+          .filter(member => member.id !== currentUser.uid);
 
         setFamilyMembers(members);
+        
+        // Also remove the current user from selectedMembers if they're included
+        if (selectedMembers.includes(currentUser.uid)) {
+          onMemberSelect(selectedMembers.filter(id => id !== currentUser.uid));
+        }
       } catch (error) {
         console.error('Error fetching family members:', error);
       } finally {
