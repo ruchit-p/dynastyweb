@@ -57,7 +57,7 @@ export default function PersonalInformationPage() {
 
       // Upload new profile picture if one was selected
       if (newProfilePicture) {
-        const storageRef = ref(storage, `profile-pictures/${currentUser.uid}`)
+        const storageRef = ref(storage, `profilePictures/${currentUser.uid}/${newProfilePicture.name}`)
         await uploadBytes(storageRef, newProfilePicture)
         profilePictureUrl = await getDownloadURL(storageRef)
       }
