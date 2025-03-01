@@ -22,7 +22,7 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
-const functions = getFunctions(app);
+const functions = getFunctions(app, 'us-central1');
 
 // Connect to emulators in development
 if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
