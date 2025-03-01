@@ -1,15 +1,115 @@
-# Stories Feature Documentation
+# Dynasty Stories
+
+This document explains how to work with stories in the Dynasty app.
 
 ## Overview
-The Stories feature allows family members to share and preserve their family memories, experiences, and history through rich multimedia content. Stories can include text, images, videos, and audio recordings, and can be shared with specific family members or the entire family tree.
 
-## Features
-- Create multimedia stories with text, images, videos, and audio
-- Tag family members in stories
-- Set privacy levels (family, personal, or custom access)
-- Add location data to stories
-- Include event dates
-- Rich text editing capabilities
+Stories are a core feature of Dynasty, allowing users to share memories, events, and moments with their family members.
+
+## API vs. Client Components
+
+In our previous version, we used a `useStories` hook to handle stories. We've since moved to a more direct approach using the API client. This section explains the transition and current approach.
+
+### Direct API Approach (Current)
+
+We now use the API client directly in components:
+
+```tsx
+// Example: Getting a story
+const response = await api.stories.getStory(id)
+
+// Example: Creating a story
+const result = await api.stories.createStory(storyData)
+
+// Example: Updating a story
+const response = await api.stories.updateStory(id, storyData)
+
+// Example: Deleting a story
+const response = await api.stories.deleteStory(id)
+```
+
+This approach:
+- Works better with Next.js Server Components
+- Provides direct access to Edge Functions
+- Keeps state management at the page level
+- Separates data fetching from UI concerns
+
+### Adding State Management
+
+When using the API client directly, implement state management in your component:
+
+```tsx
+// State management example
+const [story, setStory] = useState<StoryData | null>(null)
+const [loading, setLoading] = useState(true)
+const [error, setError] = useState<string | null>(null)
+
+// Fetch function
+const fetchStory = async () => {
+  try {
+    setLoading(true)
+    setError(null)
+    
+    const response = await api.stories.getStory(id)
+    
+    if (response.error) throw new Error(response.error.message)
+    
+    if (response.data) {
+      setStory(response.data)
+    } else {
+      setError("Story not found")
+    }
+  } catch (error) {
+    setError((error as Error).message)
+  } finally {
+    setLoading(false)
+  }
+}
+```
+
+### Real-time Updates
+
+For real-time updates, use the `useRealtime` hook:
+
+```tsx
+// NOTE: Real-time updates are temporarily disabled and will be re-implemented later
+// Import the hook
+// import { useRealtime } from "@/lib/client/hooks/useRealtime"
+
+// In your component
+// useRealtime<StoryEvent['data']>(
+//   (event) => {
+//     if (
+//       event.type === 'story' && 
+//       event.data && 
+//       event.data.id === storyId
+//     ) {
+//       if (event.action === 'UPDATE') {
+//         setStory(event.data)
+//       }
+//     }
+//   },
+//   { type: 'story' }
+// )
+```
+
+## Legacy Hook Approach (Deprecated)
+
+> Note: The useStories hook has been removed in favor of the direct API approach described above.
+
+~~Example usage of the previous hook:~~
+
+```tsx
+// DEPRECATED - Don't use this approach
+const { create } = useStories()
+await create(storyData)
+
+const { update } = useStories()
+await update(storyId, storyData)
+
+const { loadFamilyStories } = useStories()
+await loadFamilyStories(familyTreeId)
+```
 
 ## Story Structure
 A story consists of the following components:
@@ -98,19 +198,6 @@ deleteStory(id: string): Promise<void>
 #### Get Family Tree Stories
 ```typescript
 getFamilyTreeStories(familyTreeId: string): Promise<Story[]>
-```
-
-### Client Hooks
-The `useStories` hook provides a convenient way to interact with stories:
-```typescript
-const {
-  loading,
-  stories,
-  create,
-  update,
-  remove,
-  loadFamilyStories,
-} = useStories()
 ```
 
 ## Usage Examples

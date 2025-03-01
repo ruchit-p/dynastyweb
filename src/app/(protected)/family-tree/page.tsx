@@ -1,21 +1,17 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useAuth } from '@/components/auth';
+import { useAuth, AuthGuard } from '@/components/auth';
 import { useToast } from '@/components/ui/use-toast';
 import calcTree from "relatives-tree";
-import type { Node, ExtNode, Connector } from 'relatives-tree/lib/types';
+import type { Node, ExtNode } from 'relatives-tree/lib/types';
+import { api } from "@/lib/api-client";
 import { 
-  getFamilyTreeData, 
-  createFamilyMember as createFamilyMemberApi, 
-  deleteFamilyMember as deleteFamilyMemberApi, 
   Gender as ApiGender,
-  UserData,
-  CreateMemberOptions,
-  convertToRelativesTreeFormat
-} from "@/lib/api/family-tree";
+  RelativeTreeNode,
+  CreateMemberOptions
+} from "@/lib/api-client";
 import FamilyNode from '@/components/FamilyNode';
-import ProtectedRoute from '@/components/ProtectedRoute';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import {
@@ -34,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Minus, Plus } from 'lucide-react';
+import { Minus, Plus, RefreshCw } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,7 +52,7 @@ type RelationType = 'parent' | 'spouse' | 'child' | 'sibling';
 interface AddMemberFormData {
   firstName: string;
   lastName: string;
-  dateOfBirth?: Date;
+  dateOfBirth?: string;
   gender: string;
   phone?: string;
   email?: string;
@@ -85,13 +81,20 @@ interface ExtendedNodeAttributes {
   status?: string;
   phone?: string;
   email?: string;
-  dateOfBirth?: Date;
+  dateOfBirth?: string;
+  dateOfDeath?: string;
+  firstName?: string;
+  lastName?: string;
+  bio?: string;
+  profilePicture?: string;
   [key: string]: unknown;
 }
 
 interface ExtendedNodeWithAttributes extends ExtNode {
   attributes?: ExtendedNodeAttributes;
 }
+
+type ExtNodeWithId = ExtNode & { id: string };
 
 // Create component-specific logger
 const logger = createLogger('FamilyTreePage');
@@ -101,6 +104,7 @@ export default function FamilyTreePage() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [treeData, setTreeData] = useState<Node[]>([]);
   const [selectedNode, setSelectedNode] = useState<ExtendedNodeWithAttributes | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -120,10 +124,13 @@ export default function FamilyTreePage() {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [rootNode, setRootNode] = useState<string>('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [familyTreeId, setFamilyTreeId] = useState<string>('');
   const treeContainerRef = useRef<HTMLDivElement>(null);
   const DEBUG_MODE = false; // Debug flag - set to true to enable debug features
 
+  // Function to fetch family tree data
   const fetchFamilyTreeData = useCallback(async () => {
     if (!currentUser?.id) {
       logger.warn('No current user ID available', { 
@@ -136,93 +143,60 @@ export default function FamilyTreePage() {
 
     try {
       setLoading(true);
+      setError(null);
       logger.debug('Fetching family tree data', { 
         userId: currentUser.id, 
         method: 'fetchFamilyTreeData'
       });
       
-      // Get the family tree ID from user or fall back to user ID
-      const familyTreeId = (currentUser as ExtendedUser).family_tree_id || currentUser.id;
+      // Get user data to make sure we have the latest family_tree_id
+      const userResponse = await api.auth.getUser();
       
-      // Fetch tree data from API
-      const data = await getFamilyTreeData(familyTreeId);
+      if (userResponse.error) {
+        throw new Error(userResponse.error.message || 'Failed to get user data');
+      }
       
-      logger.debug('Family tree data fetched successfully', {
-        userId: currentUser.id,
-        nodeCount: data.nodes?.length || 0,
-        method: 'fetchFamilyTreeData'
-      });
+      // Get the family tree ID from user response or fall back to user ID
+      const userFamilyTreeId = userResponse.data?.family_tree_id || currentUser.id;
+      setFamilyTreeId(userFamilyTreeId);
       
-      if (data && data.nodes && data.nodes.length > 0) {
-        // Use the converter function to properly format nodes
-        const convertedNodes = convertToRelativesTreeFormat(data.nodes);
-        
-        // Update state with properly formatted data
-        setTreeData(convertedNodes as unknown as Node[]);
-        
-        // Set root node ID from the API response or default to first node
-        if (data.rootId) {
-          setRootNode(data.rootId);
-        } else if (convertedNodes.length > 0) {
-          setRootNode(convertedNodes[0].id);
-        }
-      } else {
-        // Handle empty tree case
-        setTreeData([]);
-        logger.debug('No family tree nodes found', { 
-          userId: currentUser.id, 
-          method: 'fetchFamilyTreeData'
+      // Fetch family tree data
+      const response = await api.familyTree.getFamilyTreeData(userFamilyTreeId, rootNode || undefined);
+      
+      if (response.error) {
+        logger.error('Error fetching family tree data', { 
+          error: response.error,
+          userId: currentUser.id
         });
+        throw new Error(response.error.message || 'Failed to load family tree data');
+      }
+      
+      if (response.data) {
+        logger.debug('Family tree data fetched successfully', { 
+          nodeCount: response.data.length 
+        });
+        setTreeData(response.data);
+      } else {
+        throw new Error('No family tree data returned');
       }
     } catch (error) {
-      logger.error('Error fetching family tree data', {
-        userId: currentUser?.id,
-        error: error instanceof Error ? error.message : String(error),
-        method: 'fetchFamilyTreeData'
-      });
-      
+      const errorMsg = (error as Error).message || 'Failed to load family tree';
+      setError(errorMsg);
+      logger.error('Error in fetchFamilyTreeData', { error });
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to load family tree data. Please try again.",
-        variant: "destructive",
+        variant: 'destructive',
+        title: 'Error',
+        description: errorMsg,
       });
-      setTreeData([]);
     } finally {
       setLoading(false);
     }
-  }, [currentUser, toast]);
-
-  // Add debug logging for currentUser changes
-  useEffect(() => {
-    if (currentUser) {
-      logger.debug('Current user state updated', {
-        userId: currentUser.id,
-        isAuthenticated: !!currentUser,
-        emailVerified: currentUser.email_confirmed_at ? true : false,
-        component: 'FamilyTreePage'
-      });
-    } else {
-      logger.debug('Current user is null or undefined', {
-        component: 'FamilyTreePage'
-      });
-    }
-  }, [currentUser]);
+  }, [currentUser, toast, rootNode]);
   
   // Original data fetching effect
   useEffect(() => {
     fetchFamilyTreeData();
   }, [fetchFamilyTreeData]);
-
-  // Debug effect to track currentUser changes
-  useEffect(() => {
-    if (DEBUG_MODE) {
-      console.log('currentUser state changed:', {
-        userId: currentUser?.id || 'no user',
-        hasUser: !!currentUser,
-        timestamp: new Date().toISOString()
-      });
-    }
-  }, [currentUser, DEBUG_MODE]);
 
   // Update rootNode when user changes
   useEffect(() => {
@@ -302,7 +276,7 @@ export default function FamilyTreePage() {
 
       setPosition({ x, y });
     }
-  }, [treeData, calculateOptimalZoom, rootNode, DEBUG_MODE]);
+  }, [treeData, rootNode, calculateOptimalZoom, DEBUG_MODE]);
 
   // Function to center the tree or a specific node
   const centerTree = useCallback((nodeId?: string) => {
@@ -521,18 +495,26 @@ export default function FamilyTreePage() {
   };
 
   const handleDeleteMember = async () => {
-    if (!selectedNode || !currentUser) return;
+    if (!selectedNode || !currentUser?.id) {
+      setShowDeleteDialog(false);
+      return;
+    }
     
     try {
-      setSaving(true);
+      setDeleting(true);
+      setDeleteError(null);
       
-      // Get the family tree ID from the selected node or user
-      const familyTreeId = 
-        selectedNode.attributes?.familyTreeId || 
-        ((currentUser as ExtendedUser).family_tree_id || currentUser.id);
+      logger.debug('Deleting family member', { 
+        nodeId: selectedNode.id, 
+        treeId: familyTreeId 
+      });
       
       // Call the API to delete the member
-      await deleteFamilyMemberApi(selectedNode.id, familyTreeId);
+      const response = await api.familyTree.deleteFamilyMember(selectedNode.id, familyTreeId);
+      
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
       
       toast({
         title: "Member Deleted",
@@ -544,80 +526,76 @@ export default function FamilyTreePage() {
       setShowDeleteDialog(false);
       setSelectedNode(null);
     } catch (error) {
-      console.error("Error deleting family member:", error);
+      const errorMsg = (error as Error).message || 'Failed to delete family member';
+      setDeleteError(errorMsg);
+      logger.error('Error deleting family member', { 
+        error,
+        nodeId: selectedNode.id
+      });
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete family member. Please try again.",
-        variant: "destructive",
+        variant: 'destructive',
+        title: 'Error',
+        description: errorMsg,
       });
     } finally {
-      setSaving(false);
-      setDeleteError(null);
+      setDeleting(false);
+      setShowDeleteDialog(false);
+      setSelectedNode(null);
     }
   };
 
   const handleSave = async () => {
-    if (!selectedNode || !currentUser || !relationType) return;
+    if (!selectedNode || !relationType) {
+      logger.error('Missing required data for save', { 
+        hasSelectedNode: !!selectedNode, 
+        relationType 
+      });
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Missing required information. Please try again.',
+      });
+      return;
+    }
     
-    // Form validation
-    if (!formData.firstName.trim()) {
+    // Validate form data
+    if (!formData.firstName.trim() || !formData.lastName.trim() || !formData.gender) {
       toast({
-        title: "Error",
-        description: "First name is required.",
-        variant: "destructive",
+        variant: 'destructive',
+        title: 'Missing Information',
+        description: 'Please fill in the required fields: first name, last name, and gender.',
       });
       return;
     }
-
-    if (!formData.lastName.trim()) {
-      toast({
-        title: "Error",
-        description: "Last name is required.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!formData.gender) {
-      toast({
-        title: "Error",
-        description: "Gender is required.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Find the family tree ID from the selected node or user
-    const familyTreeId = 
-      selectedNode.attributes?.familyTreeId || 
-      (currentUser as ExtendedUser).family_tree_id || 
-      currentUser.id;
     
-    if (!familyTreeId) {
-      toast({
-        title: "Error",
-        description: "Family tree ID not found. Please try again.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
       setSaving(true);
+      setError(null);
+      
+      // Find the family tree ID from the selected node or user
+      const familyTreeId = 
+        selectedNode.attributes?.familyTreeId || 
+        (currentUser as ExtendedUser).family_tree_id || 
+        currentUser.id;
+      
+      if (!familyTreeId) {
+        toast({
+          title: "Error",
+          description: "Family tree ID not found. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       // Create the new family member using the API
-      const userData: UserData = {
-        familyTreeId,
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        displayName: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
-        gender: formData.gender === 'male' ? ApiGender.male : ApiGender.female,
-        attributes: {
-          dateOfBirth: formData.dateOfBirth || new Date(),
-          status: 'pending',
-          phone: formData.phone?.trim(),
-          email: formData.email?.trim(),
-        }
+      const userData = {
+        familyTreeId: familyTreeId,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        displayName: `${formData.firstName} ${formData.lastName}`,
+        gender: formData.gender as ApiGender,
+        dateOfBirth: formData.dateOfBirth,
+        email: formData.email,
       };
 
       const options: CreateMemberOptions = {
@@ -626,12 +604,17 @@ export default function FamilyTreePage() {
         connectToExistingParent: formData.connectToExistingParent,
       };
 
-      await createFamilyMemberApi(
+      const response = await api.familyTree.createFamilyMember(
         userData,
         relationType,
         selectedNode.id,
         options
       );
+      
+      // Check for API errors
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
 
       // Refresh the tree data
       await fetchFamilyTreeData();
@@ -657,14 +640,32 @@ export default function FamilyTreePage() {
       setRelationType(null);
       setIsSheetOpen(false);
     } catch (error) {
-      console.error("Error adding family member:", error);
+      const errorMsg = (error as Error).message || 'Failed to add family member';
+      setError(errorMsg);
+      logger.error('Error in handleSave', { error, selectedNode: selectedNode.id });
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to add family member. Please try again.",
-        variant: "destructive",
+        variant: 'destructive',
+        title: 'Error',
+        description: errorMsg,
       });
     } finally {
       setSaving(false);
+      setIsSheetOpen(false);
+      setSelectedNode(null);
+      setRelationType(null);
+      
+      // Reset form data
+      setFormData({
+        firstName: '',
+        lastName: '',
+        dateOfBirth: undefined,
+        gender: '',
+        phone: '',
+        email: '',
+        connectToChildren: true,
+        connectToSpouse: true,
+        connectToExistingParent: true,
+      });
     }
   };
 
@@ -691,41 +692,6 @@ export default function FamilyTreePage() {
   const handleZoomOut = () => {
     setScale(prev => Math.max(prev - 0.1, 0.1));
   };
-
-  // Add a debug handler to test the new API directly
-  const testDirectApi = useCallback(async () => {
-    if (!currentUser?.id) {
-      toast({
-        title: "Error",
-        description: "No user found.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      
-      // Use the new API module to fetch family tree data
-      const familyTreeId = (currentUser as ExtendedUser).family_tree_id || currentUser.id;
-      const data = await getFamilyTreeData(familyTreeId);
-      
-      console.log('Direct API response:', data);
-      toast({
-        title: "API Test Success",
-        description: `Retrieved ${data.nodes?.length || 0} nodes from the API`,
-      });
-    } catch (error) {
-      console.error('Error testing API:', error);
-      toast({
-        title: "API Test Failed",
-        description: error instanceof Error ? error.message : "Failed to call the API directly",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUser, toast]);
 
   // Function to render the tree based on the current state
   const renderTree = () => {
@@ -754,189 +720,117 @@ export default function FamilyTreePage() {
           <div className="mt-4">
             <Button
               variant="default"
-              onClick={async () => {
-                try {
-                  // Create a family tree via the API
-                  const response = await fetch('/api/family-tree/create', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                    },
-                    credentials: 'include',
-                  });
-                  
-                  if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Failed to create family tree');
+              onClick={() => {
+                // Create a default node for the current user
+                const userNode: RelativeTreeNode = {
+                  id: currentUser.id,
+                  gender: ((currentUser as ExtendedUser).gender as ApiGender) || ApiGender.other,
+                  parents: [],
+                  children: [],
+                  siblings: [],
+                  spouses: [],
+                  attributes: {
+                    displayName: (currentUser as ExtendedUser).display_name || currentUser.email,
+                    familyTreeId: (currentUser as ExtendedUser).family_tree_id || currentUser.id,
+                    firstName: (currentUser as ExtendedUser).first_name,
+                    lastName: (currentUser as ExtendedUser).last_name,
                   }
-                  
-                  const data = await response.json();
-                  
-                  // Set up the initial user node with the new tree ID
-                  const user = currentUser as ExtendedUser;
-                  const userNode = {
-                    id: user.id,
-                    gender: user.gender === 'male' ? 'male' : 'female',
-                    left: 0, top: 0,
-                    hasSubTree: false,
-                    parents: [],
-                    siblings: [],
-                    spouses: [],
-                    children: [],
-                    attributes: {
-                      familyTreeId: data.treeId,
-                      displayName: user.display_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.id,
-                      isBloodRelated: true,
-                      treeOwnerId: user.id
-                    }
-                  };
-                  
-                  // Update the user's family tree ID in the database if needed
-                  if (!user.family_tree_id) {
-                    // You might want to add an API call here to update the user's family_tree_id
-                  }
-                  
-                  setSelectedNode(userNode as ExtendedNodeWithAttributes);
-                  setRelationType('child');
-                  setIsSheetOpen(true);
-                  
-                  // Refresh the tree data
-                  await fetchFamilyTreeData();
-                  
-                  toast({
-                    title: "Family Tree Created",
-                    description: "Your family tree has been created. Add your first family member to get started.",
-                    variant: "default",
-                  });
-                } catch (error) {
-                  console.error('Error creating family tree:', error);
-                  toast({
-                    title: "Error",
-                    description: error instanceof Error ? error.message : "Failed to create family tree. Please try again.",
-                    variant: "destructive",
-                  });
-                }
+                };
+                
+                // Format for relatives-tree
+                const formattedNode = api.familyTree.formatForRelativesTreeLibrary([userNode]);
+                setTreeData(formattedNode as unknown as Node[]);
+                setRootNode(currentUser.id);
               }}
             >
-              Create Your Family Tree
+              Start Your Family Tree
             </Button>
           </div>
         </div>
       );
     }
 
-    // Calculate tree layout only if treeData is available
-    const treeLayout = treeData && treeData.length > 0 
-      ? calcTree(treeData, {
-          rootId: rootNode,
-          placeholders: false
-        })
-      : null;
-
     return (
       <div 
         ref={treeContainerRef}
-        className="absolute inset-0 overflow-hidden"
+        className="relative flex-1 overflow-hidden"
         onWheel={handleWheel}
       >
         <div
-          className="tree-wrapper absolute"
+          className="absolute origin-top-left"
           style={{
-            width: treeLayout ? `${treeLayout.canvas.width * WIDTH}px` : '0px',
-            height: treeLayout ? `${treeLayout.canvas.height * HEIGHT}px` : '0px',
             transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-            transition: 'transform 0.2s ease-out',
-            transformOrigin: '0 0',
-            left: 0,
-            top: 0
+            width: treeData.length ? Math.max(calcTree(treeData, { rootId: rootNode, placeholders: false }).canvas.width * WIDTH, window.innerWidth) : '100%',
+            height: treeData.length ? Math.max(calcTree(treeData, { rootId: rootNode, placeholders: false }).canvas.height * HEIGHT, window.innerHeight) : '100%',
           }}
         >
-          {/* Render connectors first so they appear behind nodes */}
-          {treeLayout && treeLayout.connectors.map((connector: Connector, index: number) => {
-            const [x1, y1, x2, y2] = connector;
-            const key = `connector-${index}`;
-
-            // Calculate centered coordinates
-            const startX = x1 * WIDTH - (WIDTH / 2);
-            const startY = y1 * HEIGHT - (HEIGHT / 2.5);
-            const endX = x2 * WIDTH - (WIDTH / 2);
-            const endY = y2 * HEIGHT - (HEIGHT / 2.5);
-
-            return (
-              <div
-                key={key}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  overflow: 'visible',
-                }}
-              >
-                <svg
-                  style={{
-                    position: 'absolute',
-                    width: '100%',
-                    height: '100%',
-                    overflow: 'visible',
-                    pointerEvents: 'none',
-                  }}
-                >
-                  <path
-                    d={`M ${startX} ${startY} L ${endX} ${endY}`}
-                    stroke="#94a3b8"
-                    strokeWidth="1"
-                    fill="none"
+          {treeData.length > 0 && (
+            <>
+              {calcTree(treeData, { rootId: rootNode, placeholders: false }).connectors.map((connector, i) => {
+                const key = `connector-${i}`;
+                // Handle the connector format from the relatives-tree library
+                const [fromX, fromY, toX] = connector;
+                
+                return (
+                  <div
+                    key={key}
+                    className="absolute bg-gray-400"
+                    style={{
+                      left: Math.min(fromX * WIDTH + WIDTH / 2, toX * WIDTH + WIDTH / 2),
+                      top: fromY * HEIGHT + HEIGHT / 2,
+                      width: Math.abs((fromX - toX) * WIDTH),
+                      height: 2,
+                    }}
                   />
-                </svg>
-              </div>
-            );
-          })}
-
-          {/* Render nodes on top of connectors */}
-          {treeLayout && treeLayout.nodes.map((node: ExtNode) => (
-            <div
-              key={node.id}
-              onMouseDown={(e) => {
-                handleNodeClick(node, true);
-                e.stopPropagation();
-              }}
-              onMouseUp={(e) => {
-                e.stopPropagation();
-              }}
-              onMouseMove={(e) => {
-                handleNodeClick(node, false);
-                e.stopPropagation();
-              }}
-              className="cursor-pointer absolute"
-              style={{
-                left: node.left * WIDTH,
-                top: node.top * HEIGHT,
-                width: WIDTH,
-                height: HEIGHT,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <FamilyNode
-                node={node}
-                isSelected={selectedNode?.id === node.id}
-                style={{
-                  width: WIDTH - 20,
-                  height: HEIGHT - 40,
-                }}
-              />
-            </div>
-          ))}
+                );
+              })}
+              
+              {calcTree(treeData, { rootId: rootNode, placeholders: false }).nodes.map((node) => {
+                const isSelected = selectedNode?.id === node.id;
+                
+                return (
+                  <div
+                    key={node.id}
+                    className="absolute"
+                    style={{
+                      left: node.left * WIDTH,
+                      top: node.top * HEIGHT,
+                      width: WIDTH,
+                      height: HEIGHT,
+                    }}
+                    onClick={() => handleNodeClick(node, true)}
+                  >
+                    <FamilyNode
+                      node={node as ExtendedNodeWithAttributes}
+                      isSelected={isSelected}
+                    />
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
       </div>
     );
   };
 
+  // Add refresh button to the UI
+  const renderRefreshButton = () => {
+    return (
+      <Button 
+        variant="outline" 
+        size="icon" 
+        onClick={() => fetchFamilyTreeData()} 
+        disabled={loading}
+        className="fixed top-20 right-4 z-10"
+      >
+        <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+      </Button>
+    );
+  };
+
   return (
-    <ProtectedRoute>
+    <AuthGuard>
       <main className="family-tree-container w-screen min-h-screen pt-20 flex items-center justify-center overflow-hidden relative">
         {/* Debug center point */}
         {DEBUG_MODE && (
@@ -1026,14 +920,19 @@ export default function FamilyTreePage() {
         )}
 
         <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-          <SheetContent className="sm:max-w-[425px]">
+          <SheetContent className="sm:max-w-md">
             <SheetHeader>
-              <SheetTitle>Add {relationType?.charAt(0).toUpperCase()}{relationType?.slice(1)}</SheetTitle>
+              <SheetTitle>
+                {relationType === 'parent' && 'Add Parent'}
+                {relationType === 'spouse' && 'Add Spouse'}
+                {relationType === 'child' && 'Add Child'}
+                {relationType === 'sibling' && 'Add Sibling'}
+              </SheetTitle>
             </SheetHeader>
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="firstName" className="text-right flex justify-end items-center gap-1">
-                  First Name<span className="text-red-500">*</span>
+                  First Name <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="firstName"
@@ -1045,7 +944,7 @@ export default function FamilyTreePage() {
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="lastName" className="text-right flex justify-end items-center gap-1">
-                  Last Name<span className="text-red-500">*</span>
+                  Last Name <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="lastName"
@@ -1057,19 +956,19 @@ export default function FamilyTreePage() {
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="gender" className="text-right flex justify-end items-center gap-1">
-                  Gender<span className="text-red-500">*</span>
+                  Gender <span className="text-red-500">*</span>
                 </Label>
                 <Select
                   value={formData.gender}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, gender: value }))}
                 >
-                  <SelectTrigger className="col-span-3" tabIndex={3}>
+                  <SelectTrigger id="gender" className="col-span-3" tabIndex={3}>
                     <SelectValue placeholder="Select gender" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value={ApiGender.male}>Male</SelectItem>
+                    <SelectItem value={ApiGender.female}>Female</SelectItem>
+                    <SelectItem value={ApiGender.other}>Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1077,79 +976,14 @@ export default function FamilyTreePage() {
                 <Label htmlFor="dateOfBirth" className="text-right">
                   Date of Birth
                 </Label>
-                <div className="col-span-3 flex gap-2">
-                  <Select
-                    value={formData.dateOfBirth?.getMonth()?.toString()}
-                    onValueChange={(value) => {
-                      const newDate = formData.dateOfBirth || new Date();
-                      newDate.setMonth(parseInt(value));
-                      setFormData(prev => ({ ...prev, dateOfBirth: new Date(newDate) }));
-                    }}
-                  >
-                    <SelectTrigger className="w-[110px]" tabIndex={4}>
-                      <SelectValue placeholder="Month" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 12 }, (_, i) => (
-                        <SelectItem key={i} value={i.toString()}>
-                          {new Date(0, i).toLocaleString('default', { month: 'long' })}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select
-                    value={formData.dateOfBirth?.getDate()?.toString()}
-                    onValueChange={(value) => {
-                      const newDate = formData.dateOfBirth || new Date();
-                      newDate.setDate(parseInt(value));
-                      setFormData(prev => ({ ...prev, dateOfBirth: new Date(newDate) }));
-                    }}
-                  >
-                    <SelectTrigger className="w-[90px]" tabIndex={5}>
-                      <SelectValue placeholder="Day" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 31 }, (_, i) => (
-                        <SelectItem key={i} value={(i + 1).toString()}>
-                          {i + 1}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select
-                    value={formData.dateOfBirth?.getFullYear()?.toString()}
-                    onValueChange={(value) => {
-                      const newDate = formData.dateOfBirth || new Date();
-                      newDate.setFullYear(parseInt(value));
-                      setFormData(prev => ({ ...prev, dateOfBirth: new Date(newDate) }));
-                    }}
-                  >
-                    <SelectTrigger className="w-[100px]" tabIndex={6}>
-                      <SelectValue placeholder="Year" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 121 }, (_, i) => (
-                        <SelectItem key={i} value={(new Date().getFullYear() - i).toString()}>
-                          {new Date().getFullYear() - i}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="phone" className="text-right">
-                  Phone 
-                </Label>
                 <Input
-                  id="phone"
-                  type="tel"
+                  id="dateOfBirth"
+                  type="date"
                   className="col-span-3"
-                  value={formData.phone}
-                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                  tabIndex={7}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, dateOfBirth: e.target.value }));
+                  }}
+                  tabIndex={4}
                 />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -1160,9 +994,9 @@ export default function FamilyTreePage() {
                   id="email"
                   type="email"
                   className="col-span-3"
-                  value={formData.email}
+                  value={formData.email || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                  tabIndex={8}
+                  tabIndex={5}
                 />
               </div>
               {relationType === 'spouse' && (selectedNode?.children?.length ?? 0) > 0 && (
@@ -1285,7 +1119,9 @@ export default function FamilyTreePage() {
             </Button>
           </div>
         )}
+
+        {renderRefreshButton()}
       </main>
-    </ProtectedRoute>
+    </AuthGuard>
   );
 } 

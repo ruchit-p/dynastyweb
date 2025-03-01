@@ -3,22 +3,13 @@
 import { useState, useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter, useSearchParams } from 'next/navigation'
-import { toast } from "@/components/ui/use-toast"
+import { useSearchParams } from 'next/navigation'
 import { logger } from "@/lib/logger"
 import { v4 as uuidv4 } from "uuid"
 import { useAuth } from "@/components/auth/AuthContext"
 import AuthForm, { LOGIN_FIELDS } from "@/components/auth/AuthForm"
 
-const showVerificationToast = () => {
-  toast({
-    title: 'Email Verification Required',
-    description: 'Please check your email and click the verification link to complete sign up.',
-  });
-};
-
 export default function LoginPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const auth = useAuth();
   const [requestId] = useState(() => uuidv4());
@@ -51,18 +42,37 @@ export default function LoginPage() {
         email: String(formData.email).replace(/(.{3})(.*)(@.*)/, '$1***$3') // Mask email for privacy
       });
       
+      // Get redirect path from URL params or use default
+      const redirectPath = searchParams.get('redirect') || '/family-tree';
+      
+      // Log the redirect path for debugging
+      logger.debug({
+        msg: 'Login redirect path',
+        component: 'login-page',
+        requestId,
+        redirectPath
+      });
+      
       // Call the login method from AuthContext
+      // The login method will handle redirects and error toasts automatically
       await auth.login({
         email: String(formData.email),
         password: String(formData.password)
-      }, searchParams.get('redirect') || '/family-tree');
+      }, redirectPath);
       
       // If we get here, login was successful (auth.login handles redirects)
+      logger.debug({
+        msg: 'Login function completed, waiting for redirect',
+        component: 'login-page',
+        requestId
+      });
+      
       return { success: true };
     } catch (error: unknown) {
-      // Handle specific error cases
+      // This catch block shouldn't execute since auth.login handles errors with toasts
+      // But we keep it for defensive programming
       logger.error({
-        msg: 'Login failed',
+        msg: 'Unexpected login error not handled by auth.login',
         component: 'login-page',
         requestId,
         error: error instanceof Error ? {
@@ -71,40 +81,11 @@ export default function LoginPage() {
         } : String(error),
       });
       
-      const err = error as { message?: string };
-      
-      if (err.message?.includes('Invalid login credentials')) {
-        toast({
-          title: 'Login failed',
-          description: 'Invalid email or password. Please try again.',
-          variant: 'destructive',
-        });
-        return {
-          error: {
-            message: 'Invalid email or password. Please try again.'
-          }
-        };
-      } else if (err.message?.includes('Email not confirmed')) {
-        showVerificationToast();
-        router.push('/verify-email');
-        return {
-          error: {
-            message: 'Please verify your email first'
-          },
-          needsEmailVerification: true
-        };
-      } else {
-        toast({
-          title: 'Login failed',
-          description: err.message || 'An error occurred during sign in.',
-          variant: 'destructive',
-        });
-        return {
-          error: {
-            message: err.message || 'An error occurred during sign in.'
-          }
-        };
-      }
+      return {
+        error: {
+          message: error instanceof Error ? error.message : 'An unexpected error occurred'
+        }
+      };
     }
   };
 

@@ -1,13 +1,11 @@
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useToast } from '@/components/ui/use-toast';
-import { createClient } from '@/lib/client/supabase-browser';
-import { SupabaseClient } from '@supabase/supabase-js';
-import { Database } from '@/lib/shared/types/supabase';
+import { authService } from '@/lib/client/services/auth';
 import AuthForm, { AuthField } from '@/components/auth/AuthForm';
 
 // Define the fields for the forgot password form
@@ -26,32 +24,13 @@ export default function ForgotPasswordPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [message, setMessage] = useState('');
-  const [supabase, setSupabase] = useState<SupabaseClient<Database> | null>(null);
 
-  useEffect(() => {
-    const initSupabase = async () => {
-      const client = createClient();
-      setSupabase(client);
-    };
-    
-    initSupabase();
-  }, []);
-
-  const handleResetPassword = async (formData: Record<string, string>) => {
+  const handleResetPassword = async (formData: Record<string, unknown>) => {
     setMessage('');
 
-    if (!supabase) {
-      return {
-        error: {
-          message: 'Unable to connect to authentication service'
-        }
-      };
-    }
-
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`,
-      });
+      const email = formData.email as string;
+      const { error } = await authService.resetPassword(email);
 
       if (error) throw error;
 

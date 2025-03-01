@@ -3,6 +3,7 @@ import { ExtNode } from 'relatives-tree/lib/types';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { RelativeTreeNode } from '@/lib/api-client';
 
 interface Props {
   node: ExtNode & {
@@ -11,6 +12,14 @@ interface Props {
       imageUrl?: string;
       isBloodRelated?: boolean;
       profilePicture?: string;
+      firstName?: string;
+      lastName?: string;
+      familyTreeId?: string;
+      treeOwnerId?: string;
+      status?: string;
+      dateOfBirth?: string;
+      dateOfDeath?: string;
+      bio?: string;
     };
   };
   style?: React.CSSProperties;
@@ -40,8 +49,14 @@ const FamilyNode: React.FC<Props> = ({ node, style, isSelected }) => {
     height: '100%',
   };
 
-  const initials = node.attributes?.displayName
-    ? node.attributes.displayName
+  // Generate display name from firstName and lastName if available, or use displayName
+  const displayName = node.attributes?.displayName || 
+    (node.attributes?.firstName || node.attributes?.lastName ? 
+      `${node.attributes?.firstName || ''} ${node.attributes?.lastName || ''}`.trim() : 
+      'Unknown');
+
+  const initials = displayName
+    ? displayName
         .split(' ')
         .map((n: string) => n[0])
         .slice(0, 2)
@@ -71,7 +86,7 @@ const FamilyNode: React.FC<Props> = ({ node, style, isSelected }) => {
       <Avatar className="h-12 w-12 select-none shrink-0">
         <AvatarImage 
           src={node.attributes?.profilePicture || "/avatar.svg"} 
-          alt={node.attributes?.displayName || 'Member'} 
+          alt={displayName} 
           draggable={false}
           className="pointer-events-none"
         />
@@ -88,9 +103,9 @@ const FamilyNode: React.FC<Props> = ({ node, style, isSelected }) => {
             "break-words",
             "w-full max-w-[120px]"
           )}
-          title={node.attributes?.displayName}
+          title={displayName}
         >
-          {node.attributes?.displayName || 'Unknown'}
+          {displayName}
         </div>
       </div>
     </div>

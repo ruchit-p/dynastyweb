@@ -35,11 +35,14 @@ export default function AuthStatus({
       
       try {
         const supabase = createClient();
-        const { data: { session } } = await supabase.auth.getSession();
         
-        setUser(session?.user || null);
+        // First verify user is authenticated using getUser()
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        setUser(user || null);
       } catch (error) {
         console.error('Error checking auth status:', error);
+        setUser(null);
       } finally {
         setIsLoading(false);
       }

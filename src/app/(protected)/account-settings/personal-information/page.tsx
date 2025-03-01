@@ -10,7 +10,16 @@ import { Camera, Loader2 } from "lucide-react"
 import { useAuth } from "@/components/auth"
 import { useToast } from "@/components/ui/use-toast"
 import { createClient } from "@/lib/supabase/client"
-import ProtectedRoute from "@/components/ProtectedRoute"
+import { AuthGuard } from "@/components/auth"
+import { z } from "zod"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
+import { format } from "date-fns"
+import { CalendarIcon } from "lucide-react"
+import { Calendar } from "@/components/ui/calendar"
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default function PersonalInformationPage() {
   const { currentUser, refreshUser } = useAuth()
@@ -116,106 +125,108 @@ export default function PersonalInformationPage() {
 
   if (!currentUser) {
     return (
-      <ProtectedRoute>
+      <AuthGuard>
         <div className="flex justify-center items-center min-h-[500px]">
           <Loader2 className="h-8 w-8 animate-spin text-[#0A5C36]" />
         </div>
-      </ProtectedRoute>
+      </AuthGuard>
     )
   }
 
   return (
-    <ProtectedRoute>
-      <div className="bg-white shadow-xl rounded-xl overflow-hidden p-6">
-        <div className="flex flex-col items-center mb-6">
-          <div className="relative">
-            <Image
-              src={newProfilePicture ? URL.createObjectURL(newProfilePicture) : (currentUser.avatar_url || "/avatar.svg")}
-              alt="Profile picture"
-              width={200}
-              height={200}
-              className="rounded-full object-cover"
-            />
-            {isEditing && (
-              <label
-                htmlFor="profile-picture"
-                className="absolute bottom-0 right-0 bg-[#0A5C36] text-white p-2 rounded-full cursor-pointer hover:bg-[#0A5C36]/90 transition-colors"
-              >
-                <Camera className="h-5 w-5" />
-                <input
-                  id="profile-picture"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleProfilePictureChange}
+    <AuthGuard>
+      <div className="space-y-6">
+        <div className="bg-white shadow-xl rounded-xl overflow-hidden p-6">
+          <div className="flex flex-col items-center mb-6">
+            <div className="relative">
+              <Image
+                src={newProfilePicture ? URL.createObjectURL(newProfilePicture) : (currentUser.avatar_url || "/avatar.svg")}
+                alt="Profile picture"
+                width={200}
+                height={200}
+                className="rounded-full object-cover"
+              />
+              {isEditing && (
+                <label
+                  htmlFor="profile-picture"
+                  className="absolute bottom-0 right-0 bg-[#0A5C36] text-white p-2 rounded-full cursor-pointer hover:bg-[#0A5C36]/90 transition-colors"
+                >
+                  <Camera className="h-5 w-5" />
+                  <input
+                    id="profile-picture"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleProfilePictureChange}
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  name="firstName"
+                  value={formData.firstName}
+                  onChange={handleInputChange}
+                  disabled={!isEditing}
                 />
-              </label>
+              </div>
+              <div>
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={handleInputChange}
+                  disabled={!isEditing}
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                value={currentUser?.email}
+                disabled={true} // Email cannot be changed
+                className="bg-gray-50"
+              />
+            </div>
+            <div>
+              <Label htmlFor="phoneNumber">Phone Number</Label>
+              <Input
+                id="phoneNumber"
+                name="phoneNumber"
+                value={formData.phoneNumber}
+                onChange={handleInputChange}
+                disabled={!isEditing}
+              />
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end space-x-4">
+            {isEditing ? (
+              <>
+                <Button variant="outline" onClick={() => setIsEditing(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSave} disabled={isSaving}>
+                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {isSaving ? "Saving..." : "Save Changes"}
+                </Button>
+              </>
+            ) : (
+              <Button onClick={() => setIsEditing(true)}>Edit Profile</Button>
             )}
           </div>
         </div>
-
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="firstName">First Name</Label>
-              <Input
-                id="firstName"
-                name="firstName"
-                value={formData.firstName}
-                onChange={handleInputChange}
-                disabled={!isEditing}
-              />
-            </div>
-            <div>
-              <Label htmlFor="lastName">Last Name</Label>
-              <Input
-                id="lastName"
-                name="lastName"
-                value={formData.lastName}
-                onChange={handleInputChange}
-                disabled={!isEditing}
-              />
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              value={currentUser?.email}
-              disabled={true} // Email cannot be changed
-              className="bg-gray-50"
-            />
-          </div>
-          <div>
-            <Label htmlFor="phoneNumber">Phone Number</Label>
-            <Input
-              id="phoneNumber"
-              name="phoneNumber"
-              value={formData.phoneNumber}
-              onChange={handleInputChange}
-              disabled={!isEditing}
-            />
-          </div>
-        </div>
-
-        <div className="mt-6 flex justify-end space-x-4">
-          {isEditing ? (
-            <>
-              <Button variant="outline" onClick={() => setIsEditing(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {isSaving ? "Saving..." : "Save Changes"}
-              </Button>
-            </>
-          ) : (
-            <Button onClick={() => setIsEditing(true)}>Edit Profile</Button>
-          )}
-        </div>
       </div>
-    </ProtectedRoute>
+    </AuthGuard>
   )
 } 

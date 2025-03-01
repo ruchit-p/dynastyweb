@@ -223,8 +223,16 @@ export default function MediaUpload({
           
           // Get auth token for edge function call
           const supabase = createClient()
-          const { data: { session } } = await supabase.auth.getSession()
-          const token = session?.access_token
+          
+          // Get user and session securely
+          const { data: { user } } = await supabase.auth.getUser()
+          
+          // If we need the token, we can still get the session after confirming user authentication
+          let token = null
+          if (user) {
+            const { data: { session } } = await supabase.auth.getSession()
+            token = session?.access_token
+          }
 
           // Prepare Edge Function URL
           const FUNCTIONS_URL = process.env.NEXT_PUBLIC_SUPABASE_URL 

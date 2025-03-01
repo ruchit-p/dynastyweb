@@ -1,5 +1,7 @@
 // Create a custom logger for Next.js RSC compatibility
 // This avoids the worker thread issues with pino in React Server Components
+import * as Sentry from '@sentry/nextjs';
+
 const createSimpleLogger = (level: string) => {
   const logLevels: Record<string, number> = {
     trace: 10,
@@ -101,7 +103,20 @@ export function trackError(error: Error, metadata: Record<string, unknown> = {})
     ...metadata
   });
   
+  // Log error to console
   logger.error({}, 'Error tracked');
+
+  // Capture error in Sentry with additional context
+  try {
+    Sentry.captureException(error);
+    if (Object.keys(metadata).length > 0) {
+      Sentry.setContext('additional', metadata);
+    }
+  } catch (sentryError) {
+    // Catch and log any issues with Sentry reporting
+    console.error('Failed to report error to Sentry:', sentryError);
+  }
+  
   return error;
 }
 
@@ -110,6 +125,22 @@ export function trackError(error: Error, metadata: Record<string, unknown> = {})
  */
 export function logErrorToMCPServer(error: Error, metadata: Record<string, unknown> = {}) {
   console.error('Error logged to MCP server:', error, metadata);
+  
+  // Also capture in Sentry with critical priority
+  try {
+    // Add MCP-specific context
+    Sentry.setContext('mcp_log', {
+      isMCPError: true,
+      ...metadata
+    });
+    
+    // Set the level to critical for MCP errors
+    Sentry.captureException(error, {
+      level: 'fatal' // Highest severity level in Sentry
+    });
+  } catch (sentryError) {
+    console.error('Failed to report MCP error to Sentry:', sentryError);
+  }
 }
 
 // Export the base logger

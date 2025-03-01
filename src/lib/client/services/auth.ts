@@ -1,11 +1,10 @@
 /**
  * Client-side auth service
  * 
- * This provides a clean wrapper around Edge Functions for authentication.
+ * This provides a clean wrapper around API client for authentication.
  * It's designed to be used by components that need authentication functionality.
  */
 
-import { createClient } from '@/lib/supabase'
 import { api } from '@/lib/api-client'
 import logger from '@/lib/logger'
 
@@ -56,112 +55,255 @@ type VerifyInvitationResponse = {
   inviteeEmail?: string;
 }
 
+// Define response types for auth endpoints
+type AuthUserResponse = {
+  user: any;
+}
+
+type AuthSessionResponse = {
+  user: any;
+  session: any;
+}
+
 // MARK: - Service Functions
 
 /**
  * Sign up a new user
  */
 export async function signUpUser(data: SignUpData) {
-  const response = await api.auth.signUp(data)
-  
-  if (response.error) {
-    logger.error({
-      msg: 'Sign up failed',
-      error: response.error
+  try {
+    logger.debug({
+      msg: 'Starting sign up process',
+      email: data.email.substring(0, 3) + '***' + data.email.split('@')[1]
     })
-    return { error: response.error }
+    
+    const response = await api.auth.signUp({
+      email: data.email,
+      password: data.password,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      dateOfBirth: data.dateOfBirth,
+      gender: data.gender
+    })
+    
+    if (response.error) {
+      logger.error({
+        msg: 'Sign up failed',
+        error: response.error.message,
+        code: response.error.code
+      })
+      
+      return { 
+        error: { 
+          message: response.error.message,
+          code: response.error.code
+        } 
+      }
+    }
+    
+    logger.debug({
+      msg: 'Sign up API call succeeded',
+      hasUser: !!response.data?.user
+    })
+    
+    // Cast to the expected type
+    const userData = response.data as AuthUserResponse
+    
+    return { user: userData?.user }
+  } catch (error) {
+    logger.error({
+      msg: 'Unexpected sign up error',
+      error: error instanceof Error ? error.message : String(error)
+    })
+    
+    return {
+      error: {
+        message: error instanceof Error ? error.message : 'An unexpected error occurred during sign up'
+      }
+    }
   }
-  
-  return { user: response.data }
 }
 
 /**
  * Sign in a user with email and password
  */
 export async function signInUser(data: SignInData) {
-  const response = await api.auth.signIn(data)
-  
-  if (response.error) {
-    logger.error({
-      msg: 'Sign in failed',
-      error: response.error
+  try {
+    logger.debug({
+      msg: 'Starting sign in process',
+      email: data.email.substring(0, 3) + '***' + data.email.split('@')[1]
     })
-    return { error: response.error }
+    
+    const response = await api.auth.signIn({
+      email: data.email,
+      password: data.password
+    })
+    
+    if (response.error) {
+      logger.error({
+        msg: 'Sign in failed',
+        error: response.error.message,
+        code: response.error.code
+      })
+      
+      return { 
+        error: { 
+          message: response.error.message,
+          code: response.error.code
+        } 
+      }
+    }
+    
+    // Log success with session details
+    logger.debug({
+      msg: 'Sign in API call succeeded',
+      hasSession: !!response.data?.session,
+      hasUser: !!response.data?.user
+    })
+    
+    // Cast to the expected type and return the session
+    const sessionData = response.data as AuthSessionResponse
+    
+    return { session: sessionData.session }
+  } catch (error) {
+    logger.error({
+      msg: 'Unexpected sign in error',
+      error: error instanceof Error ? error.message : String(error)
+    })
+    
+    return {
+      error: {
+        message: error instanceof Error ? error.message : 'An unexpected error occurred during sign in'
+      }
+    }
   }
-  
-  return { session: response.data }
 }
 
 /**
  * Sign out the current user
  */
 export async function signOutUser() {
-  const response = await api.auth.signOut()
-  
-  if (response.error) {
-    logger.error({
-      msg: 'Sign out failed',
-      error: response.error
+  try {
+    logger.debug({
+      msg: 'Starting sign out process'
     })
-    return { error: response.error }
+    
+    const response = await api.auth.signOut()
+    
+    if (response.error) {
+      logger.error({
+        msg: 'Sign out failed',
+        error: response.error.message,
+        code: response.error.code
+      })
+      
+      return { 
+        error: { 
+          message: response.error.message,
+          code: response.error.code
+        } 
+      }
+    }
+    
+    logger.debug({
+      msg: 'Sign out successful'
+    })
+    
+    return { success: true }
+  } catch (error) {
+    logger.error({
+      msg: 'Unexpected sign out error',
+      error: error instanceof Error ? error.message : String(error)
+    })
+    
+    return {
+      error: {
+        message: error instanceof Error ? error.message : 'An unexpected error occurred during sign out'
+      }
+    }
   }
-  
-  return { success: true }
 }
 
 /**
  * Send password reset email
  */
 export async function resetUserPassword(email: string) {
-  const response = await api.auth.resetPassword(email)
-  
-  if (response.error) {
-    logger.error({
-      msg: 'Password reset failed',
-      error: response.error
+  try {
+    logger.debug({
+      msg: 'Starting password reset process',
+      email: email.substring(0, 3) + '***' + email.split('@')[1]
     })
-    return { error: response.error }
+    
+    const response = await api.auth.resetPassword(email)
+    
+    if (response.error) {
+      logger.error({
+        msg: 'Password reset failed',
+        error: response.error.message,
+        code: response.error.code
+      })
+      
+      return { 
+        error: { 
+          message: response.error.message,
+          code: response.error.code
+        } 
+      }
+    }
+    
+    logger.debug({
+      msg: 'Password reset email sent successfully'
+    })
+    
+    return { success: true }
+  } catch (error) {
+    logger.error({
+      msg: 'Unexpected password reset error',
+      error: error instanceof Error ? error.message : String(error)
+    })
+    
+    return {
+      error: {
+        message: error instanceof Error ? error.message : 'An unexpected error occurred during password reset'
+      }
+    }
   }
-  
-  return { success: true }
 }
 
 /**
  * Get the current user session
  */
 export async function getUserSession() {
-  // Use Supabase client directly for getting session since it's handled by the browser
-  const supabase = createClient()
-  const { data, error } = await supabase.auth.getSession()
-  
-  if (error) {
+  try {
+    const response = await api.auth.getUser()
+    
+    if (response.error) {
+      logger.error({
+        msg: 'Get user failed',
+        error: response.error.message
+      })
+      return { error: { message: response.error.message } }
+    }
+    
+    // Cast to the expected type
+    const userData = response.data as AuthSessionResponse
+    
+    return { 
+      user: userData.user,
+      session: userData.session 
+    }
+  } catch (error) {
     logger.error({
-      msg: 'Get session failed',
-      error: error.message
+      msg: 'Unexpected error getting user session',
+      error: error instanceof Error ? error.message : String(error)
     })
-    return { error: { message: error.message } }
+    
+    return {
+      error: {
+        message: error instanceof Error ? error.message : 'An unexpected error occurred getting user session'
+      }
+    }
   }
-  
-  return { session: data.session }
-}
-
-/**
- * Refresh the user session
- */
-export async function refreshUserSession() {
-  // Use Supabase client directly for refreshing the session
-  const supabase = createClient()
-  const { data, error } = await supabase.auth.refreshSession()
-  
-  if (error) {
-    logger.error({
-      msg: 'Refresh session failed',
-      error: error.message
-    })
-    return { error: { message: error.message } }
-  }
-  
-  return { session: data.session }
 }
 
 /**
@@ -208,6 +350,36 @@ export async function signUpUserWithInvitation(data: InvitedSignUpData) {
   return { user: response.data }
 }
 
+/**
+ * Send email verification
+ */
+export async function sendEmailVerification(data: { email: string, expiresIn?: number }) {
+  try {
+    const response = await api.auth.verifyEmail(data.email)
+    
+    if (response.error) {
+      logger.error({
+        msg: 'Email verification resend failed',
+        error: response.error.message
+      })
+      return { error: { message: response.error.message }, success: false }
+    }
+    
+    return { success: true }
+  } catch (error) {
+    logger.error({
+      msg: 'Email verification resend failed',
+      error: error instanceof Error ? error.message : String(error)
+    })
+    return { 
+      error: { 
+        message: error instanceof Error ? error.message : 'Failed to resend verification email' 
+      }, 
+      success: false 
+    }
+  }
+}
+
 // MARK: - Unified Service Export
 export const authService = {
   signUp: signUpUser,
@@ -215,7 +387,7 @@ export const authService = {
   signOut: signOutUser,
   resetPassword: resetUserPassword,
   getSession: getUserSession,
-  refreshSession: refreshUserSession,
   verifyInvitation: verifyUserInvitation,
   signUpWithInvitation: signUpUserWithInvitation,
+  sendEmailVerification: sendEmailVerification,
 } 

@@ -10,11 +10,11 @@ import { Mail, CheckCircle, Clock, RefreshCw, AlertTriangle } from "lucide-react
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { createClient } from "@/lib/supabase"
-import { authService } from "@/lib/client/services/auth-service"
+import { authService } from "@/lib/client/services/auth"
 import { AuthStatus } from "@/components/auth"
 
 const VERIFICATION_EXPIRY_TIME = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
-const RESEND_COOLDOWN = 60 // Cooldown period in seconds
+const RESEND_COOLDOWN = 300 // Cooldown period in seconds (5 minutes)
 
 // Utility for showing countdown timer
 function ExpiryCountdown({ expiryTime, onExpire }: { expiryTime: number, onExpire: () => void }) {
@@ -168,13 +168,10 @@ export default function VerifyEmailPage() {
         expiresIn: VERIFICATION_EXPIRY_TIME / 1000 // Convert ms to seconds
       })
       
-      if (!result.success) {
-        // Type guard to check if result has an error property
-        if ('error' in result) {
-          throw new Error(result.error.message || 'Failed to resend verification email')
-        } else {
-          throw new Error('Failed to resend verification email')
-        }
+      if ('error' in result && result.error) {
+        throw new Error(result.error.message || 'Failed to resend verification email')
+      } else {
+        throw new Error('Failed to resend verification email')
       }
       
       // Reset expiry time to now + 24 hours
@@ -291,27 +288,30 @@ export default function VerifyEmailPage() {
             </div>
             
             <div className="space-y-2">
-              <Button
-                onClick={handleResendVerification}
-                disabled={isResending || resendCooldown > 0}
-                variant="outline"
+              <Button 
+                onClick={handleResendVerification} 
+                disabled={resendCooldown > 0 || isResending}
                 className="w-full"
               >
                 {isResending ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Sending...
-                  </>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                 ) : resendCooldown > 0 ? (
                   <>
-                    Resend in {resendCooldown}s
+                    <Clock className="h-4 w-4 mr-2" />
+                    Wait {resendCooldown}s
                   </>
                 ) : (
                   <>
+                    <Mail className="h-4 w-4 mr-2" />
                     Resend verification email
                   </>
                 )}
               </Button>
+              {resendCooldown === 0 && !isResending && (
+                <p className="text-xs text-gray-500 mt-1 text-center">
+                  You can request a new verification email every 5 minutes.
+                </p>
+              )}
               
               <Button
                 onClick={() => router.push('/login')}

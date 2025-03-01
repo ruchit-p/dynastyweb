@@ -23,6 +23,18 @@ A modern web application for creating and managing family trees, sharing family 
 - **Forms**: React Hook Form with Zod validation
 - **State Management**: React Context + Custom Hooks
 
+## Important Notes
+
+### Authentication System
+The authentication system uses the `AuthGuard` component for route protection. This component provides:
+
+- **Client-side route protection** that redirects unauthenticated users to the login page
+- **Email verification** checks to ensure users have verified accounts
+- **Seamless redirects** back to the originally requested page after login
+- **Configurable behavior** with options for verification requirements, loading states, and more
+
+For more information on the authentication system, see [Authentication Guide](./docs/AUTH_GUIDE.md).
+
 ## Getting Started
 
 ### Prerequisites
@@ -44,18 +56,40 @@ npm install
 yarn install
 ```
 
-3. Create a `.env.local` file with your Supabase credentials:
+3. Set up environment variables:
+
+This project uses multiple environment files for different environments:
+
+- `.env.development` - For local development (created automatically)
+- `.env.production` - For production deployment (created automatically)
+- `.env.local` - For local overrides (you should create this)
+
+Create a `.env.local` file with your Supabase credentials:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-4. Run the development server:
+4. Start the development server
 ```bash
 npm run dev
 # or
 yarn dev
 ```
+
+5. Start local Supabase (optional, if using local Supabase)
+```bash
+npm run supabase:start
+```
+
+### Production Environment
+
+For production deployment to `mydynastyapp.com`, the configuration is managed via:
+- Environment variables in Vercel
+- The `.env.production` file included in the repository
+
+See the [Deployment Guide](./docs/deployment.md) for detailed instructions on deploying to production.
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 

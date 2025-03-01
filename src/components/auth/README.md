@@ -2,6 +2,13 @@
 
 This directory contains reusable authentication components for Next.js applications using Supabase as the authentication provider. These components are designed to be type-safe, consistent, and easy to integrate into your application.
 
+## Key Features
+
+- **Automatic Session Management**: Uses `@supabase/ssr` package to handle session persistence automatically without manual localStorage management
+- **Type-Safe Authentication**: Fully typed components and hooks for better developer experience
+- **Client & Server Components**: Built to work with Next.js App Router architecture
+- **Comprehensive Error Handling**: Structured error responses and user feedback
+
 ## Components Overview
 
 ### 1. AuthGuard
@@ -19,6 +26,21 @@ export default function ProtectedPage() {
     </AuthGuard>
   );
 }
+```
+
+#### Configuration Options
+
+`AuthGuard` can be configured with these props:
+
+```tsx
+<AuthGuard
+  requiredVerification={true} // Whether email verification is required
+  fallbackUrl='/login' // Where to redirect if not authenticated
+  showLoading={true} // Whether to show loading state while checking auth
+  verifyWithContext={true} // Use AuthContext for verification
+>
+  <YourProtectedContent />
+</AuthGuard>
 ```
 
 ### 2. AuthStatus
@@ -101,7 +123,7 @@ const CUSTOM_FIELDS = [
 
 ### 4. AuthProvider
 
-Context provider that manages authentication state and provides auth methods to components.
+Context provider that manages authentication state and provides auth methods to components. Uses the `@supabase/ssr` package to handle session persistence automatically.
 
 ```tsx
 // In your layout.tsx
@@ -120,6 +142,12 @@ export default function RootLayout({ children }) {
 }
 ```
 
+The AuthProvider now:
+- Initializes a Supabase client using the SSR package
+- Manages session state automatically without requiring localStorage
+- Handles auth state changes via Supabase's onAuthStateChange API
+- Provides typed access to the current user, session and auth methods
+
 ### 5. useAuth Hook
 
 Access authentication state and functions from any component.
@@ -128,16 +156,16 @@ Access authentication state and functions from any component.
 import { useAuth } from "@/components/auth";
 
 function YourComponent() {
-  const { user, signOut, isLoading } = useAuth();
+  const { currentUser, loading, logout } = useAuth();
   
-  if (isLoading) return <div>Loading...</div>;
+  if (loading) return <div>Loading...</div>;
   
   return (
     <div>
-      {user ? (
+      {currentUser ? (
         <div>
-          <p>Welcome, {user.email}!</p>
-          <button onClick={signOut}>Sign out</button>
+          <p>Welcome, {currentUser.email}!</p>
+          <button onClick={logout}>Sign out</button>
         </div>
       ) : (
         <p>Please sign in</p>
@@ -146,6 +174,31 @@ function YourComponent() {
   );
 }
 ```
+
+The hook provides:
+- `currentUser`: The authenticated user object (or null)
+- `session`: The current Supabase session (or null)
+- `loading`: Boolean indicating if auth state is being loaded
+- Auth methods: `login`, `logout`, `signUp`, `resetPassword`, etc.
+
+## Authentication Flow
+
+1. **Login Process**:
+   - User submits credentials via AuthForm
+   - AuthContext's login method is called
+   - Supabase authenticates the user
+   - Session is automatically persisted via the SSR package
+   - User is redirected to the appropriate page (handling URL redirect parameters)
+
+2. **Session Management**:
+   - The `@supabase/ssr` package handles cookie-based session persistence
+   - No manual localStorage management is required
+   - Auth state is kept in sync via onAuthStateChange listeners
+
+3. **Protected Routes**:
+   - AuthGuard checks for valid session
+   - Unauthenticated users are redirected to login with the current path as a redirect parameter
+   - Email verification status is checked and appropriate notifications are shown
 
 ## Example Implementation
 
@@ -159,32 +212,22 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import AuthForm, { LOGIN_FIELDS } from "@/components/auth/AuthForm";
-import { signIn } from "@/app/actions/auth";
+import { useAuth } from "@/components/auth";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (formData: Record<string, string>) => {
+    setIsLoading(true);
     try {
-      const result = await signIn({
+      await login({
         email: formData.email,
         password: formData.password
       });
       
-      if (result.error) {
-        throw result.error;
-      }
-      
-      if (result.user) {
-        if (!result.user.email_confirmed_at) {
-          router.push('/verify-email');
-          return { needsEmailVerification: true };
-        } else {
-          router.push('/dashboard');
-          return { success: true, redirectTo: '/dashboard' };
-        }
-      }
-      
+      // Redirect is handled by the login method which considers URL parameters
       return { success: true };
     } catch (error) {
       return { 
@@ -192,6 +235,8 @@ export default function LoginPage() {
           message: error instanceof Error ? error.message : 'Failed to login',
         } 
       };
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -205,7 +250,8 @@ export default function LoginPage() {
           <AuthForm
             fields={LOGIN_FIELDS}
             onSubmit={handleSubmit}
-            submitButtonText="Sign in"
+            submitButtonText={isLoading ? "Signing in..." : "Sign in"}
+            isSubmitting={isLoading}
           />
         </div>
       </div>
@@ -216,21 +262,12 @@ export default function LoginPage() {
 
 ## Best Practices
 
-1. **Auth Flow**: Use `AuthForm` for user input, server actions for authentication logic, and Context API for global state.
-
+1. **Use SSR Package**: Leverage `@supabase/ssr` for automatic session management instead of manual localStorage handling.
 2. **Protected Routes**: Always use `AuthGuard` to protect routes that require authentication.
-
 3. **User Feedback**: Use toast notifications to give feedback on authentication actions.
-
-4. **Error Handling**: Properly handle and display authentication errors.
-
-5. **Type Safety**: Use TypeScript types provided by the components for better type checking.
-
+4. **Error Handling**: Properly handle and display authentication errors with structured responses.
+5. **Type Safety**: Utilize TypeScript interfaces for all auth-related data.
 6. **Custom Forms**: Extend `AuthForm` with custom fields when needed for your specific auth requirements.
-
-7. **Server Actions**: Use Next.js server actions for authentication logic to keep sensitive operations on the server.
-
-8. **Layout Integration**: Place the `AuthStatus` component in the application layout for consistent authentication UI.
 
 ## Customization
 

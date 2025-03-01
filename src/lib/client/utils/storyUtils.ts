@@ -1,6 +1,6 @@
 import type { Story } from '@/lib/shared/types/story'
 import { createLogger } from '@/lib/client/logger'
-import { callEdgeFunction } from '@/lib/api-client'
+import { api } from '@/lib/api-client'
 
 // Create a logger for story utilities
 const storyLogger = createLogger('storyUtils')
@@ -168,13 +168,13 @@ export function searchStories(stories: Story[], query: string): Story[] {
 // MARK: - Story Actions
 export async function fetchUserStories(): Promise<Story[]> {
   try {
-    const response = await callEdgeFunction('/stories/user')
+    const response = await api.stories.getUserStories('current')
     
-    if (!response.data) {
-      throw new Error('Failed to fetch user stories')
+    if (response.error) {
+      throw new Error(response.error.message || 'Failed to fetch user stories')
     }
     
-    return response.data.stories
+    return response.data?.stories || []
   } catch (error) {
     storyLogger.error('Error fetching user stories', {
       error: error instanceof Error ? error.message : String(error)
@@ -185,13 +185,13 @@ export async function fetchUserStories(): Promise<Story[]> {
 
 export async function fetchAccessibleStories(): Promise<Story[]> {
   try {
-    const response = await callEdgeFunction('/stories/accessible')
+    const response = await api.stories.getFeed()
     
-    if (!response.data) {
-      throw new Error('Failed to fetch accessible stories')
+    if (response.error) {
+      throw new Error(response.error.message || 'Failed to fetch accessible stories')
     }
     
-    return response.data.stories
+    return response.data?.stories || []
   } catch (error) {
     storyLogger.error('Error fetching accessible stories', {
       error: error instanceof Error ? error.message : String(error)
@@ -247,29 +247,25 @@ export async function createNewStory(storyData: Partial<Story>): Promise<ActionR
       requestBody.people_involved = storyData.people_involved || storyData.peopleInvolved
     }
     
-    const response = await callEdgeFunction('/stories', requestBody)
+    const response = await api.stories.createStory(requestBody)
     
-    if (response.data?.story) {
-      storyLogger.info('Story created successfully', {
-        storyId: response.data.story.id,
-        authorId: storyData.user_id || storyData.authorID
-      })
-      return { success: true, story: response.data.story }
+    if (response.error) {
+      throw new Error(response.error.message || 'Failed to create story')
     }
     
-    storyLogger.warn('Failed to create story', {
-      error: response.error || 'Unknown error'
-    })
-    return { success: false, error: response.error?.message || 'Failed to create story' }
+    return {
+      success: true,
+      story: response.data?.story
+    }
   } catch (error) {
     storyLogger.error('Error creating story', {
-      title: storyData.title,
-      authorId: storyData.user_id || storyData.authorID,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      title: storyData.title || 'Untitled'
     })
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error occurred' 
+    
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'An unknown error occurred'
     }
   }
 }
@@ -277,21 +273,14 @@ export async function createNewStory(storyData: Partial<Story>): Promise<ActionR
 export async function updateExistingStory(storyData: Partial<Story> & { id: string }): Promise<ActionResult<Story>> {
   try {
     storyLogger.debug('Updating story', {
-      storyId: storyData.id,
+      id: storyData.id,
       title: storyData.title
     })
     
     // Create a request body for the API
     const requestBody: Record<string, unknown> = {
-      id: storyData.id
-    }
-    
-    if (storyData.title) {
-      requestBody.title = storyData.title
-    }
-    
-    if (storyData.subtitle) {
-      requestBody.subtitle = storyData.subtitle
+      title: storyData.title || '',
+      subtitle: storyData.subtitle || '',
     }
     
     if (storyData.event_date || storyData.eventDate) {
@@ -316,32 +305,34 @@ export async function updateExistingStory(storyData: Partial<Story> & { id: stri
       requestBody.blocks = storyData.blocks
     }
     
+    if (storyData.family_tree_id || storyData.familyTreeId) {
+      requestBody.family_tree_id = storyData.family_tree_id || storyData.familyTreeId
+    }
+    
     if (storyData.people_involved?.length || storyData.peopleInvolved?.length) {
       requestBody.people_involved = storyData.people_involved || storyData.peopleInvolved
     }
     
-    const response = await callEdgeFunction(`/stories/${storyData.id}`, requestBody)
+    const response = await api.stories.updateStory(storyData.id, requestBody)
     
-    if (response.data?.story) {
-      storyLogger.info('Story updated successfully', {
-        storyId: storyData.id
-      })
-      return { success: true, story: response.data.story }
+    if (response.error) {
+      throw new Error(response.error.message || 'Failed to update story')
     }
     
-    storyLogger.warn('Failed to update story', {
-      storyId: storyData.id,
-      error: response.error || 'Unknown error'
-    })
-    return { success: false, error: response.error?.message || 'Failed to update story' }
+    return {
+      success: true,
+      story: response.data?.story
+    }
   } catch (error) {
     storyLogger.error('Error updating story', {
-      storyId: storyData.id,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      id: storyData.id,
+      title: storyData.title || 'Untitled'
     })
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error occurred' 
+    
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'An unknown error occurred'
     }
   }
 }
@@ -349,34 +340,28 @@ export async function updateExistingStory(storyData: Partial<Story> & { id: stri
 export async function removeStory(storyId: string): Promise<ActionResult<undefined>> {
   try {
     storyLogger.debug('Removing story', {
-      storyId
+      id: storyId
     })
     
-    const response = await callEdgeFunction(`/stories/${storyId}`)
+    const response = await api.stories.deleteStory(storyId)
     
-    if (!response.error) {
-      storyLogger.info('Story deleted successfully', {
-        storyId
-      })
-      return { success: true, story: undefined }
+    if (response.error) {
+      throw new Error(response.error.message || 'Failed to delete story')
     }
     
-    storyLogger.warn('Failed to delete story', {
-      storyId,
-      error: response.error || 'Unknown error'
-    })
-    return { 
-      success: false, 
-      error: response.error?.message || 'Failed to delete story'
+    return {
+      success: true,
+      story: undefined
     }
   } catch (error) {
-    storyLogger.error('Error deleting story', {
-      storyId,
-      error: error instanceof Error ? error.message : String(error)
+    storyLogger.error('Error removing story', {
+      error: error instanceof Error ? error.message : String(error),
+      id: storyId
     })
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error occurred' 
+    
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'An unknown error occurred'
     }
   }
 }

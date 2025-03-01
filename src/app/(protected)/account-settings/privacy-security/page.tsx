@@ -17,11 +17,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Fingerprint, Key, Trash, Loader2 } from "lucide-react"
-import { useAuth } from "@/components/auth"
+import { Fingerprint, Key, Trash, Loader2, AlertTriangle } from "lucide-react"
+import { useAuth, AuthGuard } from "@/components/auth"
 import { useToast } from "@/components/ui/use-toast"
 import { createClient } from "@/lib/supabase/client"
-import ProtectedRoute from "@/components/ProtectedRoute"
 import { ChangePasswordDialog } from "@/components/ChangePasswordDialog"
 import { SettingsManager, type PrivacySettings } from "@/utils/settingsManager"
 
@@ -142,18 +141,18 @@ export default function PrivacySecurityPage() {
 
   if (isLoading) {
     return (
-      <ProtectedRoute>
+      <AuthGuard>
         <div className="flex justify-center items-center min-h-[500px]">
           <Loader2 className="h-8 w-8 animate-spin text-[#0A5C36]" />
         </div>
-      </ProtectedRoute>
+      </AuthGuard>
     )
   }
 
   return (
-    <ProtectedRoute>
-      <div className="bg-white shadow-xl rounded-xl overflow-hidden p-6">
-        <div className="space-y-6">
+    <AuthGuard>
+      <div className="space-y-6">
+        <div className="bg-white shadow-md rounded-lg p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <Fingerprint className="h-5 w-5 text-[#0A5C36]" />
@@ -208,50 +207,54 @@ export default function PrivacySecurityPage() {
         </div>
       </div>
 
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete your account and remove your data from our
-              servers.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="my-4">
-            <Label htmlFor="delete-confirmation" className="text-sm font-medium">
-              Type &quot;DELETE&quot; to confirm
-            </Label>
-            <Input
-              id="delete-confirmation"
-              value={deleteConfirmation}
-              onChange={(e) => setDeleteConfirmation(e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteAccount}
-              disabled={deleteConfirmation !== "DELETE" || isDeleting}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                "Delete Account"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <AuthGuard>
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete your account and remove your data from our
+                servers.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="my-4">
+              <Label htmlFor="delete-confirmation" className="text-sm font-medium">
+                Type &quot;DELETE&quot; to confirm
+              </Label>
+              <Input
+                id="delete-confirmation"
+                value={deleteConfirmation}
+                onChange={(e) => setDeleteConfirmation(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirmation !== "DELETE" || isDeleting}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete Account"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </AuthGuard>
 
-      <ChangePasswordDialog
-        open={showChangePasswordDialog}
-        onOpenChange={setShowChangePasswordDialog}
-      />
-    </ProtectedRoute>
+      <AuthGuard>
+        <ChangePasswordDialog
+          open={showChangePasswordDialog}
+          onOpenChange={setShowChangePasswordDialog}
+        />
+      </AuthGuard>
+    </AuthGuard>
   )
 } 

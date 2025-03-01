@@ -1,0 +1,32 @@
+{
+  "version": 2,
+  "public": false,
+  "buildCommand": "npm run build",
+  "framework": "nextjs",
+  "outputDirectory": ".next",
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "staging": true,
+      "development": false
+    }
+  },
+  "regions": ["sfo1"],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        }
+      ]
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_APP_URL": "https://mydynastyapp.com"
+  },
+  "rewrites": [
+    { "source": "/healthz", "destination": "/api/health" }
+  ]
+}

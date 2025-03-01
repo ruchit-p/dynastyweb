@@ -15,31 +15,7 @@ import { Loader2 } from "lucide-react"
 import { DateOfBirthPicker } from "@/components/ui/date-of-birth-picker"
 import { GenderSelect } from "@/components/ui/gender-select"
 import { Input } from "@/components/ui/input"
-import { Calendar } from "@/components/ui/calendar"
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { useToast } from "@/components/ui/use-toast"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { cn } from "@/lib/utils"
-import { format } from "date-fns"
-import { CalendarDaysIcon } from "lucide-react"
 import React from "react"
-import { useForm } from "react-hook-form"
-import { generateRequestId } from "@/lib/client/utils/request-id"
 
 // Custom signup fields specific to this application
 const CUSTOM_SIGNUP_FIELDS: AuthField[] = [
@@ -122,8 +98,20 @@ export default function SignupPage() {
   // This is a simplified version that focuses on showing how to use the AuthForm
   const handleSignUp = async (formValues: Record<string, unknown>) => {
     try {
+      logger.debug({
+        msg: 'Starting sign up process from button click',
+        hasFormValues: !!formValues,
+        fields: Object.keys(formValues),
+      });
+
       // Validate passwords match
       if (formValues.password !== formValues.confirmPassword) {
+        setFormErrors(prev => ({ ...prev, confirmPassword: 'Passwords do not match' }))
+        toast({
+          title: 'Error',
+          description: 'Passwords do not match',
+          variant: 'destructive'
+        });
         return { 
           error: { 
             message: 'Passwords do not match'
@@ -134,6 +122,11 @@ export default function SignupPage() {
       // Validate date of birth and gender
       if (!dateOfBirth) {
         setFormErrors(prev => ({ ...prev, dateOfBirth: 'Please select your date of birth' }))
+        toast({
+          title: 'Error',
+          description: 'Please select your date of birth',
+          variant: 'destructive'
+        });
         return { 
           error: { 
             message: 'Please select your date of birth'
@@ -143,6 +136,11 @@ export default function SignupPage() {
 
       if (!gender) {
         setFormErrors(prev => ({ ...prev, gender: 'Please select your gender' }))
+        toast({
+          title: 'Error',
+          description: 'Please select your gender',
+          variant: 'destructive'
+        });
         return { 
           error: { 
             message: 'Please select your gender'
@@ -152,7 +150,18 @@ export default function SignupPage() {
 
       setIsSubmitting(true);
       
-      // Use Auth Context to sign up
+      // Log signup attempt details (masking sensitive data)
+      logger.info({
+        msg: 'Submitting signup data',
+        email: String(formValues.email).replace(/(.{3})(.*)(@.*)/, '$1***$3'),
+        hasPassword: !!formValues.password,
+        firstName: formValues.firstName,
+        lastName: formValues.lastName,
+        hasDateOfBirth: !!dateOfBirth,
+        gender
+      });
+      
+      // Use Auth Context to sign up with Supabase
       const result = await auth.signUp({
         email: formValues.email as string,
         password: formValues.password as string,
@@ -160,42 +169,77 @@ export default function SignupPage() {
         lastName: formValues.lastName as string,
         dateOfBirth: dateOfBirth.toISOString(),
         gender: gender as "male" | "female" | "other"
-      })
+      });
+      
+      logger.info({
+        msg: 'Signup result received',
+        success: result.success,
+        hasError: !!result.error,
+        needsEmailVerification: result.needsEmailVerification
+      });
+      
+      setIsSubmitting(false);
       
       if (result.error) {
-        setIsSubmitting(false);
-        throw result.error
+        // Handle specific error cases
+        if (result.error.code === '23505' || result.error.code === 'user-exists') {
+          toast({
+            title: 'Account exists',
+            description: 'An account with this email already exists. Please sign in instead.',
+            variant: 'destructive'
+          })
+        } else {
+          toast({
+            title: 'Signup failed',
+            description: result.error.message || 'An unexpected error occurred',
+            variant: 'destructive'
+          })
+        }
+        
+        return { 
+          success: false, 
+          error: result.error 
+        };
       }
       
-      // Navigate to verification page and show success toast
-      router.push('/verify-email')
-      toast({
-        title: 'Account created!',
-        description: 'Please check your email to verify your account.',
-      })
+      // If signup successful but verification needed, redirect to verification page
+      if (result.needsEmailVerification) {
+        // Navigate to verification page and show success toast
+        router.push('/verify-email')
+        toast({
+          title: 'Account created!',
+          description: 'Please check your email to verify your account.',
+        })
+      } else {
+        // If no verification needed, redirect to family tree
+        router.push('/family-tree')
+        toast({
+          title: 'Account created!',
+          description: 'Your account has been created successfully.',
+        })
+      }
       
-      return { success: true, needsEmailVerification: true }
+      return { success: true, needsEmailVerification: result.needsEmailVerification }
     } catch (error: unknown) {
       setIsSubmitting(false);
-      console.error('Signup error:', error)
-      // Handle specific error cases
-      const err = error as { code?: string; message?: string; details?: string }
+      const errorMsg = error instanceof Error ? error.message : 'An unexpected error occurred';
       
-      // Handle PostgrestError (database-specific errors)
-      if (err.code === '23505' || err.code === 'user-exists') { // Unique violation
-        return {
-          error: {
-            message: 'An account with this email already exists. Please sign in instead.',
-            code: err.code
-          }
-        }
-      } else {
-        // Return error details
-        return {
-          error: {
-            message: err.details || err.message || 'Failed to create account. Please try again.',
-            code: err.code
-          }
+      logger.error({
+        msg: 'Unexpected signup error',
+        error: errorMsg,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
+      toast({
+        title: 'Signup failed',
+        description: errorMsg,
+        variant: 'destructive'
+      });
+      
+      return {
+        success: false,
+        error: {
+          message: errorMsg
         }
       }
     }
@@ -213,18 +257,34 @@ export default function SignupPage() {
     </p>
   );
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    logger.debug({
+      msg: 'Form submitted',
+      requestId
+    });
+    
     const form = e.target as HTMLFormElement;
     const formData = new FormData(form);
     const formValues: Record<string, unknown> = {};
     
-    // Convert FormData to a plain object using Array.from instead
+    // Convert FormData to a plain object using Array.from instead of iterator
     Array.from(formData.entries()).forEach(([key, value]) => {
       formValues[key] = value;
     });
     
-    handleSignUp(formValues);
+    // Add debugging to see if form values are being collected
+    logger.debug({
+      msg: 'Form values collected',
+      formKeys: Object.keys(formValues),
+      hasEmail: !!formValues.email,
+      hasPassword: !!formValues.password,
+      hasFirstName: !!formValues.firstName,
+      hasLastName: !!formValues.lastName
+    });
+    
+    await handleSignUp(formValues);
   };
 
   return (

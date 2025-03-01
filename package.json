@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev ",
-    "dev:prod": "NODE_ENV=production next dev --turbopack",
+    "dev": "next dev",
+    "dev:prod": "NODE_ENV=production next dev",
     "build": "next build",
+    "build:analyze": "ANALYZE=true next build",
     "start": "next start",
+    "start:prod": "NODE_ENV=production next start",
     "lint": "next lint",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
@@ -14,7 +16,9 @@
     "db:types": "supabase gen types typescript --local > src/types/supabase.ts",
     "db:reset": "supabase db reset",
     "db:push": "supabase db push",
-    "db:pull": "supabase db pull"
+    "db:pull": "supabase db pull",
+    "env:local": "bash ./scripts/switch-env.sh local",
+    "env:prod": "bash ./scripts/switch-env.sh prod"
   },
   "dependencies": {
     "@modelcontextprotocol/server-postgres": "^0.6.2",

@@ -17,9 +17,13 @@ import { Bell, Settings, LogOut, Plus, BookOpen, Users, Home, PenSquare } from "
 import { authService } from '@/lib/client/services/auth'
 
 interface User {
-  profile_picture: string | null
-  display_name: string | null
-  email: string | null
+  id: string
+  email?: string | null
+  display_name?: string | null
+  first_name?: string | null
+  last_name?: string | null
+  profile_picture?: string | null
+  email_confirmed_at?: string | null
 }
 
 interface NavbarProps {

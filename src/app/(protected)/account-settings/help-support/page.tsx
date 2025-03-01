@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/accordion"
 import { HelpCircle, Mail, MessageSquare, ExternalLink } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
-import ProtectedRoute from "@/components/ProtectedRoute"
+import { useAuth, AuthGuard } from "@/components/auth"
 
 const faqs = [
   {
@@ -62,7 +62,7 @@ export default function HelpSupportPage() {
   }
 
   return (
-    <ProtectedRoute>
+    <AuthGuard>
       <div className="space-y-8 pb-4">
         <div>
           <h3 className="text-lg font-medium">Frequently Asked Questions</h3>
@@ -142,6 +142,6 @@ export default function HelpSupportPage() {
           </div>
         </div>
       </div>
-    </ProtectedRoute>
+    </AuthGuard>
   )
 } 

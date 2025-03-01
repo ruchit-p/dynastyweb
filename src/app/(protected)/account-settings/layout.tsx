@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 import { User, Bell, Lock, HelpCircle, LogOut, ChevronRight } from "lucide-react"
 import { useAuth } from "@/components/auth"
 import { useToast } from "@/components/ui/use-toast"
-import ProtectedRoute from "@/components/ProtectedRoute"
+import { AuthGuard } from "@/components/auth"
 
 interface SidebarNavItem {
   title: string
@@ -77,7 +77,7 @@ export default function AccountSettingsLayout({
   }
 
   return (
-    <ProtectedRoute>
+    <AuthGuard>
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row mt-6 md:space-x-8">
           <main className="flex-1 bg-white shadow-xl rounded-xl p-6">{children}</main>
@@ -118,6 +118,6 @@ export default function AccountSettingsLayout({
           </aside>
         </div>
       </div>
-    </ProtectedRoute>
+    </AuthGuard>
   )
 } 

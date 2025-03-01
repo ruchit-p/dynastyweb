@@ -24,6 +24,7 @@ const logger = createLogger('AuthContext')
 type AuthError = {
   message: string
   code?: string
+  details?: string
 }
 
 type AuthContextType = {
@@ -59,11 +60,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const client = createClient();
       setSupabase(client);
       
-      // Also set a global object for emergencies
-      if (typeof window !== 'undefined') {
-        (window as Window & { __supabaseClient?: SupabaseClient }).__supabaseClient = client;
-      }
-      
       logger.debug('Supabase client initialized successfully');
     } catch (error) {
       logger.error('Failed to initialize Supabase client', {
@@ -73,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // MARK: - Session Restoration from Storage
+  // MARK: - Session Management
   useEffect(() => {
     // Skip if Supabase client is not initialized
     if (!supabase) {
@@ -81,169 +77,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     
-    // Try to get session from localStorage first for quicker loading
-    try {
-      const savedSession = localStorage.getItem('supabase.auth.session')
-      if (savedSession) {
-        logger.debug('Found saved session in localStorage')
-        const parsed = JSON.parse(savedSession);
-        if (parsed?.currentSession?.access_token && parsed?.currentSession?.refresh_token) {
-          console.log('Found saved session in localStorage');
-        }
-      }
-    } catch (e) {
-      logger.warn('Failed to parse saved session from localStorage', {
-        error: e instanceof Error ? e.message : String(e)
-      })
-    }
-
     const checkSession = async () => {
       try {
         logger.debug('Checking initial session...')
         
-        // Get initial session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        // Get initial session using the updated auth service
+        const { session, user: verifiedUser, error: sessionError } = await authService.getSession();
         if (sessionError) throw sessionError;
 
-        if (session) {
-          logger.debug('Session found, validating user...', {
+        if (session && verifiedUser) {
+          logger.debug('Session found and user verified', {
             hasAccessToken: !!session.access_token,
             hasRefreshToken: !!session.refresh_token,
-            expiresAt: session.expires_at
+            expiresAt: session.expires_at,
+            userId: verifiedUser.id
           });
           
-          // First, try to get user directly with access token
-          try {
-            const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser();
+          setUser(verifiedUser);
+          setSession(session);
+          
+          // Show verification toast if user exists but email is not confirmed
+          if (!verifiedUser.email_confirmed_at) {
+            showVerificationToast();
+          }
+        } else if (session) {
+          // Session exists but couldn't get user, try session refresh
+          logger.debug('Attempting to refresh session...');
+          const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+          
+          if (refreshError) {
+            logger.warn('Session refresh error', { error: refreshError.message });
+            setUser(null);
+            setSession(null);
+          } else if (refreshedSession) {
+            const { data: { user: refreshedUser } } = await supabase.auth.getUser();
             
-            if (!userError && verifiedUser) {
-              logger.info('User verified successfully', {
-                userId: verifiedUser.id,
-                emailVerified: !!verifiedUser.email_confirmed_at
-              })
-              setUser(verifiedUser);
-              setSession(session);
+            if (refreshedUser) {
+              logger.info('Session refreshed successfully', { userId: refreshedUser.id });
+              setUser(refreshedUser);
+              setSession(refreshedSession);
               
-              // Manually save to localStorage for redundancy
-              if (typeof window !== 'undefined' && verifiedUser && verifiedUser.id && verifiedUser.email) {
-                try {
-                  const sessionData = {
-                    currentSession: {
-                      access_token: session.access_token,
-                      refresh_token: session.refresh_token,
-                      expires_at: session.expires_at,
-                      user: { id: verifiedUser.id, email: verifiedUser.email }
-                    }
-                  };
-                  localStorage.setItem('supabase.auth.session', JSON.stringify(sessionData));
-                  logger.debug('Saved new session to localStorage after login');
-                } catch (storageError) {
-                  logger.warn('Failed to save session to localStorage', {
-                    error: storageError instanceof Error ? storageError.message : String(storageError)
-                  });
-                }
-              }
-              
-              // Show verification toast if user exists but email is not confirmed
-              if (!verifiedUser.email_confirmed_at) {
+              if (!refreshedUser.email_confirmed_at) {
                 showVerificationToast();
               }
-              setLoading(false);
-              return;
             }
-          } catch (firstAttemptError) {
-            logger.warn('First validation attempt failed, trying alternative method', {
-              error: firstAttemptError instanceof Error ? firstAttemptError.message : String(firstAttemptError)
-            });
+          } else {
+            // No session after refresh
+            logger.info('No valid session after refresh attempt');
+            setUser(null);
+            setSession(null);
           }
-          
-          // If that fails, try refreshing the session with more robust error handling
-          try {
-            logger.debug('Attempting to refresh session...');
-            const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
-            
-            if (refreshError) {
-              logger.warn('Session refresh error', {
-                error: refreshError.message
-              });
-              // Instead of throwing, we'll try to recover
-              if (refreshError.message?.includes('expired')) {
-                // Handle expired token case
-                logger.info('Token expired, clearing session');
-                await supabase.auth.signOut({ scope: 'local' });
-                setUser(null);
-                setSession(null);
-                setLoading(false);
-                return;
-              }
-            }
-            
-            if (refreshedSession) {
-              const { data: { user: refreshedUser }, error: refreshedUserError } = await supabase.auth.getUser();
-              
-              if (!refreshedUserError && refreshedUser) {
-                logger.info('Session refreshed successfully', {
-                  userId: refreshedUser.id
-                });
-                setUser(refreshedUser);
-                setSession(refreshedSession);
-                
-                // Save refreshed session to localStorage
-                if (typeof window !== 'undefined' && refreshedUser && refreshedUser.id && refreshedUser.email) {
-                  try {
-                    const sessionData = {
-                      currentSession: {
-                        access_token: refreshedSession.access_token,
-                        refresh_token: refreshedSession.refresh_token,
-                        expires_at: refreshedSession.expires_at,
-                        user: { id: refreshedUser.id, email: refreshedUser.email }
-                      }
-                    };
-                    localStorage.setItem('supabase.auth.session', JSON.stringify(sessionData));
-                    logger.debug('Saved refreshed session to localStorage');
-                  } catch (storageError) {
-                    logger.warn('Failed to save refreshed session to localStorage', {
-                      error: storageError instanceof Error ? storageError.message : String(storageError)
-                    });
-                  }
-                }
-                
-                if (!refreshedUser.email_confirmed_at) {
-                  showVerificationToast();
-                }
-                setLoading(false);
-                return;
-              }
-            } else {
-              // No refreshed session but no error - this is a valid case
-              logger.info('No session after refresh attempt, clearing state');
-              setUser(null);
-              setSession(null);
-            }
-          } catch (refreshError) {
-            logger.warn('Session refresh failed', {
-              error: refreshError instanceof Error ? refreshError.message : String(refreshError)
-            });
-            // Continue to cleanup instead of throwing
-          }
-          
-          // If we get here, we couldn't validate the user, so clear the session
-          logger.warn('Could not validate user session, signing out');
-          try {
-            await supabase.auth.signOut({ scope: 'local' });
-            if (typeof window !== 'undefined') {
-              localStorage.removeItem('supabase.auth.session');
-            }
-          } catch (signOutError) {
-            logger.error('Error during signOut', {
-              error: signOutError instanceof Error ? signOutError.message : String(signOutError)
-            });
-            // Continue even if signOut fails
-          }
-          setUser(null);
-          setSession(null);
         } else {
-          // No session found, clear state
+          // No session found
           logger.info('No session found');
           setUser(null);
           setSession(null);
@@ -266,56 +151,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      logger.debug('Auth state changed', { event })
+      logger.debug('Auth state changed', { event });
       
-      if (event === 'SIGNED_IN' && session) {
-        setUser(session.user)
-        setSession(session)
-      }
-      
-      if (event === 'SIGNED_OUT') {
-        setUser(null)
-        setSession(null)
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('supabase.auth.session')
-        }
-      }
-      
-      if (event === 'TOKEN_REFRESHED' && session) {
-        logger.debug('Token refreshed automatically')
-        setUser(session.user)
-        setSession(session)
-        
-        // Save refreshed session to localStorage
-        if (typeof window !== 'undefined' && session.user && session.user.id && session.user.email) {
-          try {
-            const sessionData = {
-              currentSession: {
-                access_token: session.access_token,
-                refresh_token: session.refresh_token,
-                expires_at: session.expires_at,
-                user: { id: session.user.id, email: session.user.email }
-              }
-            };
-            localStorage.setItem('supabase.auth.session', JSON.stringify(sessionData));
-            logger.debug('Saved refreshed session to localStorage from event handler');
-          } catch (storageError) {
-            logger.warn('Failed to save refreshed session to localStorage', {
-              error: storageError instanceof Error ? storageError.message : String(storageError)
-            });
+      // Update local state based on auth events
+      // @supabase/ssr handles persistence automatically
+      switch (event) {
+        case 'SIGNED_IN':
+          if (session) {
+            logger.debug('User signed in');
+            setUser(session.user);
+            setSession(session);
           }
-        }
+          break;
+          
+        case 'SIGNED_OUT':
+          logger.debug('User signed out');
+          setUser(null);
+          setSession(null);
+          break;
+          
+        case 'TOKEN_REFRESHED':
+          if (session) {
+            logger.debug('Token refreshed automatically');
+            setUser(session.user);
+            setSession(session);
+          }
+          break;
+          
+        case 'USER_UPDATED':
+          if (session) {
+            logger.debug('User updated');
+            setUser(session.user);
+          }
+          break;
       }
-      
-      if (event === 'USER_UPDATED' && session) {
-        logger.debug('User updated')
-        setUser(session.user)
-      }
-    })
+    });
 
     return () => {
-      subscription.unsubscribe()
-    }
+      subscription.unsubscribe();
+    };
   }, [supabase, router]);
 
   // MARK: - Auth Methods
@@ -338,23 +212,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           code: result.error.code
         })
         
+        setLoading(false)
         return {
           success: false,
-          error: {
-            message: result.error.message
-          }
+          error: result.error
         }
       }
       
-      // For Edge Functions, we need to determine verification status differently
-      // Check if the response indicates email verification is needed
-      const needsEmailVerification = true // Edge Functions always require email verification
+      // Check if email verification is needed
+      const needsEmailVerification = !result.user?.email_confirmed_at
       
       if (needsEmailVerification) {
         logger.debug('Email verification required')
         showVerificationToast()
+      } else {
+        // If no email verification needed, refresh session
+        await refreshUser()
       }
       
+      setLoading(false)
       return {
         success: true,
         needsEmailVerification
@@ -364,14 +240,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         error: error instanceof Error ? error.message : String(error)
       })
       
+      setLoading(false)
       return {
         success: false,
         error: {
-          message: 'An unexpected error occurred during sign up.'
+          message: error instanceof Error ? error.message : 'An unexpected error occurred'
         }
       }
-    } finally {
-      setLoading(false)
     }
   }
   
@@ -444,7 +319,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         logger.info('Invitation verified successfully', { 
           invitationId,
-          email: result.inviteeEmail
+          inviteeEmail: result.inviteeEmail
         })
       }
       
@@ -467,50 +342,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
   
   /**
-   * Handle sign in (login)
-   * @param data - Sign in data
-   * @param redirect - Optional redirect path
+   * Handle user sign in
+   * @param data - Sign in credentials
+   * @param redirect - Optional path to redirect to after sign in
    */
   const handleSignIn = async (data: SignInData, redirect?: string): Promise<void> => {
+    setLoading(true)
+    
     try {
-      logger.debug('Logging in user', { email: data.email })
+      logger.debug('Signing in user', { 
+        email: data.email.substring(0, 3) + '***' + data.email.split('@')[1] 
+      })
       
+      // Use auth service
       const result = await authService.signIn(data)
       
       if (result.error) {
-        logger.error('Login error', {
-          error: result.error.message,
-          code: result.error.code
-        })
-        toast({
-          title: 'Unable to sign in',
-          description: result.error.message,
-          variant: 'destructive',
-        })
-        return
+        throw result.error
       }
       
-      // User is now signed in
-      logger.info('User logged in successfully', { email: data.email })
-      
-      if (redirect) {
-        router.push(redirect)
+      // If we have a session, update the local state
+      if (result.session) {
+        // Get user from session
+        const { data: userData } = await supabase?.auth.getUser() || {}
+        
+        if (userData?.user) {
+          setUser(userData.user)
+          setSession(result.session)
+          
+          // Log successful sign in
+          logger.info('User signed in successfully', { 
+            userId: userData.user.id,
+            emailVerified: !!userData.user.email_confirmed_at
+          })
+          
+          // Check if email is verified and show toast if not
+          if (!userData.user.email_confirmed_at) {
+            showVerificationToast()
+          }
+          
+          // Redirect if specified, otherwise go to default route
+          if (redirect) {
+            router.push(redirect)
+          } else {
+            router.push('/family-tree')
+          }
+        } else {
+          throw new Error('Failed to get user data after sign in')
+        }
+      } else {
+        throw new Error('No session returned from sign in')
       }
-    } catch (err) {
-      const error = err as AuthError
-      logger.error('Unexpected login error', {
-        error: error.message,
-        code: error.code,
-        stack: err instanceof Error ? err.stack : undefined
+    } catch (error: unknown) {
+      logger.error('Sign in error', { 
+        error: error instanceof Error ? error.message : String(error) 
       })
       
+      // Format error for toast
+      const errorMsg = error instanceof Error ? error.message : 'Invalid email or password'
+      
+      // Show error toast
       toast({
-        title: 'Error',
-        description: error.message || 'An unexpected error occurred during sign in.',
+        title: 'Sign in failed',
+        description: errorMsg,
         variant: 'destructive',
       })
-      
-      throw error
+    } finally {
+      setLoading(false)
     }
   }
   
@@ -519,39 +417,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    */
   const handleSignOut = async (): Promise<void> => {
     try {
-      logger.debug('Logging out user', { userId: user?.id })
+      logger.debug('Logging out user', { userId: user?.id });
       
-      const result = await authService.signOut()
+      const result = await authService.signOut();
       
       if (result.error) {
         logger.error('Logout error', {
           error: result.error.message
-        })
+        });
         toast({
           title: 'Unable to sign out',
           description: result.error.message,
           variant: 'destructive',
-        })
-        return
+        });
+        return;
       }
       
-      // User is now signed out
-      logger.info('User logged out successfully')
-      router.push('/login')
+      // User is now signed out - @supabase/ssr handles clearing the session
+      logger.info('User logged out successfully');
+      router.push('/login');
     } catch (err) {
-      const error = err as AuthError
+      const error = err as AuthError;
       logger.error('Unexpected logout error', {
         error: error.message,
         stack: err instanceof Error ? err.stack : undefined
-      })
+      });
       
       toast({
         title: 'Error',
         description: error.message || 'An unexpected error occurred during sign out.',
         variant: 'destructive',
-      })
+      });
       
-      throw error
+      throw error;
     }
   }
   

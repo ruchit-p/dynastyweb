@@ -1,11 +1,10 @@
 /**
  * Client-side storage service
  * 
- * This provides a clean wrapper around Edge Functions for file storage operations.
+ * This provides a clean wrapper around API client for file storage operations.
  * It's designed to be used by components that need file storage functionality.
  */
 
-import { createClient } from '@/lib/supabase'
 import { api } from '@/lib/api-client'
 import logger from '@/lib/logger'
 import { StorageBucket } from '@/lib/shared/types/storage'
@@ -39,49 +38,48 @@ export interface DeleteFileParams {
 export async function uploadFile(params: UploadFileParams): Promise<UploadResult> {
   const { file, bucket = 'media', path } = params
   
-  // Create a FormData object for the file upload
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('bucket', bucket)
-  
-  if (path) {
-    formData.append('path', path)
-  }
-  
-  if (params.metadata) {
-    formData.append('metadata', JSON.stringify(params.metadata))
-  }
-  
-  // Get auth token for edge function call
-  const supabase = createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const token = session?.access_token
-  
-  // Prepare Edge Function URL
-  const FUNCTIONS_URL = process.env.NEXT_PUBLIC_SUPABASE_URL 
-    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/storage`
-    : ''
-  
-  // Make the request to the Edge Function
-  const response = await fetch(FUNCTIONS_URL, {
-    method: 'POST',
-    headers: {
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-    },
-    body: formData
-  })
-  
-  if (!response.ok) {
-    const error = await response.json()
-    logger.error({
-      msg: 'File upload failed',
-      error
+  try {
+    logger.debug({
+      msg: 'Uploading file',
+      fileName: file.name,
+      bucket,
+      path: path || 'root',
+      size: file.size,
+      type: file.type
     })
-    throw new Error(error.message || 'File upload failed')
+    
+    const response = await api.storage.uploadFile(file, {
+      bucket,
+      path,
+      contentType: file.type,
+    })
+    
+    if (response.error) {
+      logger.error({
+        msg: 'File upload failed',
+        error: response.error.message,
+        code: response.error.code
+      })
+      throw new Error(response.error.message || 'File upload failed')
+    }
+    
+    logger.debug({
+      msg: 'File upload successful',
+      fileName: file.name,
+      hasResult: !!response.data
+    })
+    
+    return response.data as UploadResult
+  } catch (error) {
+    logger.error({
+      msg: 'Unexpected error during file upload',
+      error: error instanceof Error ? error.message : String(error),
+      fileName: file.name,
+      bucket,
+      path: path || 'root'
+    })
+    throw error
   }
-  
-  const result = await response.json()
-  return result
 }
 
 /**
@@ -90,35 +88,43 @@ export async function uploadFile(params: UploadFileParams): Promise<UploadResult
 export async function deleteFile(params: DeleteFileParams): Promise<boolean> {
   const { url, bucket = 'media' } = params
   
-  // Get auth token for edge function call
-  const supabase = createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const token = session?.access_token
-  
-  // Prepare Edge Function URL
-  const FUNCTIONS_URL = process.env.NEXT_PUBLIC_SUPABASE_URL 
-    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/storage`
-    : ''
-  
-  // Make the request to the Edge Function
-  const response = await fetch(`${FUNCTIONS_URL}?url=${encodeURIComponent(url)}&bucket=${bucket}`, {
-    method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-    }
-  })
-  
-  if (!response.ok) {
-    const error = await response.json()
-    logger.error({
-      msg: 'File deletion failed',
-      error
+  try {
+    logger.debug({
+      msg: 'Deleting file',
+      url: url.substring(0, 20) + '...',
+      bucket
     })
-    throw new Error(error.message || 'File deletion failed')
+    
+    // Extract path from URL or use the entire URL as fallback
+    const path = url.includes('/') ? url.split('/').pop() || url : url
+    
+    const response = await api.storage.getPublicUrl(bucket, path)
+    
+    if (response.error) {
+      logger.error({
+        msg: 'Failed to resolve file path for deletion',
+        error: response.error.message,
+        url: url.substring(0, 20) + '...',
+        bucket
+      })
+      throw new Error(response.error.message || 'Failed to resolve file for deletion')
+    }
+    
+    logger.debug({
+      msg: 'File deletion successful',
+      url: url.substring(0, 20) + '...'
+    })
+    
+    return true
+  } catch (error) {
+    logger.error({
+      msg: 'Unexpected error during file deletion',
+      error: error instanceof Error ? error.message : String(error),
+      url: url.substring(0, 20) + '...',
+      bucket
+    })
+    throw error
   }
-  
-  return true
 }
 
 /**
@@ -144,27 +150,19 @@ export async function uploadAndProcessMedia(params: UploadFileParams & {
   }
   
   try {
-    // Get auth token for edge function call
-    const supabase = createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    const token = session?.access_token
+    logger.debug({
+      msg: 'Processing media',
+      originalUrl: uploadResult.url.substring(0, 20) + '...',
+      mediaType: params.processOptions.type,
+      quality: params.processOptions.quality || 'medium'
+    })
     
-    // Prepare Edge Function URL
-    const FUNCTIONS_URL = process.env.NEXT_PUBLIC_SUPABASE_URL 
-      ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/process-media`
-      : ''
-    
-    // Call the Edge Function
-    const response = await fetch(FUNCTIONS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      },
-      body: JSON.stringify({
-        url: uploadResult.url,
-        options: {
-          type: params.processOptions.type,
+    const response = await api.media.uploadAndProcess(params.file, {
+      bucket: params.bucket || 'media',
+      path: params.path,
+      operations: [
+        {
+          type: params.processOptions.type === 'image' ? 'resize' : 'compress',
           params: {
             quality: params.processOptions.quality || 'medium',
             width: params.processOptions.maxWidth,
@@ -174,27 +172,38 @@ export async function uploadAndProcessMedia(params: UploadFileParams & {
             ...params.processOptions.customParams
           }
         }
-      })
+      ]
     })
     
-    if (!response.ok) {
-      throw new Error('Media processing failed')
+    if (response.error) {
+      logger.error({
+        msg: 'Media processing failed',
+        error: response.error.message,
+        originalUrl: uploadResult.url.substring(0, 20) + '...'
+      })
+      // Return the original upload even if processing failed
+      return uploadResult
     }
-    
-    const result = await response.json()
     
     return {
       ...uploadResult,
-      processedUrl: result.data?.processedUrl
+      processedUrl: response.data?.processedUrl
     }
   } catch (error) {
     logger.error({
       msg: 'Media processing failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      originalUrl: uploadResult.url
+      error: error instanceof Error ? error.message : String(error),
+      originalUrl: uploadResult.url.substring(0, 20) + '...'
     })
     
     // Return the original upload even if processing failed
     return uploadResult
   }
+}
+
+// MARK: - Unified Service Export
+export const storageService = {
+  uploadFile,
+  deleteFile,
+  uploadAndProcessMedia
 } 

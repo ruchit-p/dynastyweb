@@ -7,7 +7,7 @@ import { type Story } from "@/lib/shared/types/story"
 import { Button } from "@/components/ui/button"
 import { PenSquare, BookOpen } from "lucide-react"
 import { StoryCard } from "@/components/Story"
-import { getAccessibleStories } from "@/app/actions/stories"
+import { getFamilyTreeStories } from "@/lib/api-client"
 
 // Define the enriched story type
 type EnrichedStory = Story & {
@@ -45,7 +45,7 @@ export default function FeedPage() {
         }
 
         console.log('[Feed] Fetching accessible stories');
-        const accessibleStories = await getAccessibleStories(user.id);
+        const accessibleStories = await getFamilyTreeStories(user.id);
         console.log('[Feed] Stories response:', accessibleStories);
         
         if (!mounted) {

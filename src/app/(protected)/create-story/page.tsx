@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth"
-import { uploadFile, uploadAndProcessMedia } from "@/app/actions/storage"
+import { api } from "@/lib/api-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,8 +17,6 @@ import AudioRecorder from "@/components/AudioRecorder"
 import LocationPicker from "@/components/LocationPicker"
 import { useToast } from "@/components/ui/use-toast"
 import { FamilyMemberSelect } from "@/components/FamilyMemberSelect"
-import { createStory } from "@/app/actions/stories"
-import { supabaseBrowser as supabase } from "@/lib/client/supabase-browser"
 
 type BlockType = "text" | "image" | "video" | "audio"
 
@@ -36,19 +34,28 @@ interface Location {
   address: string
 }
 
+interface FamilyMember {
+  id: string
+  name: string
+  relationship: string
+}
+
 export default function CreateStoryPage() {
   const router = useRouter()
   const { currentUser } = useAuth()
   const { toast } = useToast()
-  const [loading, setLoading] = useState(false)
-  const [title, setTitle] = useState("")
-  const [subtitle, setSubtitle] = useState("")
-  const [date, setDate] = useState<Date>(new Date())
+  const [blocks, setBlocks] = useState<Block[]>([{ id: 'initial-block', type: 'text', content: '' }])
+  const [title, setTitle] = useState('')
+  const [subtitle, setSubtitle] = useState('')
+  const [date, setDate] = useState<Date | undefined>(undefined)
   const [location, setLocation] = useState<Location | undefined>(undefined)
   const [privacy, setPrivacy] = useState<"family" | "personal" | "custom">("family")
-  const [customAccessMembers, setCustomAccessMembers] = useState<string[]>([])
   const [taggedMembers, setTaggedMembers] = useState<string[]>([])
-  const [blocks, setBlocks] = useState<Block[]>([])
+  const [customAccessMembers, setCustomAccessMembers] = useState<string[]>([])
+  const [familyMembers, setFamilyMembers] = useState<{id: string, name: string}[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [showLocationPicker, setShowLocationPicker] = useState(false)
   const [userLocation, setUserLocation] = useState<Location | null>(null)
 
@@ -81,6 +88,56 @@ export default function CreateStoryPage() {
     }
   }, []);
 
+  useEffect(() => {
+    const fetchFamilyMembers = async () => {
+      // Check for family tree ID in the user object
+      if (!currentUser || !currentUser.id) return;
+      
+      try {
+        setIsLoadingMembers(true)
+        setErrorMessage(null)
+        
+        // Get the user's family tree information
+        const userResponse = await api.auth.getUser()
+        
+        if (userResponse.error) {
+          throw new Error(userResponse.error.message || "Failed to get user data")
+        }
+        
+        const familyTreeId = userResponse.data?.family_tree_id
+        
+        if (!familyTreeId) {
+          return // No family tree associated with the user
+        }
+        
+        // Call to the familyTree Edge Function to get family members
+        const response = await api.familyTree.getFamilyTree(familyTreeId)
+        
+        if (response.error) {
+          throw new Error(response.error.message || "Failed to get family tree data")
+        }
+        
+        if (response.data && response.data.familyTree) {
+          // Extract members from the response based on the actual structure
+          const members = response.data.familyTree.members || []
+          setFamilyMembers(members)
+        }
+      } catch (error) {
+        console.error("Error fetching family members:", error)
+        setErrorMessage("Failed to load family members")
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to load family members. Some features may be limited."
+        })
+      } finally {
+        setIsLoadingMembers(false)
+      }
+    }
+    
+    fetchFamilyMembers()
+  }, [currentUser, toast])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -88,18 +145,15 @@ export default function CreateStoryPage() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Title is required"
+        description: "Please enter a title for your story"
       })
       return
     }
 
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('family_tree_id')
-      .eq('id', currentUser?.id)
-      .single()
-
-    if (userError || !userData?.family_tree_id) {
+    // Get user's family tree ID using the API instead of direct Supabase query
+    const userResponse = await api.auth.getUser()
+    
+    if (userResponse.error || !userResponse.data?.family_tree_id) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -110,7 +164,8 @@ export default function CreateStoryPage() {
     }
 
     try {
-      setLoading(true)
+      setIsSubmitting(true)
+      setErrorMessage(null)
 
       // First, create a temporary story ID for media uploads
       const storyId = Math.random().toString(36).substr(2, 9)
@@ -136,16 +191,19 @@ export default function CreateStoryPage() {
               let result;
               
               // Apply compression based on media type using WhatsApp-style settings
-              const operations = [];
+              const operations: Array<{
+                type: 'resize' | 'compress' | 'convert';
+                params: Record<string, unknown>;
+              }> = [];
               
               if (block.type === 'image') {
                 operations.push({
-                  type: 'resize' as const,
+                  type: 'resize',
                   params: { width: 1600, height: 1600, fit: 'cover' }
                 });
                 
                 operations.push({
-                  type: 'compress' as const,
+                  type: 'compress',
                   params: { quality: 75, format: 'webp' }
                 });
               }
@@ -165,15 +223,15 @@ export default function CreateStoryPage() {
               updateProgress(10);
               
               if (operations.length > 0) {
-                result = await uploadAndProcessMedia({
-                  file: block.content,
+                // Use the Edge Function media API for processing
+                result = await api.media.uploadAndProcess(block.content, {
                   bucket,
                   path: `${storyId}/`,
                   operations
                 });
               } else {
-                result = await uploadFile({
-                  file: block.content,
+                // Use the Edge Function storage API for regular uploads
+                result = await api.storage.uploadFile(block.content, {
                   bucket,
                   path: `${storyId}/`
                 });
@@ -182,11 +240,11 @@ export default function CreateStoryPage() {
               // Complete progress
               updateProgress(100);
               
-              if (!result.success || !result.data) {
-                throw new Error(result.error || 'Failed to upload media');
+              if (result.error || !result.data) {
+                throw new Error(result.error?.message || 'Failed to upload media');
               }
               
-              // Handle the URL regardless of whether it's from uploadFile or uploadAndProcessMedia
+              // Handle the URL from the API response
               const url = result.data.url;
               
               return {
@@ -215,32 +273,26 @@ export default function CreateStoryPage() {
         })
       )
 
-      // Create the story using the server action
-      const formData = new FormData();
-      formData.append('title', title.trim());
-      if (subtitle.trim()) formData.append('subtitle', subtitle.trim());
-      if (date) formData.append('event_date', date.toISOString());
-      if (location) formData.append('location', JSON.stringify(location));
-      formData.append('privacy', privacy);
+      // Create the story using the Edge Function API
+      const storyData = {
+        title: title.trim(),
+        subtitle: subtitle.trim() || null,
+        event_date: date ? date.toISOString() : null,
+        location: location || null,
+        privacy: privacy,
+        custom_access_members: privacy === 'custom' && customAccessMembers.length > 0 
+          ? customAccessMembers 
+          : null,
+        familyTreeId: userResponse.data?.family_tree_id || '',
+        people_involved: taggedMembers.length > 0 ? taggedMembers : null,
+        blocks: processedBlocks
+      };
       
-      if (privacy === 'custom' && customAccessMembers.length > 0) {
-        formData.append('custom_access_members', JSON.stringify(customAccessMembers));
-      }
-      
-      formData.append('familyTreeId', userData.family_tree_id);
-      
-      if (taggedMembers.length > 0) {
-        formData.append('people_involved', JSON.stringify(taggedMembers));
-      }
-      
-      // Append blocks data
-      formData.append('blocks', JSON.stringify(processedBlocks));
-      
-      // Call the server action
-      const result = await createStory(formData);
+      // Call the Edge Function API
+      const result = await api.stories.createStory(storyData);
       
       if (result.error) {
-        throw new Error(result.error);
+        throw new Error(result.error.message);
       }
       
       toast({
@@ -250,13 +302,14 @@ export default function CreateStoryPage() {
       router.push("/feed") // Redirect to feed page after successful creation
     } catch (error) {
       console.error("Error creating story:", error)
+      setErrorMessage((error as Error).message || "Failed to create story")
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create story. Please try again."
+        description: (error as Error).message || "Failed to create story. Please try again."
       })
     } finally {
-      setLoading(false)
+      setIsSubmitting(false)
     }
   }
 
@@ -297,8 +350,15 @@ export default function CreateStoryPage() {
   }
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4 my-6">Create New Story</h1>
+    <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <h1 className="text-3xl font-bold mb-6">Create a New Story</h1>
+      
+      {errorMessage && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md text-red-600">
+          {errorMessage}
+        </div>
+      )}
+      
       <form onSubmit={handleSubmit} className="space-y-6 max-w-3xl mx-auto">
         <div className="space-y-2">
           <Label htmlFor="title">
@@ -333,7 +393,7 @@ export default function CreateStoryPage() {
                   className={`w-full justify-start text-left font-normal`}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {format(date, "PPP")}
+                  {date ? format(date, "PPP") : "Select date"}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
@@ -524,12 +584,12 @@ export default function CreateStoryPage() {
             type="button"
             variant="outline"
             onClick={() => router.back()}
-            disabled={loading}
+            disabled={isSubmitting}
           >
             Cancel
           </Button>
-          <Button type="submit" className="mb-4" disabled={loading}>
-            {loading ? "Creating..." : "Create Story"}
+          <Button type="submit" className="mb-4" disabled={isSubmitting || !title.trim()}>
+            {isSubmitting ? "Creating..." : "Create Story"}
           </Button>
         </div>
       </form>

@@ -23,10 +23,10 @@ const nextConfig = {
     const isDevelopment = process.env.NODE_ENV === 'development';
     
     // Define CSP based on environment
-    const developmentCSP = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' *.supabase.co localhost:* 127.0.0.1:*; connect-src 'self' *.supabase.co localhost:* 127.0.0.1:*; img-src 'self' data: blob: *.supabase.co; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; base-uri 'self';";
+    const developmentCSP = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' *.supabase.co localhost:* 127.0.0.1:*; connect-src 'self' *.supabase.co localhost:* 127.0.0.1:* http://127.0.0.1:54321/functions/v1/*; img-src 'self' data: blob: *.supabase.co; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'self'; form-action 'self'; base-uri 'self';";
     
     // More restrictive CSP for production (no localhost, 127.0.0.1)
-    const productionCSP = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' *.supabase.co; connect-src 'self' *.supabase.co; img-src 'self' data: blob: *.supabase.co; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; base-uri 'self';";
+    const productionCSP = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' *.supabase.co; connect-src 'self' *.supabase.co; img-src 'self' data: blob: *.supabase.co; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'self'; form-action 'self'; base-uri 'self';";
     
     return [
       {

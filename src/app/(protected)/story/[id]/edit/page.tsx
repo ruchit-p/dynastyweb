@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { X, GripVertical } from "lucide-react"
 import { FamilyMemberSelect } from "@/components/FamilyMemberSelect"
-import { DatePicker } from "@/components/ui/date-picker"
-import { LocationPicker } from "@/components/LocationPicker"
-import { supabaseBrowser } from '@/lib/client/supabase-browser'
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import LocationPicker from "@/components/LocationPicker"
+import { api } from '@/lib/api-client'
 import {
   Select,
   SelectContent,
@@ -64,14 +65,23 @@ export default function EditStoryPage() {
       if (!id || !currentUser) return
 
       try {
-        const { data: storyData, error } = await supabaseBrowser
-          .from('stories')
-          .select('*')
-          .eq('id', id)
-          .single()
+        const response = await api.stories.getStory(id as string)
+        
+        if (response.error) throw new Error(response.error.message)
 
-        if (error) throw error
-
+        const storyData = response.data as {
+          id: string;
+          title: string;
+          subtitle?: string;
+          author_id: string;
+          event_date?: string;
+          location?: Location;
+          privacy: PrivacyLevel;
+          custom_access_members?: string[];
+          people_involved?: string[];
+          blocks: StoryBlock[];
+        };
+        
         if (!storyData) {
           toast({
             variant: "destructive",
@@ -82,7 +92,6 @@ export default function EditStoryPage() {
           return
         }
         
-        // Verify ownership
         if (storyData.author_id !== currentUser.id) {
           toast({
             variant: "destructive",
@@ -93,7 +102,6 @@ export default function EditStoryPage() {
           return
         }
 
-        // Set form data
         setTitle(storyData.title)
         setSubtitle(storyData.subtitle || "")
         setDate(storyData.event_date ? new Date(storyData.event_date) : new Date())
@@ -102,7 +110,6 @@ export default function EditStoryPage() {
         setCustomAccessMembers(storyData.custom_access_members || [])
         setTaggedMembers(storyData.people_involved || [])
 
-        // Convert story blocks to form blocks
         const formBlocks = storyData.blocks.map((block: StoryBlock) => ({
           id: block.local_id,
           type: block.type,
@@ -148,7 +155,6 @@ export default function EditStoryPage() {
     try {
       setLoading(true)
 
-      // Process all blocks and upload media if needed
       const processedBlocks = await Promise.all(
         blocks.map(async (block) => {
           if (block.type === 'text') {
@@ -159,30 +165,24 @@ export default function EditStoryPage() {
             }
           }
 
-          // For media blocks, check if the content is a File (new upload) or URL (already uploaded)
           if (block.content instanceof File) {
             try {
-              // Upload to Supabase Storage
               const fileExt = block.content.name.split('.').pop()
               const filePath = `${id}/${block.id}.${fileExt}`
               
-              const { error: uploadError } = await supabaseBrowser
-                .storage
-                .from('story-media')
-                .upload(filePath, block.content, {
-                  upsert: true
-                })
+              const uploadResult = await api.storage.uploadFile(block.content, {
+                bucket: 'story-media',
+                path: filePath,
+              })
 
-              if (uploadError) throw uploadError
+              if (uploadResult.error) throw new Error(uploadResult.error.message)
 
-              // Get public URL
-              const { data: { publicUrl } } = supabaseBrowser
-                .storage
-                .from('story-media')
-                .getPublicUrl(filePath)
-
+              const urlResult = await api.storage.getPublicUrl('story-media', filePath)
+              
+              if (urlResult.error) throw new Error(urlResult.error.message)
+              
               return {
-                data: publicUrl,
+                data: urlResult.data.url,
                 local_id: block.id,
                 type: block.type
               }
@@ -200,37 +200,32 @@ export default function EditStoryPage() {
         })
       )
 
-      // Update story in Supabase
-      const { error: updateError } = await supabaseBrowser
-        .from('stories')
-        .update({
-          title,
-          subtitle: subtitle || null,
-          event_date: date.toISOString(),
-          location,
-          privacy,
-          custom_access_members: privacy === 'custom' ? customAccessMembers : [],
-          people_involved: taggedMembers,
-          blocks: processedBlocks,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', id)
-        .eq('author_id', currentUser.id)
+      const storyData = {
+        title: title.trim(),
+        subtitle: subtitle.trim() || null,
+        event_date: date ? date.toISOString() : null,
+        location,
+        privacy,
+        custom_access_members: privacy === 'custom' ? customAccessMembers : null,
+        people_involved: taggedMembers,
+        blocks: processedBlocks
+      }
 
-      if (updateError) throw updateError
+      const response = await api.stories.updateStory(id as string, storyData)
+      
+      if (response.error) throw new Error(response.error.message)
 
       toast({
         title: "Success",
-        description: "Story updated successfully",
+        description: "Story updated successfully"
       })
-
       router.push(`/story/${id}`)
     } catch (error) {
       console.error("Error updating story:", error)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to update story. Please try again."
+        description: error instanceof Error ? error.message : "Failed to update story"
       })
     } finally {
       setLoading(false)

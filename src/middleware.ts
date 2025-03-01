@@ -48,13 +48,10 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Check if we have a session
-  const { data: { session } } = await supabase.auth.getSession()
-  
   try {
-    // Get user if session exists
-    const user = session?.user || null
-    const isAuthenticated = !!session
+    // Get user data securely from the auth server
+    const { data: { user } } = await supabase.auth.getUser()
+    const isAuthenticated = !!user
     const isEmailVerified = user?.email_confirmed_at ? true : false
     
     // Current path
