@@ -52,7 +52,9 @@ export const getAccessibleStories = async (userId: string, familyTreeId: string)
 };
 
 export const getUserStories = async (userId: string) => {
-  const functionRef = httpsCallable(functions, 'getUserStories');
+  const functionRef = httpsCallable(functions, 'getUserStories', {
+    timeout: 60000, // 60 seconds timeout
+  });
   const result = await functionRef({ userId });
   return result.data as { stories: EnrichedStory[] };
 };

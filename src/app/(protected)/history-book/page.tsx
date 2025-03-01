@@ -44,9 +44,24 @@ export default function HistoryBookPage() {
           return;
         }
         
+        console.log('[HistoryBook] Current user:', {
+          uid: currentUser.uid,
+          email: currentUser.email,
+          emailVerified: currentUser.emailVerified,
+          isAnonymous: currentUser.isAnonymous,
+          metadata: currentUser.metadata
+        });
+        
         console.log('[HistoryBook] Fetching user stories');
-        const response = await getUserStories(currentUser.uid);
-        console.log('[HistoryBook] Stories response:', response);
+        let response;
+        try {
+          response = await getUserStories(currentUser.uid);
+          console.log('[HistoryBook] Stories response:', response);
+        } catch (error) {
+          console.error('[HistoryBook] Error calling getUserStories:', error);
+          setError(error instanceof Error ? error.message : 'Failed to fetch stories');
+          return;
+        }
         
         if (!mounted) {
           console.log('[HistoryBook] Component unmounted, skipping state update');
@@ -62,7 +77,7 @@ export default function HistoryBookPage() {
         const { stories: userStories } = response;
         console.log('[HistoryBook] Processed stories:', {
           count: userStories.length,
-          stories: userStories.map(s => ({
+          stories: userStories.map((s: EnrichedStory) => ({
             id: s.id,
             title: s.title,
             createdAt: s.createdAt
