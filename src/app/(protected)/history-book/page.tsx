@@ -77,14 +77,41 @@ export default function HistoryBookPage() {
         const { stories: userStories } = response;
         console.log('[HistoryBook] Processed stories:', {
           count: userStories.length,
-          stories: userStories.map((s: EnrichedStory) => ({
+          stories: userStories.map((s: Partial<EnrichedStory>) => ({
             id: s.id,
             title: s.title,
-            createdAt: s.createdAt
+            createdAt: s.createdAt,
+            author: s.author || null,
+            taggedPeople: s.taggedPeople || [],
+            authorID: s.authorID
           }))
         });
 
-        setStories(userStories as EnrichedStory[]);
+        // Transform the stories to ensure they have the expected structure
+        const enrichedStories = userStories.map((story: Partial<EnrichedStory>) => {
+          console.log(`[HistoryBook] Transforming story ${story.id}, author present: ${!!story.author}, authorID: ${story.authorID}`);
+          
+          // Ensure the story has an author property with required fields
+          const enrichedStory: EnrichedStory = {
+            ...story as Story,
+            // Ensure required properties are present
+            blocks: story.blocks || [],
+            privacy: story.privacy || 'family',
+            peopleInvolved: story.peopleInvolved || [],
+            isDeleted: story.isDeleted || false,
+            // If author is missing, create it from authorID
+            author: story.author || {
+              id: story.authorID || '',
+              displayName: currentUser?.displayName || 'Unknown User',
+              profilePicture: currentUser?.photoURL || undefined
+            },
+            // Ensure taggedPeople exists
+            taggedPeople: story.taggedPeople || []
+          };
+          return enrichedStory;
+        });
+
+        setStories(enrichedStories);
       } catch (error) {
         console.error('[HistoryBook] Error loading stories:', error);
         if (!mounted) return;
