@@ -217,4 +217,18 @@ export const getFamilyManagementData = async () => {
       isOwner: boolean;
     }>;
   };
+};
+
+// MARK: - Support Functions
+
+/**
+ * Creates a support ticket
+ * @param subject The subject of the support ticket
+ * @param message The detailed message describing the issue
+ * @returns Success status and ticket ID
+ */
+export const createSupportTicket = async (subject: string, message: string) => {
+  const functionRef = httpsCallable(functions, 'createSupportTicket');
+  const result = await functionRef({ subject, message });
+  return result.data as { success: boolean; ticketId: string };
 }; 

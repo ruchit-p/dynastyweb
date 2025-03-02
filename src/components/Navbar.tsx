@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Bell, Settings, LogOut, Plus, BookOpen, Users, Home, PenSquare } from "lucide-react"
+import { firebaseImageLoader } from "@/lib/image-loader"
 
 interface User {
   photoURL: string | null
@@ -134,6 +135,8 @@ export default function Navbar({ user }: NavbarProps) {
                   className="rounded-full object-cover"
                   width={32}
                   height={32}
+                  unoptimized={true}
+                  loader={firebaseImageLoader}
                 />
               </Button>
             </DropdownMenuTrigger>
@@ -146,6 +149,8 @@ export default function Navbar({ user }: NavbarProps) {
                     className="rounded-full object-cover"
                     width={40}
                     height={40}
+                    unoptimized={true}
+                    loader={firebaseImageLoader}
                   />
                   <div className="flex flex-col">
                     <span className="text-sm font-medium">{user.displayName || "User"}</span>

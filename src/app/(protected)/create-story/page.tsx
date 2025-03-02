@@ -37,7 +37,7 @@ interface Location {
 
 export default function CreateStoryPage() {
   const router = useRouter()
-  const { currentUser, firestoreUser } = useAuth()
+  const { currentUser, firestoreUser, refreshFirestoreUser } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [title, setTitle] = useState("")
@@ -111,6 +111,11 @@ export default function CreateStoryPage() {
     }
 
     console.log("Firestore user data:", firestoreUser);
+    
+    // Add more detailed logging to help diagnose the issue
+    console.log("Family tree ID:", firestoreUser.familyTreeId);
+    console.log("User document:", JSON.stringify(firestoreUser, null, 2));
+    
     if (!firestoreUser.familyTreeId) {
       console.error("No family tree ID found in user document");
       toast({
@@ -119,8 +124,22 @@ export default function CreateStoryPage() {
         description: "You need to be part of a family tree to create stories. Please create or join a family tree first."
       });
       router.push("/family-tree");
+    } else {
+      console.log("Family tree ID found:", firestoreUser.familyTreeId);
     }
   }, [currentUser?.uid, firestoreUser, router, toast]);
+
+  // Force refresh of firestore user data when component mounts
+  useEffect(() => {
+    if (currentUser?.uid) {
+      // Call the function to refresh the user data
+      refreshFirestoreUser().then(() => {
+        console.log("Refreshed Firestore user data");
+      }).catch(error => {
+        console.error("Error refreshing Firestore user data:", error);
+      });
+    }
+  }, [currentUser?.uid, refreshFirestoreUser]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -135,14 +154,29 @@ export default function CreateStoryPage() {
     }
 
     if (!firestoreUser?.familyTreeId) {
+      console.error("No family tree ID found during form submission. Current firestore user:", firestoreUser);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "You need to be part of a family tree to create stories"
-      })
-      router.push("/family-tree")
-      return
+        description: "You need to be part of a family tree to create stories. Please create or join a family tree first."
+      });
+      router.push("/family-tree");
+      return;
     }
+
+    // Extra validation to ensure familyTreeId is a valid string
+    const familyTreeId = firestoreUser.familyTreeId.trim();
+    if (!familyTreeId) {
+      console.error("Family tree ID is empty string");
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Invalid family tree data. Please try again or contact support."
+      });
+      return;
+    }
+
+    console.log("Proceeding with story creation. Family tree ID:", familyTreeId);
 
     try {
       setLoading(true)
@@ -209,34 +243,49 @@ export default function CreateStoryPage() {
         })
       )
 
-      // Create the story using the Cloud Function
-      await createStory({
-        authorID: currentUser!.uid,
+      // Create story via Cloud Function
+      console.log("Creating story with family tree ID:", familyTreeId);
+      
+      if (!currentUser) {
+        throw new Error("User not authenticated");
+      }
+      
+      const result = await createStory({
+        authorID: currentUser.uid,
         title: title.trim(),
         subtitle: subtitle.trim() || undefined,
         eventDate: date,
-        location: location || undefined,
+        location: location,
         privacy: privacy === "personal" ? "privateAccess" : privacy,
         customAccessMembers: privacy === "custom" ? customAccessMembers : undefined,
         blocks: processedBlocks,
-        familyTreeId: firestoreUser!.familyTreeId,
+        familyTreeId: familyTreeId,
         peopleInvolved: taggedMembers
       });
+
+      console.log("Story created successfully:", result);
       
+      // Show success message and redirect
       toast({
         title: "Success",
-        description: "Story created successfully!"
+        description: "Your story has been created!"
       })
-      router.push("/feed") // Redirect to feed page after successful creation
+      router.push("/feed")
     } catch (error) {
-      console.error("Error creating story:", error)
+      console.error("Error creating story:", error);
+      
+      let errorMessage = "An error occurred while creating your story. Please try again.";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create story. Please try again."
-      })
-    } finally {
-      setLoading(false)
+        description: errorMessage
+      });
+      
+      setLoading(false);
     }
   }
 

@@ -13,6 +13,7 @@ import {
 import { HelpCircle, Mail, MessageSquare, ExternalLink } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import ProtectedRoute from "@/components/ProtectedRoute"
+import { createSupportTicket } from "@/utils/functionUtils"
 
 const faqs = [
   {
@@ -41,19 +42,37 @@ export default function HelpSupportPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!subject || !message) {
+      toast({
+        title: "Missing Information",
+        description: "Please provide both a subject and a message.",
+        variant: "destructive",
+      })
+      return
+    }
+    
     try {
       setIsSending(true)
-      // TODO: Implement support ticket submission
-      toast({
-        title: "Message Sent",
-        description: "We'll get back to you as soon as possible.",
-      })
-      setSubject("")
-      setMessage("")
-    } catch {
+      
+      // Submit support ticket to Firebase
+      const response = await createSupportTicket(subject, message)
+      
+      if (response.success) {
+        toast({
+          title: "Thank you for your feedback",
+          description: "Your message has been sent.",
+        })
+        setSubject("")
+        setMessage("")
+      } else {
+        throw new Error("Failed to create support ticket")
+      }
+    } catch (error) {
+      console.error("Error submitting support ticket:", error)
       toast({
         title: "Error",
-        description: "Failed to send message. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to send message. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -63,7 +82,7 @@ export default function HelpSupportPage() {
 
   return (
     <ProtectedRoute>
-      <div className="space-y-8 pb-4">
+      <div className="space-y-8 bg-white shadow-xl rounded-xl overflow-hidden p-6">
         <div>
           <h3 className="text-lg font-medium">Frequently Asked Questions</h3>
           <Accordion type="single" collapsible className="mt-4">
@@ -113,31 +132,11 @@ export default function HelpSupportPage() {
           <h3 className="text-lg font-medium">Additional Resources</h3>
           <div className="grid gap-4 mt-4">
             <a
-              href="#"
-              className="flex items-center gap-2 text-sm text-primary hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <MessageSquare className="h-4 w-4" />
-              Visit our Community Forum
-              <ExternalLink className="h-3 w-3" />
-            </a>
-            <a
               href="mailto:support@mydynastyapp.com"
               className="flex items-center gap-2 text-sm text-primary hover:underline"
             >
               <Mail className="h-4 w-4" />
               Email Support
-            </a>
-            <a
-              href="#"
-              className="flex items-center gap-2 text-sm text-primary hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <HelpCircle className="h-4 w-4" />
-              Documentation
-              <ExternalLink className="h-3 w-3" />
             </a>
           </div>
         </div>

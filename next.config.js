@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
+    unoptimized: process.env.NODE_ENV === 'development',
     remotePatterns: [
       {
         protocol: 'https',
@@ -11,22 +12,25 @@ const nextConfig = {
       {
         protocol: 'http',
         hostname: '127.0.0.1',
-        port: '*',
+        port: '9199',
+        pathname: '/v0/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'dynasty-dev-1b042.firebasestorage.app',
+        port: '',
         pathname: '/**',
       },
     ],
   }
 }
 
-module.exports = nextConfig
-
-
 // Injected content via Sentry wizard below
-
 const { withSentryConfig } = require("@sentry/nextjs");
 
+// Export the final config with Sentry applied
 module.exports = withSentryConfig(
-  module.exports,
+  nextConfig,
   {
     // For all available options, see:
     // https://www.npmjs.com/package/@sentry/webpack-plugin#options
