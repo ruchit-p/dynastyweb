@@ -2,9 +2,10 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '@/lib/firebase';
 import type { Node } from 'relatives-tree/lib/types';
 import type { Story } from './storyUtils';
+import { Timestamp } from 'firebase/firestore';
 
 // Initialize Firebase Functions
-const functions = getFunctions(app);
+const functions = getFunctions(app, 'us-central1');
 
 // Define the enriched story type
 type EnrichedStory = Story & {
@@ -167,4 +168,53 @@ export const updateFamilyMember = async (
   const functionRef = httpsCallable(functions, 'updateFamilyMember');
   const result = await functionRef({ memberId, updates, familyTreeId });
   return result.data as { success: boolean };
+};
+
+// MARK: - Family Tree Admin Management
+
+export const promoteToAdmin = async (
+  memberId: string,
+  familyTreeId: string,
+  currentUserId: string
+) => {
+  const functionRef = httpsCallable(functions, 'promoteToAdmin');
+  const result = await functionRef({ memberId, familyTreeId, currentUserId });
+  return result.data as { success: boolean; message?: string };
+};
+
+export const demoteToMember = async (
+  memberId: string,
+  familyTreeId: string,
+  currentUserId: string
+) => {
+  const functionRef = httpsCallable(functions, 'demoteToMember');
+  const result = await functionRef({ memberId, familyTreeId, currentUserId });
+  return result.data as { success: boolean; message?: string };
+};
+
+/**
+ * Fetches the family tree management data including members and their admin status
+ * @returns Family tree data and members with admin/owner status
+ */
+export const getFamilyManagementData = async () => {
+  const functionRef = httpsCallable(functions, 'getFamilyManagementData');
+  const result = await functionRef();
+  return result.data as {
+    tree: {
+      id: string;
+      ownerUserId: string;
+      memberUserIds: string[];
+      adminUserIds: string[];
+      treeName: string;
+      createdAt: Timestamp;
+    };
+    members: Array<{
+      id: string;
+      displayName: string;
+      profilePicture: string | null;
+      createdAt: Timestamp;
+      isAdmin: boolean;
+      isOwner: boolean;
+    }>;
+  };
 }; 

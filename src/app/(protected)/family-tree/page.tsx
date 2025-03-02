@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback} from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import calcTree from "relatives-tree";
@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Minus, Plus } from 'lucide-react';
+import { Minus, Plus, Settings, MoreVertical } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +38,19 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/ui/avatar"
 
 const WIDTH = 150;
 const HEIGHT = 150;
@@ -78,6 +91,25 @@ export default function FamilyTreePage() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isViewSheetOpen, setIsViewSheetOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isFamilyManagementOpen, setIsFamilyManagementOpen] = useState(false);
+  const [familyTreeData, setFamilyTreeData] = useState<{
+    id: string;
+    ownerUserID: string;
+    memberUserIDs: string[];
+    adminUserIDs: string[];
+    treeName: string;
+    createdAt: Date;
+  } | null>(null);
+  const [familyMembers, setFamilyMembers] = useState<Array<{
+    id: string;
+    displayName: string;
+    profilePicture?: string;
+    createdAt: Date | string;
+    isAdmin: boolean;
+    isOwner: boolean;
+    // Member status can be calculated based on memberUserIDs and adminUserIDs
+  }>>([]);
+  const [memberEditTarget, setMemberEditTarget] = useState<string | null>(null);
   const [relationType, setRelationType] = useState<RelationType | null>(null);
   const [formData, setFormData] = useState<AddMemberFormData>({
     firstName: '',
@@ -156,6 +188,55 @@ export default function FamilyTreePage() {
         title: "Error",
         description: "Failed to load family tree. Please try again.",
         variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser, toast]);
+
+  // Fetch family tree admin data and members
+  const fetchFamilyManagementData = useCallback(async () => {
+    if (!currentUser) return;
+
+    try {
+      setLoading(true);
+      
+      // Call the Cloud Function instead of direct Firebase access
+      const { getFamilyManagementData } = await import('@/utils/functionUtils');
+      const data = await getFamilyManagementData();
+      
+      if (!data || !data.tree || !data.members) {
+        throw new Error('Failed to retrieve family management data');
+      }
+      
+      // Set the tree data from the function result
+      setFamilyTreeData({
+        id: data.tree.id,
+        ownerUserID: data.tree.ownerUserId, // Note: converting from camelCase to our local naming convention
+        memberUserIDs: data.tree.memberUserIds || [],
+        adminUserIDs: data.tree.adminUserIds || [],
+        treeName: data.tree.treeName,
+        createdAt: data.tree.createdAt?.toDate ? data.tree.createdAt.toDate() : new Date(),
+      });
+      
+      // Set the members from the function result
+      const formattedMembers = data.members.map(member => ({
+        id: member.id,
+        displayName: member.displayName,
+        profilePicture: member.profilePicture || undefined,
+        createdAt: member.createdAt?.toDate ? member.createdAt.toDate() : new Date(),
+        isAdmin: member.isAdmin,
+        isOwner: member.isOwner
+      }));
+      
+      setFamilyMembers(formattedMembers);
+      
+    } catch (error) {
+      console.error('Error fetching family management data:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load family management data. Please try again.',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -714,29 +795,65 @@ export default function FamilyTreePage() {
 
   // Function to handle viewing a family member
   const handleViewMember = () => {
-    if (!selectedNode) return;
+    if (!selectedNode && !memberEditTarget) return;
     
-    const node = selectedNode as CustomNode;
-    const memberData = node.attributes;
-    
-    if (!memberData) return;
-    
-    // Extract the member's data to populate the form
-    const nameParts = memberData.displayName?.split(' ') || ['', ''];
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || '';
-    
-    setViewFormData({
-      firstName,
-      lastName,
-      gender: node.gender,
-      dateOfBirth: undefined,  // We don't have DOB in the tree data
-      phone: '',               // We don't have phone in the tree data
-      email: '',               // We don't have email in the tree data
-      connectToChildren: false,
-      connectToSpouse: false,
-      connectToExistingParent: false,
-    });
+    // If we have a selectedNode, use that
+    if (selectedNode) {
+      const node = selectedNode as CustomNode;
+      const memberData = node.attributes;
+      
+      if (!memberData) return;
+      
+      // Extract the member's data to populate the form
+      const nameParts = memberData.displayName?.split(' ') || ['', ''];
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+      
+      setViewFormData({
+        firstName,
+        lastName,
+        gender: node.gender,
+        dateOfBirth: undefined,  // We don't have DOB in the tree data
+        phone: '',               // We don't have phone in the tree data
+        email: '',               // We don't have email in the tree data
+        connectToChildren: false,
+        connectToSpouse: false,
+        connectToExistingParent: false,
+      });
+    } 
+    // If we have a memberEditTarget from family management, use that
+    else if (memberEditTarget) {
+      // Find the member in the familyMembers array
+      const member = familyMembers.find(m => m.id === memberEditTarget);
+      if (!member) return;
+      
+      // Find a node in treeData with this id
+      const node = treeData.find(n => n.id === memberEditTarget);
+      if (!node) return;
+      
+      // Set selectedNode for the update function to work
+      setSelectedNode(node as ExtNode);
+      
+      // Extract firstName and lastName from displayName
+      const nameParts = member.displayName.split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+      
+      setViewFormData({
+        firstName,
+        lastName,
+        gender: node.gender,
+        dateOfBirth: undefined,
+        phone: '',
+        email: '',
+        connectToChildren: false,
+        connectToSpouse: false,
+        connectToExistingParent: false,
+      });
+      
+      // Reset memberEditTarget
+      setMemberEditTarget(null);
+    }
     
     setIsEditMode(false);
     setIsViewSheetOpen(true);
@@ -828,6 +945,95 @@ export default function FamilyTreePage() {
     }
   };
 
+  // Function to promote a member to admin status
+  const handlePromoteToAdmin = async (memberId: string) => {
+    if (!currentUser || !familyTreeData) return;
+    
+    try {
+      setSaving(true);
+      
+      // Call the promoteToAdmin function
+      const { promoteToAdmin } = await import('@/utils/functionUtils');
+      const result = await promoteToAdmin(memberId, familyTreeData.id, currentUser.uid);
+      
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Member has been promoted to admin.",
+          duration: 3000,
+        });
+        
+        // Refresh data
+        await fetchFamilyManagementData();
+      } else {
+        throw new Error("Failed to promote member");
+      }
+      
+    } catch (error) {
+      console.error("Error promoting member to admin:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to promote member. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+  
+  // Function to demote an admin to member status
+  const handleDemoteToMember = async (memberId: string) => {
+    if (!currentUser || !familyTreeData) return;
+    
+    // Cannot demote the owner
+    if (memberId === familyTreeData.ownerUserID) {
+      toast({
+        title: "Error",
+        description: "Cannot demote the family tree owner.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      setSaving(true);
+      
+      // Call the demoteToMember function
+      const { demoteToMember } = await import('@/utils/functionUtils');
+      const result = await demoteToMember(memberId, familyTreeData.id, currentUser.uid);
+      
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Admin has been demoted to member.",
+          duration: 3000,
+        });
+        
+        // Refresh data
+        await fetchFamilyManagementData();
+      } else {
+        throw new Error("Failed to demote admin");
+      }
+      
+    } catch (error) {
+      console.error("Error demoting admin to member:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to demote admin. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Effect to fetch family management data when the settings panel is opened
+  useEffect(() => {
+    if (isFamilyManagementOpen) {
+      void fetchFamilyManagementData();
+    }
+  }, [isFamilyManagementOpen, fetchFamilyManagementData]);
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -867,6 +1073,20 @@ export default function FamilyTreePage() {
               pointerEvents: 'none'
             }} 
           />
+        )}
+        
+        {/* Admin Settings Button - only visible to admins */}
+        {(firestoreUser?.isAdmin || (familyTreeData && (currentUser.uid === familyTreeData.ownerUserID || familyTreeData.adminUserIDs.includes(currentUser.uid)))) && (
+          <div className="fixed top-20 left-4 z-10 py-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsFamilyManagementOpen(true)}
+              className="flex items-center gap-2"
+            >
+              <Settings className="h-4 w-4" />
+              <span className="hidden sm:inline">Family Management</span>
+            </Button>
+          </div>
         )}
         
         {/* Zoom Controls */}
@@ -1290,6 +1510,103 @@ export default function FamilyTreePage() {
                   Save Changes
                 </Button>
               )}
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+
+        {/* Family Management Sheet */}
+        <Sheet open={isFamilyManagementOpen} onOpenChange={setIsFamilyManagementOpen}>
+          <SheetContent className="w-full sm:max-w-[700px] overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Family Tree Management</SheetTitle>
+            </SheetHeader>
+            
+            <div className="py-6">
+              <h3 className="text-lg font-semibold mb-4">Family Members</h3>
+              
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12"></TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Date Added</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {familyMembers.map((member) => {
+                      const isCurrentUser = member.id === currentUser?.uid;
+                      
+                      // Format the date
+                      const dateAdded = member.createdAt instanceof Date 
+                        ? member.createdAt.toLocaleDateString() 
+                        : new Date(member.createdAt).toLocaleDateString();
+                      
+                      return (
+                        <TableRow key={member.id}>
+                          <TableCell>
+                            <Avatar className="h-10 w-10">
+                              <AvatarImage src={member.profilePicture} alt={member.displayName} />
+                              <AvatarFallback>{member.displayName.substring(0, 2).toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium">{member.displayName}</div>
+                            {isCurrentUser && <span className="text-xs text-muted-foreground">(You)</span>}
+                            {member.isOwner && <span className="text-xs text-primary ml-1">(Owner)</span>}
+                          </TableCell>
+                          <TableCell>{dateAdded}</TableCell>
+                          <TableCell>
+                            {member.isOwner ? 'Owner' : (member.isAdmin ? 'Admin' : 'Member')}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                  <span className="sr-only">Open menu</span>
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => {
+                                  setMemberEditTarget(member.id);
+                                  handleViewMember();
+                                }}>
+                                  Edit Member Info
+                                </DropdownMenuItem>
+                                
+                                {!member.isOwner && !isCurrentUser && (
+                                  member.isAdmin ? (
+                                    <DropdownMenuItem onClick={() => handleDemoteToMember(member.id)}>
+                                      Demote to Member
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem onClick={() => handlePromoteToAdmin(member.id)}>
+                                      Promote to Admin
+                                    </DropdownMenuItem>
+                                  )
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+            
+            <SheetFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => setIsFamilyManagementOpen(false)}
+                className="w-full sm:w-auto"
+              >
+                Close
+              </Button>
             </SheetFooter>
           </SheetContent>
         </Sheet>
