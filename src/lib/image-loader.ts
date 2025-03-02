@@ -4,7 +4,7 @@
  */
 import { ImageLoaderProps } from 'next/image';
 
-export const firebaseImageLoader = ({ src, width, quality }: ImageLoaderProps): string => {
+export const firebaseImageLoader = ({ src }: ImageLoaderProps): string => {
   // Just return the URL as-is, bypassing Next.js image optimization
   return src;
 };

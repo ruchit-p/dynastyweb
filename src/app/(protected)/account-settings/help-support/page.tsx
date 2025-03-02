@@ -10,7 +10,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import { HelpCircle, Mail, MessageSquare, ExternalLink } from "lucide-react"
+import { Mail } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import { createSupportTicket } from "@/utils/functionUtils"
