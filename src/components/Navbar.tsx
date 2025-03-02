@@ -62,20 +62,20 @@ export default function Navbar({ user }: NavbarProps) {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-      <div className="container flex h-16 items-center px-4">
+      <div className="container flex h-16 items-center px-2 sm:px-4">
         {/* Logo */}
-        <Link href="/feed" className="flex items-center gap-2 mr-6">
+        <Link href="/feed" className="flex items-center gap-2 mr-3 sm:mr-6">
           <Image
             src="/dynasty.png"
             alt="Dynasty Logo"
             width={32}
             height={32}
           />
-          <span className="text-xl font-bold text-[#0A5C36]">Dynasty</span>
+          <span className="text-xl font-bold text-[#0A5C36] hidden sm:inline-block">Dynasty</span>
         </Link>
 
         {/* Navigation Links */}
-        <div className="flex items-center gap-6 mr-6">
+        <div className="flex items-center gap-3 sm:gap-6 mr-2 sm:mr-6">
           <Link
             href="/feed"
             className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#0A5C36]"
@@ -100,11 +100,11 @@ export default function Navbar({ user }: NavbarProps) {
         </div>
 
         {/* Right Side Icons */}
-        <div className="ml-auto flex items-center gap-4">
+        <div className="ml-auto flex items-center gap-2 sm:gap-4">
           {/* Create Menu Dropdown */}
           <DropdownMenu open={isCreateMenuOpen} onOpenChange={setIsCreateMenuOpen}>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-gray-600 hover:text-[#0A5C36]">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-600 hover:text-[#0A5C36]">
                 <Plus className="h-5 w-5" />
                 <span className="sr-only">Create New</span>
               </Button>
@@ -119,7 +119,7 @@ export default function Navbar({ user }: NavbarProps) {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button variant="ghost" size="icon" className="text-gray-600 hover:text-[#0A5C36]">
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-600 hover:text-[#0A5C36]">
             <Bell className="h-5 w-5" />
             <span className="sr-only">Notifications</span>
           </Button>
