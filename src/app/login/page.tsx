@@ -93,7 +93,7 @@ export default function LoginPage() {
           className="mx-auto"
         />
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Sign in to Dynasty
+          Sign In to Dynasty
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Or{" "}
@@ -101,7 +101,7 @@ export default function LoginPage() {
             href="/signup"
             className="font-medium text-[#0A5C36] hover:text-[#0A5C36]/80"
           >
-            create a new account
+            Create a New Account
           </Link>
         </p>
       </div>
@@ -110,7 +110,7 @@ export default function LoginPage() {
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <Label htmlFor="email">Email address</Label>
+              <Label htmlFor="email">Email Address</Label>
               <div className="mt-1">
                 <Input
                   id="email"
@@ -153,7 +153,7 @@ export default function LoginPage() {
                   href="/forgot-password"
                   className="font-medium text-[#0A5C36] hover:text-[#0A5C36]/80"
                 >
-                  Forgot your password?
+                  Forgot Your Password?
                 </Link>
               </div>
             </div>
@@ -167,7 +167,7 @@ export default function LoginPage() {
                 {isLoading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Sign in
+                Sign In
               </Button>
             </div>
           </form>

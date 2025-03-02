@@ -183,7 +183,7 @@ export default function InvitedSignupPage() {
           className="mx-auto"
         />
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Complete your account setup
+          Complete Your Account Setup
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Already have an account?{" "}
@@ -191,7 +191,7 @@ export default function InvitedSignupPage() {
             href="/login"
             className="font-medium text-[#0A5C36] hover:text-[#0A5C36]/80"
           >
-            Sign in
+            Sign In
           </Link>
         </p>
       </div>
@@ -200,7 +200,7 @@ export default function InvitedSignupPage() {
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <Label htmlFor="email">Email address</Label>
+              <Label htmlFor="email">Email Address</Label>
               <div className="mt-1">
                 <Input
                   id="email"
@@ -221,7 +221,7 @@ export default function InvitedSignupPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="firstName">First name</Label>
+                <Label htmlFor="firstName">First Name</Label>
                 <div className="mt-1">
                   <Input
                     id="firstName"
@@ -240,7 +240,7 @@ export default function InvitedSignupPage() {
               </div>
 
               <div>
-                <Label htmlFor="lastName">Last name</Label>
+                <Label htmlFor="lastName">Last Name</Label>
                 <div className="mt-1">
                   <Input
                     id="lastName"
@@ -260,7 +260,7 @@ export default function InvitedSignupPage() {
             </div>
 
             <div>
-              <Label htmlFor="phone">Phone number</Label>
+              <Label htmlFor="phone">Phone Number</Label>
               <div className="mt-1">
                 <Input
                   id="phone"
@@ -278,7 +278,7 @@ export default function InvitedSignupPage() {
             </div>
 
             <div>
-              <Label htmlFor="dateOfBirth">Date of birth</Label>
+              <Label htmlFor="dateOfBirth">Date of Birth</Label>
               <div className="mt-1">
                 <Popover>
                   <PopoverTrigger asChild>
@@ -373,7 +373,7 @@ export default function InvitedSignupPage() {
             </div>
 
             <div>
-              <Label htmlFor="confirmPassword">Confirm password</Label>
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
               <div className="mt-1">
                 <Input
                   id="confirmPassword"
@@ -400,7 +400,7 @@ export default function InvitedSignupPage() {
                 {isLoading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
-                Complete signup
+                Complete Signup
               </Button>
             </div>
           </form>
