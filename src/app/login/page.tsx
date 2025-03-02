@@ -72,11 +72,65 @@ export default function LoginPage() {
       });
     } catch (error) {
       console.error("Login error:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to log in",
-        variant: "destructive",
-      });
+      
+      // Handle Firebase-specific authentication errors with user-friendly messages
+      if (error instanceof Error) {
+        const errorMessage = error.message.toLowerCase();
+        const errorCode = errorMessage.includes('auth/') 
+          ? errorMessage.split('auth/')[1].split(')')[0].trim() 
+          : '';
+        
+        switch (errorCode) {
+          case 'invalid-credential':
+            toast({
+              title: "Invalid Credentials",
+              description: "The email or password you entered is incorrect. Please try again.",
+              variant: "destructive",
+            });
+            break;
+          case 'user-not-found':
+            toast({
+              title: "User not found",
+              description: "No account exists with this email address. Please check your email or create a new account.",
+              variant: "destructive",
+            });
+            break;
+          case 'wrong-password':
+            toast({
+              title: "Invalid Credentials",
+              description: "The email or password you entered is incorrect. Please try again.",
+              variant: "destructive",
+            });
+            break;
+          case 'too-many-requests':
+            toast({
+              title: "Too many attempts",
+              description: "Access to this account has been temporarily disabled due to many failed login attempts. Please try again later.",
+              variant: "destructive",
+            });
+            break;
+          case 'user-disabled':
+            toast({
+              title: "Account disabled",
+              description: "This account has been disabled. Please contact support for help.",
+              variant: "destructive",
+            });
+            break;
+          default:
+            toast({
+              title: "Login failed",
+              description: "Unable to sign in. Please check your credentials and try again.",
+              variant: "destructive",
+            });
+        }
+      } else {
+        // Fallback for non-Error objects
+        toast({
+          title: "Login error",
+          description: "An unexpected error occurred. Please try again.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
