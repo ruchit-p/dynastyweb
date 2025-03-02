@@ -150,4 +150,21 @@ export const deleteFamilyMember = async (
   const functionRef = httpsCallable(functions, 'deleteFamilyMember');
   const result = await functionRef({ memberId, familyTreeId, currentUserId });
   return result.data as { success: boolean };
+};
+
+export const updateFamilyMember = async (
+  memberId: string,
+  updates: {
+    firstName: string;
+    lastName: string;
+    displayName: string;
+    gender: string;
+    phone?: string;
+    email?: string;
+  },
+  familyTreeId: string
+) => {
+  const functionRef = httpsCallable(functions, 'updateFamilyMember');
+  const result = await functionRef({ memberId, updates, familyTreeId });
+  return result.data as { success: boolean };
 }; 

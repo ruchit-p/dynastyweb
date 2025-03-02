@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import calcTree from "relatives-tree";
 import type { Node, ExtNode, Connector } from 'relatives-tree/lib/types';
-import { getFamilyTreeData, createFamilyMember, deleteFamilyMember } from "@/utils/functionUtils";
+import { getFamilyTreeData, createFamilyMember, deleteFamilyMember, updateFamilyMember } from "@/utils/functionUtils";
 import FamilyNode from '@/components/FamilyNode';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { Spinner } from '@/components/ui/spinner';
@@ -69,13 +69,15 @@ interface CustomNode extends Omit<Node, 'placeholder'> {
 }
 
 export default function FamilyTreePage() {
-  const { currentUser } = useAuth();
+  const { currentUser, firestoreUser } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [treeData, setTreeData] = useState<Node[]>([]);
   const [selectedNode, setSelectedNode] = useState<ExtNode | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isViewSheetOpen, setIsViewSheetOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [relationType, setRelationType] = useState<RelationType | null>(null);
   const [formData, setFormData] = useState<AddMemberFormData>({
     firstName: '',
@@ -87,6 +89,17 @@ export default function FamilyTreePage() {
     connectToChildren: true,
     connectToSpouse: true,
     connectToExistingParent: true,
+  });
+  const [viewFormData, setViewFormData] = useState<AddMemberFormData>({
+    firstName: '',
+    lastName: '',
+    dateOfBirth: undefined,
+    gender: '',
+    phone: '',
+    email: '',
+    connectToChildren: false,
+    connectToSpouse: false,
+    connectToExistingParent: false,
   });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -699,6 +712,122 @@ export default function FamilyTreePage() {
     setScale(prev => Math.max(prev - 0.1, 0.1));
   };
 
+  // Function to handle viewing a family member
+  const handleViewMember = () => {
+    if (!selectedNode) return;
+    
+    const node = selectedNode as CustomNode;
+    const memberData = node.attributes;
+    
+    if (!memberData) return;
+    
+    // Extract the member's data to populate the form
+    const nameParts = memberData.displayName?.split(' ') || ['', ''];
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+    
+    setViewFormData({
+      firstName,
+      lastName,
+      gender: node.gender,
+      dateOfBirth: undefined,  // We don't have DOB in the tree data
+      phone: '',               // We don't have phone in the tree data
+      email: '',               // We don't have email in the tree data
+      connectToChildren: false,
+      connectToSpouse: false,
+      connectToExistingParent: false,
+    });
+    
+    setIsEditMode(false);
+    setIsViewSheetOpen(true);
+  };
+  
+  // Function to save updates to a family member
+  const handleUpdateMember = async () => {
+    if (!selectedNode || !currentUser) return;
+    const node = selectedNode as CustomNode;
+    
+    // Validate required fields
+    if (!viewFormData.firstName.trim()) {
+      toast({
+        title: "Error",
+        description: "First name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!viewFormData.lastName.trim()) {
+      toast({
+        title: "Error",
+        description: "Last name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!viewFormData.gender) {
+      toast({
+        title: "Error",
+        description: "Gender is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      setSaving(true);
+      
+      // Get the full node data from treeData
+      const fullNode = treeData.find(n => n.id === node.id) as CustomNode;
+      if (!fullNode?.attributes?.familyTreeId) {
+        throw new Error('Family tree ID not found');
+      }
+      
+      // Call the updateFamilyMember function
+      const result = await updateFamilyMember(
+        node.id,
+        {
+          firstName: viewFormData.firstName.trim(),
+          lastName: viewFormData.lastName.trim(),
+          displayName: `${viewFormData.firstName.trim()} ${viewFormData.lastName.trim()}`,
+          gender: viewFormData.gender,
+          phone: viewFormData.phone?.trim(),
+          email: viewFormData.email?.trim(),
+        },
+        fullNode.attributes.familyTreeId
+      );
+      
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: "Family member updated successfully.",
+          duration: 5000,
+        });
+        
+        // Reset UI state
+        setIsEditMode(false);
+        setIsViewSheetOpen(false);
+        
+        // Fetch updated family tree data
+        await fetchFamilyTreeData();
+      } else {
+        throw new Error("Failed to update family member");
+      }
+      
+    } catch (error) {
+      console.error("Error updating family member:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update family member",
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -761,7 +890,13 @@ export default function FamilyTreePage() {
         </div>
 
         {selectedNode && (
-          <div className="fixed top-20 right-4 z-10 py-4">
+          <div className="fixed top-20 right-4 z-10 py-4 flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={handleViewMember}
+            >
+              View Family Member
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="default">Add Family Member</Button>
@@ -1013,6 +1148,148 @@ export default function FamilyTreePage() {
                 {saving ? <Spinner className="mr-2 h-4 w-4" /> : null}
                 Save
               </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+
+        {/* View Family Member Sheet */}
+        <Sheet open={isViewSheetOpen} onOpenChange={setIsViewSheetOpen}>
+          <SheetContent className="sm:max-w-[425px]">
+            <SheetHeader className="flex items-center justify-between">
+              <SheetTitle>
+                {isEditMode ? "Edit Family Member" : "Family Member Details"}
+              </SheetTitle>
+              {/* Edit toggle for admins */}
+              {(currentUser?.uid === (selectedNode as CustomNode)?.attributes?.treeOwnerId || firestoreUser?.isAdmin) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditMode(prev => !prev)}
+                >
+                  {isEditMode ? "View Mode" : "Edit Mode"}
+                </Button>
+              )}
+            </SheetHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="viewFirstName" className="text-right flex justify-end items-center gap-1">
+                  First Name{isEditMode && <span className="text-red-500">*</span>}
+                </Label>
+                {isEditMode ? (
+                  <Input
+                    id="viewFirstName"
+                    className="col-span-3"
+                    value={viewFormData.firstName}
+                    onChange={(e) => setViewFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                    tabIndex={1}
+                  />
+                ) : (
+                  <div className="col-span-3">{viewFormData.firstName}</div>
+                )}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="viewLastName" className="text-right flex justify-end items-center gap-1">
+                  Last Name{isEditMode && <span className="text-red-500">*</span>}
+                </Label>
+                {isEditMode ? (
+                  <Input
+                    id="viewLastName"
+                    className="col-span-3"
+                    value={viewFormData.lastName}
+                    onChange={(e) => setViewFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                    tabIndex={2}
+                  />
+                ) : (
+                  <div className="col-span-3">{viewFormData.lastName}</div>
+                )}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="viewGender" className="text-right flex justify-end items-center gap-1">
+                  Gender{isEditMode && <span className="text-red-500">*</span>}
+                </Label>
+                {isEditMode ? (
+                  <Select
+                    value={viewFormData.gender}
+                    onValueChange={(value) => setViewFormData(prev => ({ ...prev, gender: value }))}
+                  >
+                    <SelectTrigger className="col-span-3" tabIndex={3}>
+                      <SelectValue placeholder="Select gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="male">Male</SelectItem>
+                      <SelectItem value="female">Female</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="col-span-3">
+                    {viewFormData.gender === 'male' ? 'Male' : 
+                     viewFormData.gender === 'female' ? 'Female' : 'Other'}
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="viewPhone" className="text-right">
+                  Phone
+                </Label>
+                {isEditMode ? (
+                  <Input
+                    id="viewPhone"
+                    type="tel"
+                    className="col-span-3"
+                    value={viewFormData.phone || ''}
+                    onChange={(e) => setViewFormData(prev => ({ ...prev, phone: e.target.value }))}
+                    tabIndex={4}
+                  />
+                ) : (
+                  <div className="col-span-3">{viewFormData.phone || 'Not available'}</div>
+                )}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="viewEmail" className="text-right">
+                  Email
+                </Label>
+                {isEditMode ? (
+                  <Input
+                    id="viewEmail"
+                    type="email"
+                    className="col-span-3"
+                    value={viewFormData.email || ''}
+                    onChange={(e) => setViewFormData(prev => ({ ...prev, email: e.target.value }))}
+                    tabIndex={5}
+                  />
+                ) : (
+                  <div className="col-span-3">{viewFormData.email || 'Not available'}</div>
+                )}
+              </div>
+              
+              {/* If there's additional information that should be displayed, add it here */}
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">
+                  Relationship
+                </Label>
+                <div className="col-span-3">
+                  {(selectedNode as CustomNode)?.attributes?.isBloodRelated ? 'Blood Relative' : 'Non-blood Relative'}
+                </div>
+              </div>
+            </div>
+            <SheetFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsViewSheetOpen(false);
+                  setIsEditMode(false);
+                }}
+                disabled={saving}
+              >
+                Close
+              </Button>
+              {isEditMode && (
+                <Button onClick={handleUpdateMember} disabled={saving}>
+                  {saving ? <Spinner className="mr-2 h-4 w-4" /> : null}
+                  Save Changes
+                </Button>
+              )}
             </SheetFooter>
           </SheetContent>
         </Sheet>
