@@ -298,8 +298,8 @@ export default function CreateStoryPage() {
   }
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4 my-6">Create New Story</h1>
+    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6">
+      <h1 className="text-2xl font-bold mb-4 mt-4 sm:mt-6">Create New Story</h1>
       <form onSubmit={handleSubmit} className="space-y-6 max-w-3xl mx-auto">
         <div className="space-y-2">
           <Label htmlFor="title">
@@ -324,7 +324,7 @@ export default function CreateStoryPage() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>Date</Label>
             <Popover>
@@ -427,22 +427,22 @@ export default function CreateStoryPage() {
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <h2 className="text-lg font-semibold">Story Content</h2>
-            <div className="flex items-center gap-2 ml-auto">
-              <Button type="button" variant="outline" size="sm" onClick={() => addBlock("text")}>
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:ml-auto mt-2 sm:mt-0">
+              <Button type="button" variant="outline" size="sm" onClick={() => addBlock("text")} className="px-3 py-2 h-auto">
                 <Type className="h-4 w-4 mr-2" />
                 Add Text
               </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => addBlock("image")}>
+              <Button type="button" variant="outline" size="sm" onClick={() => addBlock("image")} className="px-3 py-2 h-auto">
                 <ImageIcon className="h-4 w-4 mr-2" />
                 Add Image
               </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => addBlock("video")}>
+              <Button type="button" variant="outline" size="sm" onClick={() => addBlock("video")} className="px-3 py-2 h-auto">
                 <Video className="h-4 w-4 mr-2" />
                 Add Video
               </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => addBlock("audio")}>
+              <Button type="button" variant="outline" size="sm" onClick={() => addBlock("audio")} className="px-3 py-2 h-auto">
                 <Mic className="h-4 w-4 mr-2" />
                 Add Audio
               </Button>
@@ -453,14 +453,22 @@ export default function CreateStoryPage() {
             <div className="text-center py-12 border-2 border-dashed rounded-lg">
               <Plus className="h-8 w-8 mx-auto text-gray-400 mb-2" />
               <p className="text-sm text-gray-600">Add a block to start creating your story</p>
-              <div className="flex justify-center gap-2 mt-4">
-                <Button variant="outline" size="sm" onClick={() => addBlock("text")}>
+              <div className="grid grid-cols-2 gap-2 mt-4 max-w-xs mx-auto">
+                <Button variant="outline" size="sm" onClick={() => addBlock("text")} className="px-3 py-2 h-auto">
                   <Type className="h-4 w-4 mr-2" />
                   Add Text
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => addBlock("image")}>
+                <Button variant="outline" size="sm" onClick={() => addBlock("image")} className="px-3 py-2 h-auto">
                   <ImageIcon className="h-4 w-4 mr-2" />
                   Add Image
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => addBlock("video")} className="px-3 py-2 h-auto">
+                  <Video className="h-4 w-4 mr-2" />
+                  Add Video
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => addBlock("audio")} className="px-3 py-2 h-auto">
+                  <Mic className="h-4 w-4 mr-2" />
+                  Add Audio
                 </Button>
               </div>
             </div>
@@ -524,16 +532,21 @@ export default function CreateStoryPage() {
           )}
         </div>
 
-        <div className="flex justify-end gap-4">
+        <div className="flex flex-col sm:flex-row sm:justify-end gap-3 sm:gap-4 mt-6">
           <Button
             type="button"
             variant="outline"
             onClick={() => router.back()}
             disabled={loading}
+            className="w-full sm:w-auto"
           >
             Cancel
           </Button>
-          <Button type="submit" className="mb-4" disabled={loading}>
+          <Button 
+            type="submit" 
+            disabled={loading}
+            className="w-full mb-4 sm:w-auto"
+          >
             {loading ? "Creating..." : "Create Story"}
           </Button>
         </div>
