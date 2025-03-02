@@ -95,6 +95,41 @@ export default function FamilyTreePage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const treeContainerRef = useRef<HTMLDivElement>(null);
   const DEBUG_MODE = false; // Debug flag - set to true to enable debug features
+  // Add refs for touch handling
+  const touchStartRef = useRef({ x: 0, y: 0 });
+  const lastTouchRef = useRef({ x: 0, y: 0 });
+  const isTouchActiveRef = useRef(false);
+  const isMobileRef = useRef(false);
+  // Add refs for pinch-to-zoom
+  const previousTouchDistanceRef = useRef<number | null>(null);
+  const initialScaleRef = useRef(1);
+
+  // Check if we're on a mobile device
+  useEffect(() => {
+    // Simple mobile detection - this covers most mobile devices
+    isMobileRef.current = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }, []);
+
+  // Add non-passive touch event listeners for mobile devices
+  useEffect(() => {
+    const container = treeContainerRef.current;
+    if (!container || !isMobileRef.current) return;
+
+    // Non-passive touchmove handler to prevent default behavior
+    const handleTouchMoveRaw = (e: TouchEvent) => {
+      if ((isTouchActiveRef.current && e.touches.length === 1) || e.touches.length === 2) {
+        e.preventDefault();
+      }
+    };
+
+    // Add non-passive event listener
+    container.addEventListener('touchmove', handleTouchMoveRaw, { passive: false });
+
+    // Clean up
+    return () => {
+      container.removeEventListener('touchmove', handleTouchMoveRaw);
+    };
+  }, []);
 
   const fetchFamilyTreeData = useCallback(async () => {
     if (!currentUser) return;
@@ -567,6 +602,95 @@ export default function FamilyTreePage() {
     setPosition({ x: newX, y: newY });
   };
 
+  // Add touch handlers for mobile devices
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!isMobileRef.current) return;
+    
+    if (e.touches.length === 1) {
+      // Single touch - panning
+      const touch = e.touches[0];
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+      lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
+      isTouchActiveRef.current = true;
+      previousTouchDistanceRef.current = null;
+    } else if (e.touches.length === 2) {
+      // Two touches - pinch-to-zoom
+      isTouchActiveRef.current = false;
+      
+      // Calculate initial distance between two fingers
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const distance = Math.hypot(
+        touch2.clientX - touch1.clientX,
+        touch2.clientY - touch1.clientY
+      );
+      
+      previousTouchDistanceRef.current = distance;
+      initialScaleRef.current = scale;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isMobileRef.current) return;
+    
+    if (isTouchActiveRef.current && e.touches.length === 1) {
+      // Handle panning with one finger
+      const touch = e.touches[0];
+      
+      // Calculate the distance moved since the last touch event
+      const deltaX = touch.clientX - lastTouchRef.current.x;
+      const deltaY = touch.clientY - lastTouchRef.current.y;
+      
+      // Update position based on the touch movement
+      setPosition(prev => ({
+        x: prev.x + deltaX,
+        y: prev.y + deltaY
+      }));
+      
+      // Update the last touch position
+      lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
+    } else if (e.touches.length === 2 && previousTouchDistanceRef.current !== null) {
+      // Handle pinch-to-zoom with two fingers
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      
+      // Calculate current distance between fingers
+      const currentDistance = Math.hypot(
+        touch2.clientX - touch1.clientX,
+        touch2.clientY - touch1.clientY
+      );
+      
+      // Calculate zoom scale factor based on the change in distance
+      const scaleFactor = currentDistance / previousTouchDistanceRef.current;
+      
+      // Calculate new scale value
+      const newScale = Math.min(Math.max(initialScaleRef.current * scaleFactor, 0.1), 2);
+      
+      // Update scale
+      setScale(newScale);
+      
+      // Update the previous distance for the next move event
+      previousTouchDistanceRef.current = currentDistance;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!isMobileRef.current) return;
+    
+    if (e.touches.length === 0) {
+      // All fingers lifted
+      isTouchActiveRef.current = false;
+      previousTouchDistanceRef.current = null;
+    } else if (e.touches.length === 1) {
+      // One finger remains, reset for panning
+      const touch = e.touches[0];
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+      lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
+      isTouchActiveRef.current = true;
+      previousTouchDistanceRef.current = null;
+    }
+  };
+
   const handleZoomIn = () => {
     setScale(prev => Math.min(prev + 0.1, 2));
   };
@@ -903,6 +1027,9 @@ export default function FamilyTreePage() {
             ref={treeContainerRef}
             className="absolute inset-0 overflow-hidden"
             onWheel={handleWheel}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           >
             <div 
               className="tree-wrapper absolute"
