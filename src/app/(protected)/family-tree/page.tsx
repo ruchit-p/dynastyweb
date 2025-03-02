@@ -162,17 +162,54 @@ export default function FamilyTreePage() {
 
     // Non-passive touchmove handler to prevent default behavior
     const handleTouchMoveRaw = (e: TouchEvent) => {
-      if ((isTouchActiveRef.current && e.touches.length === 1) || e.touches.length === 2) {
+      // Prevent default browser behavior (pull-to-refresh) for all touch events on the tree container
+      if (isTouchActiveRef.current || e.touches.length === 2) {
         e.preventDefault();
       }
     };
 
     // Add non-passive event listener
     container.addEventListener('touchmove', handleTouchMoveRaw, { passive: false });
+    
+    // Disable pull-to-refresh by preventing touchstart default behavior
+    const handleTouchStartRaw = (e: TouchEvent) => {
+      if (e.touches.length === 1 || e.touches.length === 2) {
+        // Only prevent default if the touch is happening inside the tree container
+        // We still want to allow scrolling in other areas of the page
+        e.preventDefault();
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStartRaw, { passive: false });
 
     // Clean up
     return () => {
       container.removeEventListener('touchmove', handleTouchMoveRaw);
+      container.removeEventListener('touchstart', handleTouchStartRaw);
+    };
+  }, []);
+
+  // Add a useEffect to apply and remove body class for the family tree page
+  useEffect(() => {
+    // Add class to body when component mounts
+    document.body.classList.add('family-tree-page');
+    
+    // Remove class when component unmounts
+    return () => {
+      document.body.classList.remove('family-tree-page');
+    };
+  }, []);
+
+  // Add a useEffect to set overscroll behavior CSS property to prevent pull-to-refresh
+  useEffect(() => {
+    // Apply overscroll-behavior to the document body and html to prevent pull-to-refresh
+    document.body.style.overscrollBehavior = 'none';
+    document.documentElement.style.overscrollBehavior = 'none';
+    
+    // Clean up when component unmounts
+    return () => {
+      document.body.style.overscrollBehavior = '';
+      document.documentElement.style.overscrollBehavior = '';
     };
   }, []);
 
@@ -696,7 +733,7 @@ export default function FamilyTreePage() {
     setPosition({ x: newX, y: newY });
   };
 
-  // Add touch handlers for mobile devices
+  // Update the handleTouchStart function to better handle touch events
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!isMobileRef.current) return;
     

@@ -161,11 +161,30 @@ a:hover {
   background: #ffffff;
   display: flex;
   justify-content: center;
+  overscroll-behavior: none; /* Prevent pull-to-refresh */
+  -webkit-overscroll-behavior: none; /* For iOS Safari */
 }
 
 .tree-wrapper {
   margin: 2rem auto;
   padding: 1rem;
+  touch-action: none; /* Disable browser handling of all panning and zooming gestures */
+}
+
+/* Mobile touch optimization */
+@media (max-width: 768px) {
+  body.family-tree-page {
+    overscroll-behavior: none;
+    touch-action: manipulation; /* Improve touch responsiveness */
+    height: 100%;
+    position: fixed;
+    width: 100%;
+  }
+  
+  .family-tree-container {
+    padding: 1rem;
+    touch-action: manipulation;
+  }
 }
 
 .family-node {
