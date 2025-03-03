@@ -26,6 +26,13 @@ import { httpsCallable } from 'firebase/functions';
 import { doc, getDoc } from 'firebase/firestore';
 import type { InvitedSignupFormData } from "@/lib/validation";
 
+// Add RecaptchaVerifier to the Window interface
+declare global {
+  interface Window {
+    recaptchaVerifier: RecaptchaVerifier | null;
+  }
+}
+
 // MARK: - Types
 interface FirestoreUser {
   id: string;
@@ -111,7 +118,7 @@ interface AuthContextType {
     inviteeEmail: string;
   }>;
   refreshFirestoreUser: () => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: () => Promise<UserCredential | null>;
   signInWithApple: () => Promise<void>;
   startPhoneAuth: (phoneNumber: string) => Promise<string>;
   confirmPhoneAuth: (verificationId: string, verificationCode: string) => Promise<void>;
@@ -142,7 +149,7 @@ const AuthContext = createContext<AuthContextType>({
     inviteeEmail: '',
   }),
   refreshFirestoreUser: async () => {},
-  signInWithGoogle: async () => {},
+  signInWithGoogle: async () => null,
   signInWithApple: async () => {},
   startPhoneAuth: async () => '',
   confirmPhoneAuth: async () => {},
@@ -246,14 +253,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const signInWithGoogle = async (): Promise<void> => {
+  const signInWithGoogle = async (): Promise<UserCredential | null> => {
     try {
+      // Create a Google auth provider
       const provider = new GoogleAuthProvider();
+      
+      // Add scopes if needed
+      provider.addScope('profile');
+      provider.addScope('email');
+      
+      // Set custom parameters
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
+      
+      // Sign in with popup
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       
-      // Check if this is a new user (first time sign-in)
-      // If so, we need to create a profile in Firestore
+      // Check if this is a new user
       const additionalInfo = getAdditionalUserInfo(result);
       const isNewUser = additionalInfo.isNewUser || false;
       
@@ -268,6 +286,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           provider: 'google',
         });
       }
+      
+      // Return the user credential
+      return result;
     } catch (error) {
       console.error('[Auth] Google sign-in error:', error);
       throw error;
@@ -307,13 +328,52 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Start phone authentication
   const startPhoneAuth = async (phoneNumber: string): Promise<string> => {
     try {
+      // Format the phone number to ensure it has the international format
+      // If it doesn't start with +, add +1 (US) as default
+      let formattedPhone = phoneNumber;
+      if (!formattedPhone.startsWith('+')) {
+        formattedPhone = `+1${formattedPhone.replace(/\D/g, '')}`;
+      } else {
+        // Just remove any non-digit characters except the leading +
+        formattedPhone = '+' + formattedPhone.substring(1).replace(/\D/g, '');
+      }
+      
+      console.log('Formatted phone number:', formattedPhone);
+      
+      // Clear any existing reCAPTCHA widgets
+      window.recaptchaVerifier = null;
+      
+      // Get the recaptcha container
+      const recaptchaContainer = document.getElementById('recaptcha-container');
+      if (!recaptchaContainer) {
+        throw new Error('reCAPTCHA container not found');
+      }
+      
+      // Clear the container
+      recaptchaContainer.innerHTML = '';
+      
       // Create a reCAPTCHA verifier instance
-      const recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        size: 'invisible',
+      const recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainer, {
+        size: 'normal', // Use normal size instead of invisible
+        callback: () => {
+          console.log('reCAPTCHA verified');
+        },
+        'expired-callback': () => {
+          console.log('reCAPTCHA expired');
+          // Refresh the captcha
+          recaptchaVerifier.clear();
+          window.recaptchaVerifier = null;
+        }
       });
       
+      // Store the verifier in window for potential reuse
+      window.recaptchaVerifier = recaptchaVerifier;
+      
+      // Render the reCAPTCHA widget
+      await recaptchaVerifier.render();
+      
       // Start the phone authentication process
-      const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+      const confirmationResult = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier);
       
       // Return the verification ID that will be used to complete sign-in
       return confirmationResult.verificationId;

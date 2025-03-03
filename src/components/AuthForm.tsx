@@ -65,38 +65,20 @@ const checkEmailExistsWithCloudFunction = async (email: string): Promise<boolean
       return null;
     }
     
-    console.log("Functions object:", functions);
-    
     // Make sure we're using the correct function name
     const checkEmail = httpsCallable(functions, "checkEmailExists");
     console.log("Cloud function reference created");
     
     // Call the function with the email
-    console.log("Calling checkEmailExists with data:", { email });
-    
-    // Add a timeout to prevent hanging if the function doesn't respond
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error("Cloud function timeout after 10 seconds")), 10000);
-    });
-    
-    // Race the function call against the timeout
-    const result = await Promise.race([
-      checkEmail({ email }),
-      timeoutPromise
-    ]) as { data: boolean };
+    const result = await checkEmail({ email });
     
     console.log("Email check result from Cloud Function:", result);
-    console.log("Email check result data:", result.data);
     
+    // The data property contains the actual result
     return result.data as boolean;
   } catch (error) {
     console.error("Error calling email check Cloud Function:", error);
     console.error("Error details:", error instanceof Error ? error.message : JSON.stringify(error, null, 2));
-    
-    // If it's a timeout error, log it specifically
-    if (error instanceof Error && error.message.includes("timeout")) {
-      console.error("Cloud function timed out. This could indicate a deployment issue or region mismatch.");
-    }
     
     // Return null to indicate Cloud Function error
     return null;
@@ -171,46 +153,47 @@ export function AuthForm({ authMethod }: AuthFormProps) {
       // If we haven't checked if the email exists yet, check it
       if (isEmailExists === null) {
         console.log("Checking if email exists...");
-        let exists = false;
         
         try {
-          console.log("Before calling checkEmailExists");
-          exists = await checkEmailExists(data.email);
-          console.log("After calling checkEmailExists, result:", exists);
+          const exists = await checkEmailExists(data.email);
+          console.log("Email exists check result:", exists);
+          
+          // Update state with the result
+          setIsEmailExists(exists);
+          
+          // Important: Don't return here, continue with the form submission
+          // This ensures the form submission continues after checking email
         } catch (emailCheckError) {
           console.error("Error in email check:", emailCheckError);
-          console.error("Error details:", JSON.stringify(emailCheckError, null, 2));
           toast({
             title: "Error",
             description: "Failed to verify email. Please try again.",
             variant: "destructive",
           });
+          setIsLoading(false);
+          return; // Only return if there's an error
         }
-        
-        console.log("Setting isEmailExists state to:", exists);
-        setIsEmailExists(exists);
-        console.log("Updated isEmailExists state to:", exists);
-        setIsLoading(false);
-      } else {
-        // If email exists and user chose password sign-in
-        if (isEmailExists && !usePasswordlessSignIn) {
-          await signIn(data.email, data.password);
-          toast({
-            title: "Success",
-            description: "You have successfully signed in.",
-          });
-          router.push("/family-tree");
-        } 
-        // If email exists and user chose passwordless sign-in OR email doesn't exist (sign-up)
-        else {
-          // Use our new custom passwordless function
-          await sendPasswordlessLink(data.email, !isEmailExists);
-          toast({
-            title: isEmailExists ? "Sign in link sent" : "Sign up link sent",
-            description: `We've sent a ${isEmailExists ? "sign in" : "sign up"} link to your email. Please check your inbox.`,
-          });
-          router.push(`/auth/email-link-signin?email=${encodeURIComponent(data.email)}`);
-        }
+      }
+      
+      // Now handle the authentication based on whether the email exists
+      // If email exists and user chose password sign-in
+      if (isEmailExists && !usePasswordlessSignIn) {
+        await signIn(data.email, data.password);
+        toast({
+          title: "Success",
+          description: "You have successfully signed in.",
+        });
+        router.push("/family-tree");
+      } 
+      // If email exists and user chose passwordless sign-in OR email doesn't exist (sign-up)
+      else {
+        // Use our new custom passwordless function
+        await sendPasswordlessLink(data.email, !isEmailExists);
+        toast({
+          title: isEmailExists ? "Sign in link sent" : "Sign up link sent",
+          description: `We've sent a ${isEmailExists ? "sign in" : "sign up"} link to your email. Please check your inbox.`,
+        });
+        router.push(`/auth/email-link-signin?email=${encodeURIComponent(data.email)}`);
       }
     } catch (error) {
       console.error("Authentication error:", error);
@@ -219,6 +202,7 @@ export function AuthForm({ authMethod }: AuthFormProps) {
         description: error instanceof Error ? error.message : "Authentication failed",
         variant: "destructive",
       });
+    } finally {
       setIsLoading(false);
     }
   }, [isEmailExists, router, sendPasswordlessLink, signIn, toast, usePasswordlessSignIn, checkEmailExists]);
@@ -255,12 +239,18 @@ export function AuthForm({ authMethod }: AuthFormProps) {
   const handleGoogleSignIn = useCallback(async () => {
     setIsLoading(true);
     try {
-      await signInWithGoogle();
+      const result = await signInWithGoogle();
+      console.log("Google sign-in successful:", result);
+      
       toast({
         title: "Success",
         description: "You have successfully signed in with Google.",
       });
-      router.push("/family-tree");
+      
+      // Ensure we have a small delay before redirecting to allow Firebase to complete auth state change
+      setTimeout(() => {
+        router.push("/family-tree");
+      }, 1000);
     } catch (error) {
       console.error("Google sign-in error:", error);
       toast({
@@ -420,8 +410,8 @@ export function AuthForm({ authMethod }: AuthFormProps) {
           </Form>
         )}
         
-        {/* Add recaptcha container for phone auth */}
-        <div id="recaptcha-container" className="hidden"></div>
+        {/* Add recaptcha container for phone auth - make it visible but with no height when not in use */}
+        <div id="recaptcha-container" className="mt-4"></div>
       </CardContent>
       <CardFooter className="flex flex-col space-y-4">
         <div className="relative w-full">
