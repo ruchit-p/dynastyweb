@@ -4,81 +4,131 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, CheckCircle } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import Image from "next/image";
 
+// Email validation schema
+const emailSchema = z.object({
+  email: z.string().email("Please enter a valid email address"),
+});
+
+type EmailFormValues = z.infer<typeof emailSchema>;
+
 export default function EmailLinkSignInPage() {
-  const [isVerifying, setIsVerifying] = useState(true);
+  const [status, setStatus] = useState<"checking" | "verifying" | "needEmail" | "success" | "error">("checking");
   const [email, setEmail] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const router = useRouter();
   const searchParams = useSearchParams();
   const { signInWithLink } = useAuth();
   const { toast } = useToast();
 
+  // Email form for when email is not in localStorage
+  const emailForm = useForm<EmailFormValues>({
+    resolver: zodResolver(emailSchema),
+    defaultValues: {
+      email: "",
+    },
+  });
+
   useEffect(() => {
-    // Get the email from the URL params or localStorage
-    const emailFromParams = searchParams.get("email");
-    const emailFromStorage = typeof window !== "undefined" ? localStorage.getItem("emailForSignIn") : null;
-    
-    const emailToUse = emailFromParams || emailFromStorage;
-    
-    if (!emailToUse) {
-      toast({
-        title: "Error",
-        description: "No email found. Please try signing in again.",
-        variant: "destructive",
-      });
-      router.push("/auth");
-      return;
-    }
-    
-    setEmail(emailToUse);
-    
-    // Check if this is a passwordless authentication
-    const isPasswordless = localStorage.getItem("isNewUser") !== null;
-    
-    if (isPasswordless) {
-      // Redirect to the verify-passwordless page
-      const isNewUser = localStorage.getItem("isNewUser") === "true";
-      router.push(`/auth/verify-passwordless?email=${encodeURIComponent(emailToUse)}&isNewUser=${isNewUser}`);
-      return;
-    }
-    
-    // Check if this is a sign-in link
-    const handleSignIn = async () => {
+    // First, check if this is a sign-in link
+    const isSignInLink = async () => {
       try {
-        await signInWithLink(emailToUse, window.location.href);
+        // Get the email from the URL params or localStorage
+        const emailFromParams = searchParams.get("email");
+        const emailFromStorage = typeof window !== "undefined" ? localStorage.getItem("emailForSignIn") : null;
         
-        // Clear email from localStorage after successful sign-in
-        localStorage.removeItem("emailForSignIn");
+        const emailToUse = emailFromParams || emailFromStorage;
         
-        setIsVerifying(false);
-        
-        toast({
-          title: "Success",
-          description: "You have successfully signed in.",
-        });
-        
-        // Redirect to family tree page
-        setTimeout(() => {
-          router.push("/family-tree");
-        }, 2000);
+        // If we have an email, proceed with verification
+        if (emailToUse) {
+          setEmail(emailToUse);
+          setStatus("verifying");
+          
+          try {
+            await signInWithLink(emailToUse, window.location.href);
+            
+            // Clear email from localStorage after successful sign-in
+            localStorage.removeItem("emailForSignIn");
+            localStorage.removeItem("isNewUser");
+            
+            setStatus("success");
+            
+            toast({
+              title: "Success",
+              description: "You have successfully signed in.",
+            });
+            
+            // Redirect to family tree page
+            setTimeout(() => {
+              router.push("/family-tree");
+            }, 2000);
+          } catch (error) {
+            console.error("Error signing in with email link:", error);
+            
+            setStatus("error");
+            setErrorMessage(error instanceof Error ? error.message : "Failed to sign in with email link");
+            
+            toast({
+              title: "Error",
+              description: error instanceof Error ? error.message : "Failed to sign in with email link",
+              variant: "destructive",
+            });
+          }
+        } else {
+          // If no email is found, we need to ask the user for it
+          setStatus("needEmail");
+        }
       } catch (error) {
-        console.error("Error signing in with email link:", error);
-        
-        toast({
-          title: "Error",
-          description: error instanceof Error ? error.message : "Failed to sign in with email link",
-          variant: "destructive",
-        });
-        
-        router.push("/auth");
+        console.error("Error in email link sign-in:", error);
+        setStatus("error");
+        setErrorMessage(error instanceof Error ? error.message : "An error occurred");
       }
     };
     
-    handleSignIn();
+    isSignInLink();
   }, [router, searchParams, signInWithLink, toast]);
+
+  // Handle email form submission when email is not in localStorage
+  const onEmailSubmit = async (data: EmailFormValues) => {
+    setEmail(data.email);
+    setStatus("verifying");
+    
+    try {
+      await signInWithLink(data.email, window.location.href);
+      
+      setStatus("success");
+      
+      toast({
+        title: "Success",
+        description: "You have successfully signed in.",
+      });
+      
+      // Redirect to family tree page
+      setTimeout(() => {
+        router.push("/family-tree");
+      }, 2000);
+    } catch (error) {
+      console.error("Error signing in with email link:", error);
+      
+      setStatus("error");
+      setErrorMessage(error instanceof Error ? error.message : "Failed to sign in with email link");
+      
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to sign in with email link",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="container flex h-screen w-screen flex-col items-center justify-center">
@@ -92,32 +142,106 @@ export default function EmailLinkSignInPage() {
             className="mx-auto"
           />
           <h1 className="text-2xl font-semibold tracking-tight">
-            {isVerifying ? "Verifying your email" : "Email verified"}
+            {status === "checking" && "Checking your link"}
+            {status === "verifying" && "Verifying your email"}
+            {status === "needEmail" && "Enter your email"}
+            {status === "success" && "Email verified"}
+            {status === "error" && "Error occurred"}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {isVerifying ? "Please wait while we verify your email..." : `You are now signed in as ${email}`}
+            {status === "checking" && "Please wait while we check your link..."}
+            {status === "verifying" && "Please wait while we verify your email..."}
+            {status === "needEmail" && "Please enter the email you used to sign in"}
+            {status === "success" && `You are now signed in as ${email}`}
+            {status === "error" && errorMessage}
           </p>
         </div>
         
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {isVerifying ? "Verifying" : "Success"}
-            </CardTitle>
-            <CardDescription>
-              {isVerifying 
-                ? "Confirming your identity" 
-                : "You have successfully signed in"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex justify-center py-4">
-            {isVerifying ? (
+        {(status === "checking" || status === "verifying") && (
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                {status === "checking" ? "Checking" : "Verifying"}
+              </CardTitle>
+              <CardDescription>
+                {status === "checking" ? "Checking your link" : "Confirming your identity"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex justify-center py-4">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            ) : (
+            </CardContent>
+          </Card>
+        )}
+        
+        {status === "needEmail" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Enter your email</CardTitle>
+              <CardDescription>
+                Please enter the email address you used to sign in
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Form {...emailForm}>
+                <form onSubmit={emailForm.handleSubmit(onEmailSubmit)} className="space-y-4">
+                  <FormField
+                    control={emailForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input placeholder="name@example.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit" className="w-full">Continue</Button>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
+        )}
+        
+        {status === "success" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Success</CardTitle>
+              <CardDescription>
+                You have successfully signed in
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex justify-center py-4">
               <CheckCircle className="h-8 w-8 text-green-500" />
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+            <CardFooter>
+              <Button className="w-full" onClick={() => router.push("/family-tree")}>
+                Go to Family Tree
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
+        
+        {status === "error" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Error</CardTitle>
+              <CardDescription>
+                There was a problem with your sign-in link
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center py-4 gap-4">
+              <AlertTriangle className="h-8 w-8 text-red-500" />
+              <p className="text-sm text-center text-muted-foreground">{errorMessage}</p>
+            </CardContent>
+            <CardFooter>
+              <Button className="w-full" onClick={() => router.push("/auth")}>
+                Return to Sign In
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
       </div>
     </div>
   );

@@ -435,30 +435,43 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signInWithLink = async (email: string, link: string): Promise<void> => {
     try {
       // Check if the link is a sign-in link
-      if (isSignInWithEmailLink(auth, link)) {
-        // Sign in with the link
-        const result = await signInWithEmailLink(auth, email, link);
-        const user = result.user;
-        
-        // Check if this is a new user
-        const additionalInfo = getAdditionalUserInfo(result);
-        const isNewUser = additionalInfo.isNewUser || false;
-        
-        if (isNewUser) {
-          // Call a Cloud Function to set up the user in Firestore
-          const handleOAuthSignUp = httpsCallable(functions, 'handleOAuthSignUp');
-          await handleOAuthSignUp({
-            userId: user.uid,
-            email: user.email,
-            provider: 'email-link',
-          });
-        }
-        
-        // Clear email from localStorage
-        window.localStorage.removeItem('emailForSignIn');
-      } else {
+      if (!isSignInWithEmailLink(auth, link)) {
         throw new Error('Invalid sign-in link');
       }
+      
+      console.log('[Auth] Attempting to sign in with email link:', email);
+      
+      // Sign in with the link
+      const result = await signInWithEmailLink(auth, email, link);
+      const user = result.user;
+      
+      console.log('[Auth] Successfully signed in with email link, user:', user.uid);
+      
+      // Check if this is a new user
+      const additionalInfo = getAdditionalUserInfo(result);
+      const isNewUser = additionalInfo.isNewUser || false;
+      
+      console.log('[Auth] Is new user:', isNewUser);
+      
+      if (isNewUser) {
+        console.log('[Auth] Setting up new user in Firestore');
+        // Call a Cloud Function to set up the user in Firestore
+        const handleOAuthSignUp = httpsCallable(functions, 'handleOAuthSignUp');
+        await handleOAuthSignUp({
+          userId: user.uid,
+          email: user.email,
+          provider: 'email-link',
+        });
+      }
+      
+      // Clear email from localStorage
+      window.localStorage.removeItem('emailForSignIn');
+      window.localStorage.removeItem('isNewUser');
+      
+      // Refresh the Firestore user data
+      await refreshFirestoreUser();
+      
+      console.log('[Auth] Email link sign-in completed successfully');
     } catch (error) {
       console.error('[Auth] Sign in with link error:', error);
       throw error;
@@ -468,19 +481,44 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Custom passwordless authentication using our Cloud Functions
   const sendPasswordlessLink = async (email: string, isNewUser = false): Promise<void> => {
     try {
-      const sendPasswordlessLinkFn = httpsCallable(functions, 'sendPasswordlessLink');
-      const result = await sendPasswordlessLinkFn({ email, isNewUser });
+      // Define actionCodeSettings according to Firebase docs
+      const actionCodeSettings = {
+        // URL you want to redirect back to. The domain (www.example.com) for this
+        // URL must be in the authorized domains list in the Firebase Console.
+        url: `${window.location.origin}/auth/email-link-signin?email=${encodeURIComponent(email)}&isNewUser=${isNewUser}`,
+        // This must be true
+        handleCodeInApp: true,
+      };
+
+      // First try to use Firebase's built-in method
+      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
       
-      if (!result.data || !(result.data as PasswordlessLinkResponse).success) {
-        throw new Error('Failed to send passwordless link');
-      }
-      
-      // Save the email to localStorage to use it later
+      // Save the email locally to complete the sign-in on the same device
       window.localStorage.setItem('emailForSignIn', email);
       window.localStorage.setItem('isNewUser', isNewUser.toString());
+      
+      console.log('[Auth] Email link sent successfully using Firebase method');
     } catch (error) {
-      console.error('[Auth] Send passwordless link error:', error);
-      throw error;
+      console.error('[Auth] Firebase email link error, falling back to Cloud Function:', error);
+      
+      // Fall back to our custom Cloud Function if Firebase method fails
+      try {
+        const sendPasswordlessLinkFn = httpsCallable(functions, 'sendPasswordlessLink');
+        const result = await sendPasswordlessLinkFn({ email, isNewUser });
+        
+        if (!result.data || !(result.data as PasswordlessLinkResponse).success) {
+          throw new Error('Failed to send passwordless link');
+        }
+        
+        // Save the email to localStorage to use it later
+        window.localStorage.setItem('emailForSignIn', email);
+        window.localStorage.setItem('isNewUser', isNewUser.toString());
+        
+        console.log('[Auth] Email link sent successfully using Cloud Function');
+      } catch (cloudFnError) {
+        console.error('[Auth] Cloud Function email link error:', cloudFnError);
+        throw cloudFnError;
+      }
     }
   };
 

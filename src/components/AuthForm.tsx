@@ -187,12 +187,18 @@ export function AuthForm({ authMethod }: AuthFormProps) {
       } 
       // If email exists and user chose passwordless sign-in OR email doesn't exist (sign-up)
       else {
-        // Use our new custom passwordless function
+        // Save the email to localStorage for the email link sign-in
+        localStorage.setItem('emailForSignIn', data.email);
+        
+        // Use our passwordless function
         await sendPasswordlessLink(data.email, !isEmailExists);
+        
         toast({
           title: isEmailExists ? "Sign in link sent" : "Sign up link sent",
           description: `We've sent a ${isEmailExists ? "sign in" : "sign up"} link to your email. Please check your inbox.`,
         });
+        
+        // Redirect to the waiting page
         router.push(`/auth/email-link-signin?email=${encodeURIComponent(data.email)}`);
       }
     } catch (error) {
