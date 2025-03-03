@@ -70,6 +70,23 @@ interface SignUpResult {
   historyBookId: string;
 }
 
+interface PasswordlessLinkResponse {
+  success: boolean;
+}
+
+interface VerifyPasswordlessLinkResponse {
+  success: boolean;
+  customToken: string;
+  userId: string;
+}
+
+interface CompletePasswordlessSignUpResponse {
+  success: boolean;
+  userId: string;
+  familyTreeId: string;
+  historyBookId: string;
+}
+
 interface AuthContextType {
   currentUser: User | null;
   firestoreUser: FirestoreUser | null;
@@ -394,7 +411,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const sendPasswordlessLinkFn = httpsCallable(functions, 'sendPasswordlessLink');
       const result = await sendPasswordlessLinkFn({ email, isNewUser });
       
-      if (!result.data || !(result.data as any).success) {
+      if (!result.data || !(result.data as PasswordlessLinkResponse).success) {
         throw new Error('Failed to send passwordless link');
       }
       
@@ -413,7 +430,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const verifyPasswordlessLinkFn = httpsCallable(functions, 'verifyPasswordlessLink');
       const result = await verifyPasswordlessLinkFn({ token, email, isNewUser });
       
-      const data = result.data as any;
+      const data = result.data as VerifyPasswordlessLinkResponse;
       if (!data || !data.success || !data.customToken) {
         throw new Error('Failed to verify passwordless link');
       }
@@ -435,7 +452,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const completePasswordlessSignUpFn = httpsCallable(functions, 'completePasswordlessSignUp');
       const result = await completePasswordlessSignUpFn(userData);
       
-      const data = result.data as any;
+      const data = result.data as CompletePasswordlessSignUpResponse;
       if (!data || !data.success) {
         throw new Error('Failed to complete passwordless sign-up');
       }

@@ -35,8 +35,6 @@ type ProfileFormValues = z.infer<typeof profileFormSchema>;
 export default function VerifyPasswordlessPage() {
   const [status, setStatus] = useState<"verifying" | "profile" | "success">("verifying");
   const [email, setEmail] = useState("");
-  const [userId, setUserId] = useState("");
-  const [isNewUser, setIsNewUser] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { verifyPasswordlessLink, completePasswordlessSignUp } = useAuth();
@@ -71,13 +69,11 @@ export default function VerifyPasswordlessPage() {
     }
     
     setEmail(emailParam);
-    setIsNewUser(isNewUserParam === "true");
     
     // Verify the passwordless link
     const verifyLink = async () => {
       try {
-        const uid = await verifyPasswordlessLink(token, emailParam, isNewUserParam === "true");
-        setUserId(uid);
+        await verifyPasswordlessLink(token, emailParam, isNewUserParam === "true");
         
         // If this is a new user, show the profile form
         if (isNewUserParam === "true") {
