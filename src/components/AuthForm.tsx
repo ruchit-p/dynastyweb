@@ -58,12 +58,23 @@ interface AuthFormProps {
 const checkEmailExistsWithCloudFunction = async (email: string): Promise<boolean | null> => {
   try {
     console.log("Calling Cloud Function to check if email exists:", email);
+    console.log("Functions object:", functions);
+    
+    // Make sure we're using the correct function name
     const checkEmail = httpsCallable(functions, "checkEmailExists");
+    console.log("Cloud function reference created");
+    
+    // Call the function with the email
+    console.log("Calling checkEmailExists with data:", { email });
     const result = await checkEmail({ email });
-    console.log("Email check result from Cloud Function:", result.data);
+    
+    console.log("Email check result from Cloud Function:", result);
+    console.log("Email check result data:", result.data);
+    
     return result.data as boolean;
   } catch (error) {
     console.error("Error calling email check Cloud Function:", error);
+    console.error("Error details:", JSON.stringify(error, null, 2));
     // Return null to indicate Cloud Function error
     return null;
   }
@@ -140,10 +151,12 @@ export function AuthForm({ authMethod }: AuthFormProps) {
         let exists = false;
         
         try {
+          console.log("Before calling checkEmailExists");
           exists = await checkEmailExists(data.email);
-          console.log("Email exists:", exists);
+          console.log("After calling checkEmailExists, result:", exists);
         } catch (emailCheckError) {
           console.error("Error in email check:", emailCheckError);
+          console.error("Error details:", JSON.stringify(emailCheckError, null, 2));
           toast({
             title: "Error",
             description: "Failed to verify email. Please try again.",
@@ -151,6 +164,7 @@ export function AuthForm({ authMethod }: AuthFormProps) {
           });
         }
         
+        console.log("Setting isEmailExists state to:", exists);
         setIsEmailExists(exists);
         console.log("Updated isEmailExists state to:", exists);
         setIsLoading(false);

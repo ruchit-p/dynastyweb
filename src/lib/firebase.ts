@@ -17,12 +17,14 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+console.log("Firebase app initialized:", app.name);
 
 // Initialize Firebase services
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 const functions = getFunctions(app, 'us-central1');
+console.log("Firebase functions initialized with region:", 'us-central1');
 
 // Connect to emulators in development
 if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
@@ -31,6 +33,9 @@ if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
   connectStorageEmulator(storage, '127.0.0.1', 9199);
   connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+  console.log('Connected to Firebase Emulators');
+} else {
+  console.log('Using production Firebase services');
 }
 
 // Initialize Analytics and catch if not supported (e.g. in SSR)
