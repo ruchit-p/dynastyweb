@@ -58,6 +58,13 @@ interface AuthFormProps {
 const checkEmailExistsWithCloudFunction = async (email: string): Promise<boolean | null> => {
   try {
     console.log("Calling Cloud Function to check if email exists:", email);
+    
+    // Check if functions is properly initialized
+    if (!functions) {
+      console.error("Firebase functions not initialized");
+      return null;
+    }
+    
     console.log("Functions object:", functions);
     
     // Make sure we're using the correct function name
@@ -66,7 +73,17 @@ const checkEmailExistsWithCloudFunction = async (email: string): Promise<boolean
     
     // Call the function with the email
     console.log("Calling checkEmailExists with data:", { email });
-    const result = await checkEmail({ email });
+    
+    // Add a timeout to prevent hanging if the function doesn't respond
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("Cloud function timeout after 10 seconds")), 10000);
+    });
+    
+    // Race the function call against the timeout
+    const result = await Promise.race([
+      checkEmail({ email }),
+      timeoutPromise
+    ]) as { data: boolean };
     
     console.log("Email check result from Cloud Function:", result);
     console.log("Email check result data:", result.data);
@@ -74,7 +91,13 @@ const checkEmailExistsWithCloudFunction = async (email: string): Promise<boolean
     return result.data as boolean;
   } catch (error) {
     console.error("Error calling email check Cloud Function:", error);
-    console.error("Error details:", JSON.stringify(error, null, 2));
+    console.error("Error details:", error instanceof Error ? error.message : JSON.stringify(error, null, 2));
+    
+    // If it's a timeout error, log it specifically
+    if (error instanceof Error && error.message.includes("timeout")) {
+      console.error("Cloud function timed out. This could indicate a deployment issue or region mismatch.");
+    }
+    
     // Return null to indicate Cloud Function error
     return null;
   }
