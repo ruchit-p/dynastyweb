@@ -95,10 +95,36 @@ export const invitedSignupFormSchema = z.object({
   path: ["confirmPassword"],
 });
 
+// Initial signup step schema
+export const initialSignupSchema = z.object({
+  identifier: z.string().superRefine((val, ctx) => {
+    const isEmail = emailSchema.safeParse(val).success;
+    const isPhone = phoneSchema.safeParse(val).success;
+    if (!isEmail && !isPhone) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Please enter a valid email or phone number",
+      });
+    }
+  }),
+  type: z.enum(["email", "phone"]),
+});
+
+// Password setup schema
+export const passwordSetupSchema = z.object({
+  password: passwordSchema,
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
+});
+
 // Types
 export type LoginFormData = z.infer<typeof loginFormSchema>;
 export type SignupFormData = z.infer<typeof signupFormSchema>;
 export type InvitedSignupFormData = z.infer<typeof invitedSignupFormSchema>;
+export type InitialSignupData = z.infer<typeof initialSignupSchema>;
+export type PasswordSetupData = z.infer<typeof passwordSetupSchema>;
 
 // Helper function to format validation errors
 export const formatValidationErrors = (errors: z.ZodError) => {

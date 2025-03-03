@@ -42,6 +42,9 @@ export default function CreateStoryPage() {
   const [loading, setLoading] = useState(false)
   const [title, setTitle] = useState("")
   const [subtitle, setSubtitle] = useState("")
+  const [coverPhoto, setCoverPhoto] = useState<File | string>("")
+  const [coverPhotoProgress, setCoverPhotoProgress] = useState<number | undefined>(undefined)
+  const [coverPhotoError, setCoverPhotoError] = useState<string | undefined>(undefined)
   const [date, setDate] = useState<Date>(new Date())
   const [location, setLocation] = useState<Location | undefined>(undefined)
   const [privacy, setPrivacy] = useState<"family" | "personal" | "custom">("family")
@@ -184,6 +187,30 @@ export default function CreateStoryPage() {
       // First, create a temporary story ID for media uploads
       const storyId = Math.random().toString(36).substr(2, 9)
 
+      // Upload cover photo if provided
+      let coverPhotoUrl = ""
+      if (coverPhoto && coverPhoto instanceof File) {
+        try {
+          coverPhotoUrl = await uploadMedia(
+            coverPhoto,
+            storyId,
+            "image",
+            {
+              onProgress: (progress) => {
+                setCoverPhotoProgress(progress)
+              },
+              onError: (error) => {
+                setCoverPhotoError(error.message)
+                throw error
+              }
+            }
+          )
+        } catch (error) {
+          console.error("Error uploading cover photo:", error)
+          throw error
+        }
+      }
+
       // Process all blocks and upload media if needed
       const processedBlocks = await Promise.all(
         blocks.map(async (block) => {
@@ -250,20 +277,23 @@ export default function CreateStoryPage() {
         throw new Error("User not authenticated");
       }
       
-      const result = await createStory({
+      const response = await createStory({
         authorID: currentUser.uid,
         title: title.trim(),
         subtitle: subtitle.trim() || undefined,
+        coverPhotoUrl: coverPhotoUrl || undefined,
         eventDate: date,
         location: location,
         privacy: privacy === "personal" ? "privateAccess" : privacy,
-        customAccessMembers: privacy === "custom" ? customAccessMembers : undefined,
+        customAccessMembers: privacy === "custom" ? 
+          customAccessMembers.filter(uid => uid !== currentUser.uid) : 
+          undefined,
         blocks: processedBlocks,
         familyTreeId: familyTreeId,
-        peopleInvolved: taggedMembers
+        peopleInvolved: taggedMembers.filter(uid => uid !== currentUser.uid)
       });
 
-      console.log("Story created successfully:", result);
+      console.log("Story created successfully:", response);
       
       // Show success message and redirect
       toast({
@@ -346,6 +376,13 @@ export default function CreateStoryPage() {
     }
   }
 
+  // Handle cover photo selection
+  const handleCoverPhotoSelect = (file: File) => {
+    setCoverPhoto(file)
+    setCoverPhotoError(undefined)
+    setCoverPhotoProgress(undefined)
+  }
+
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6">
       <h1 className="text-2xl font-bold mb-4 mt-4 sm:mt-6">Create New Story</h1>
@@ -371,6 +408,31 @@ export default function CreateStoryPage() {
             onChange={(e) => setSubtitle(e.target.value)}
             placeholder="Add a subtitle (optional)"
           />
+        </div>
+
+        <div>
+          <Label className="block text-sm font-medium mb-2">
+            Cover Photo
+          </Label>
+          <MediaUpload
+            type="image"
+            onFileSelect={handleCoverPhotoSelect}
+            value={coverPhoto instanceof File ? "" : coverPhoto as string}
+            onRemove={() => setCoverPhoto("")}
+          />
+          {coverPhotoProgress !== undefined && coverPhotoProgress < 100 && (
+            <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+              <div
+                className="bg-[#0A5C36] h-2.5 rounded-full transition-all duration-300"
+                style={{ width: `${coverPhotoProgress}%` }}
+              />
+            </div>
+          )}
+          {coverPhotoError && (
+            <div className="text-sm text-red-500 mt-1">
+              {coverPhotoError}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

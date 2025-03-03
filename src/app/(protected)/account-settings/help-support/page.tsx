@@ -17,20 +17,32 @@ import { createSupportTicket } from "@/utils/functionUtils"
 
 const faqs = [
   {
-    question: "How do I create a family tree?",
-    answer: "To create a family tree, click on the 'Create Tree' button on your dashboard. Follow the step-by-step guide to add family members and establish relationships.",
+    question: "Can I invite family members to join my Dynasty?",
+    answer: "Yes! You can invite family members by accessing your family tree and clicking the 'Invite Members' button. Enter their email addresses and they'll receive an invitation with instructions to join. Once they accept, they'll be able to view, contribute to shared family trees, and add their own stories to your shared history.",
   },
   {
-    question: "Can I invite family members to join?",
-    answer: "Yes! Once you've created a family tree, you can invite family members by clicking the 'Invite Members' button and entering their email addresses.",
+    question: "How do I add stories to my History Book?",
+    answer: "Navigate to the 'History Book' section from the main navigation and click 'Create Story'. Our story editor lets you add a title, subtitle, cover photo, location (using our interactive map), and a date for the event. You can build rich content using text blocks, media galleries, and even audio recordings. Tag family members who appear in the story to help connect your family's narratives.",
   },
   {
-    question: "How do I add stories to my history book?",
-    answer: "Navigate to the History Book section and click 'Write a Story'. You can add text, photos, videos, and audio to preserve your family memories.",
+    question: "How do I control who can see my stories?",
+    answer: "Dynasty offers flexible privacy settings for your stories. When creating or editing a story, you can set privacy to 'Family' (visible to all connected family members), 'Private' (only visible to you), or 'Custom' (select specific family members who can view it). You can update these settings at any time from the story options menu.",
+  },
+  {
+    question: "How do I create and manage family events?",
+    answer: "Click the '+' button in the navigation bar and select 'Event'. Enter details like title, date, location, and description. You can add a cover photo and invite family members by selecting them from your family tree. Family members will receive invitations and can RSVP directly. You can manage all your events from the 'Events' section of the app.",
+  },
+  {
+    question: "Can I add historical family members who are deceased?",
+    answer: "Absolutely! Dynasty is designed to preserve your complete family history. This helps build a comprehensive family tree spanning multiple generations.",
+  },
+  {
+    question: "How do I customize my notification preferences?",
+    answer: "Go to 'Account Settings' → 'Notifications' to control what updates you receive. You can toggle notifications for new stories, events, comments, and family tree updates. You can also choose how you receive these notifications (email, in-app, or both).",
   },
   {
     question: "What happens to my data if I delete my account?",
-    answer: "When you delete your account, all your personal information and stories will be permanently removed. Family trees you've created will be transferred to another family member if available.",
+    answer: "When you delete your account, your personal profile information will be permanently removed. For shared content like family trees and history books, ownership will transfer to another family member if possible, or be deleted if no other members are connected.",
   },
 ]
 
@@ -82,7 +94,7 @@ export default function HelpSupportPage() {
 
   return (
     <ProtectedRoute>
-      <div className="space-y-8 bg-white shadow-xl rounded-xl overflow-hidden p-6">
+      <div className="space-y-8 bg-white shadow-xl rounded-xl overflow-hidden p-6 mb-6">
         <div>
           <h3 className="text-lg font-medium">Frequently Asked Questions</h3>
           <Accordion type="single" collapsible className="mt-4">

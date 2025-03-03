@@ -26,10 +26,10 @@ const nextConfig = {
 }
 
 // Injected content via Sentry wizard below
-import { withSentryConfig } from "@sentry/nextjs";
+const { withSentryConfig } = require("@sentry/nextjs");
 
 // Export the final config with Sentry applied
-export default withSentryConfig(
+module.exports = withSentryConfig(
   nextConfig,
   {
     // For all available options, see:

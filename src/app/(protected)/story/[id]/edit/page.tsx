@@ -20,6 +20,7 @@ import LocationPicker from "@/components/LocationPicker"
 import { useToast } from "@/components/ui/use-toast"
 import { FamilyMemberSelect } from "@/components/FamilyMemberSelect"
 import { updateStory } from "@/utils/functionUtils"
+import Image from "next/image"
 
 type BlockType = "text" | "image" | "video" | "audio"
 type PrivacyLevel = "family" | "personal" | "custom"
@@ -52,6 +53,10 @@ export default function EditStoryPage() {
   const [loading, setLoading] = useState(true)
   const [title, setTitle] = useState("")
   const [subtitle, setSubtitle] = useState("")
+  const [coverPhotoUrl, setCoverPhotoUrl] = useState<string>("")
+  const [coverPhotoFile, setCoverPhotoFile] = useState<File | null>(null)
+  const [coverPhotoUploadProgress, setCoverPhotoUploadProgress] = useState<number>(0)
+  const [coverPhotoError, setCoverPhotoError] = useState<string>("")
   const [date, setDate] = useState<Date>(new Date())
   const [location, setLocation] = useState<Location | undefined>(undefined)
   const [privacy, setPrivacy] = useState<"family" | "personal" | "custom">("family")
@@ -109,6 +114,7 @@ export default function EditStoryPage() {
         // Set form data
         setTitle(storyData.title)
         setSubtitle(storyData.subtitle || "")
+        setCoverPhotoUrl(storyData.coverPhotoUrl || "")
         setDate(storyData.eventDate ? new Date(storyData.eventDate.seconds * 1000) : new Date())
         setLocation(storyData.location)
         setPrivacy(storyData.privacy === "privateAccess" ? "personal" : storyData.privacy)
@@ -220,6 +226,30 @@ export default function EditStoryPage() {
         })
       )
 
+      // Upload cover photo if needed
+      let finalCoverPhotoUrl = coverPhotoUrl;
+      if (coverPhotoFile) {
+        try {
+          finalCoverPhotoUrl = await uploadMedia(
+            coverPhotoFile,
+            id as string,
+            'image',
+            {
+              onProgress: (progress) => {
+                setCoverPhotoUploadProgress(progress);
+              },
+              onError: (error) => {
+                setCoverPhotoError(error.message);
+                throw error;
+              }
+            }
+          );
+        } catch (error) {
+          console.error("Error uploading cover photo:", error);
+          throw error;
+        }
+      }
+
       // Update the story using the Cloud Function
       await updateStory(
         id as string,
@@ -227,6 +257,7 @@ export default function EditStoryPage() {
         {
           title: title.trim(),
           subtitle: subtitle.trim() || undefined,
+          coverPhotoUrl: finalCoverPhotoUrl || undefined,
           eventDate: date,
           location,
           privacy: privacy === "personal" ? "privateAccess" : privacy,
@@ -327,6 +358,61 @@ export default function EditStoryPage() {
             onChange={(e) => setSubtitle(e.target.value)}
             placeholder="Add a subtitle (optional)"
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Cover Photo</Label>
+          {coverPhotoUrl ? (
+            <div className="relative mb-4">
+              <Image 
+                src={coverPhotoUrl} 
+                alt="Cover Photo" 
+                width={800}
+                height={400}
+                className="w-full h-48 object-cover rounded-md"
+              />
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="absolute top-2 right-2"
+                onClick={() => {
+                  setCoverPhotoUrl("");
+                  setCoverPhotoFile(null);
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="border-2 border-dashed border-gray-300 rounded-md p-6">
+              <MediaUpload
+                onFileSelect={(file) => {
+                  setCoverPhotoFile(file);
+                  setCoverPhotoError("");
+                }}
+                type="image"
+              />
+              {coverPhotoFile && (
+                <div className="mt-2">
+                  <div className="text-sm text-gray-500">
+                    {coverPhotoFile.name} ({Math.round(coverPhotoFile.size / 1024)} KB)
+                  </div>
+                  {coverPhotoUploadProgress > 0 && coverPhotoUploadProgress < 100 && (
+                    <div className="w-full bg-gray-200 rounded-full h-2.5 mt-1">
+                      <div
+                        className="bg-green-600 h-2.5 rounded-full"
+                        style={{ width: `${coverPhotoUploadProgress}%` }}
+                      ></div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {coverPhotoError && (
+                <p className="text-red-500 text-sm mt-1">{coverPhotoError}</p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">

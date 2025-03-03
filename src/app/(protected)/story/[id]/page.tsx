@@ -52,6 +52,7 @@ interface StoryData {
     data: string
     localId: string
   }[]
+  coverPhotoUrl?: string
 }
 
 export default function StoryDetailsPage() {
@@ -208,6 +209,20 @@ export default function StoryDetailsPage() {
             </div>
           )}
         </div>
+
+        {story.coverPhotoUrl && (
+          <div className="mb-6">
+            <Image
+              src={story.coverPhotoUrl}
+              alt={story.title}
+              width={1200}
+              height={600}
+              className="w-full max-h-96 object-cover rounded-lg"
+              priority
+              unoptimized={process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true'}
+            />
+          </div>
+        )}
 
         <div className="space-y-6">
           {story.blocks.map((block) => (

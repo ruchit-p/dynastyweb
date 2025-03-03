@@ -5,6 +5,7 @@ export interface Story {
   id: string;
   title: string;
   subtitle?: string;
+  coverPhotoUrl?: string;
   authorID: string;
   createdAt: Timestamp;
   eventDate?: Timestamp;

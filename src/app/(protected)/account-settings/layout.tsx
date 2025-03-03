@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { User, Bell, Lock, HelpCircle, LogOut, ChevronRight } from "lucide-react"
+import { User, Bell, Lock, HelpCircle, LogOut } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
 import ProtectedRoute from "@/components/ProtectedRoute"
@@ -118,52 +118,50 @@ export default function AccountSettingsLayout({
       <PrefetchAccountRoutes />
       
       <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col md:flex-row mt-6 md:space-x-8">
-          <main className="flex-1 mb-6 rounded-xl">
-            {firebaseStatus && firebaseStatus.error && (
-              <div className="mb-4 p-2 bg-red-50 text-red-700 rounded text-sm">
-                Firebase connection issue detected. Please refresh the page or try again later.
-              </div>
-            )}
-            {children}
-          </main>
-
-          <aside className="md:w-64 mb-8 md:mb-0 ">
-            <nav className="space-y-1">
-              {sidebarNavItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  prefetch={true}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all hover:bg-accent",
-                    pathname === item.href ? "bg-accent" : "transparent",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "flex h-7 w-7 items-center justify-center rounded-lg border",
-                      pathname === item.href ? "border-[#0A5C36] bg-[#0A5C36] text-white" : "border-border",
-                    )}
-                  >
-                    {item.icon}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium leading-none">{item.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                </Link>
-              ))}
-            </nav>
-            <div className="mt-4">
-              <Button variant="destructive" className="w-full" onClick={handleLogout} disabled={isLoggingOut}>
-                <LogOut className="mr-2 h-4 w-4" />
-                {isLoggingOut ? "Logging out..." : "Log Out"}
-              </Button>
-            </div>
-          </aside>
+        <h1 className="text-2xl font-bold mt-6 mb-4">Account Settings</h1>
+        
+        {/* Horizontal Navigation Bar */}
+        <div className="mb-6">
+          <nav className="flex flex-wrap gap-2 p-1 bg-background border rounded-lg shadow-sm overflow-x-auto">
+            {sidebarNavItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                prefetch={true}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-all whitespace-nowrap",
+                  pathname === item.href 
+                    ? "bg-[#0A5C36] text-white" 
+                    : "hover:bg-accent"
+                )}
+              >
+                <div className="flex items-center justify-center">
+                  {item.icon}
+                </div>
+                <span>{item.title}</span>
+              </Link>
+            ))}
+            <Button 
+              variant="destructive" 
+              size="sm" 
+              className="ml-auto whitespace-nowrap" 
+              onClick={handleLogout} 
+              disabled={isLoggingOut}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              {isLoggingOut ? "Logging out..." : "Log Out"}
+            </Button>
+          </nav>
         </div>
+
+        <main className="rounded-xl">
+          {firebaseStatus && firebaseStatus.error && (
+            <div className="mb-4 p-2 bg-red-50 text-red-700 rounded text-sm">
+              Firebase connection issue detected. Please refresh the page or try again later.
+            </div>
+          )}
+          {children}
+        </main>
       </div>
     </ProtectedRoute>
   )

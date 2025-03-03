@@ -196,7 +196,7 @@ export default function PersonalInformationPage() {
 
   return (
     <ProtectedRoute>
-      <div className="bg-white shadow-xl rounded-xl overflow-hidden p-6 animate-in fade-in duration-300">
+      <div className="bg-white shadow-xl rounded-xl overflow-hidden p-6 animate-in fade-in duration-300 mb-6">
         <div className="flex flex-col items-center mb-6">
           <div className="relative">
             {newProfilePicture ? (

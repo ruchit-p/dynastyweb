@@ -147,7 +147,7 @@ export default function PrivacySecurityPage() {
 
   return (
     <ProtectedRoute>
-      <div className="bg-white shadow-xl rounded-xl overflow-hidden p-6">
+      <div className="bg-white shadow-xl rounded-xl overflow-hidden p-6 mb-6">
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">

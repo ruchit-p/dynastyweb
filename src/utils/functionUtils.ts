@@ -64,6 +64,7 @@ export const createStory = async (storyData: {
   authorID: string;
   title: string;
   subtitle?: string;
+  coverPhotoUrl?: string;
   eventDate?: Date;
   location?: {
     lat: number;
@@ -91,6 +92,7 @@ export const updateStory = async (
   updates: Partial<{
     title: string;
     subtitle: string;
+    coverPhotoUrl: string;
     eventDate: Date;
     location: {
       lat: number;
@@ -109,7 +111,7 @@ export const updateStory = async (
 ) => {
   const functionRef = httpsCallable(functions, 'updateStory');
   const result = await functionRef({ storyId, userId, updates });
-  return result.data as { success: boolean; id?: string };
+  return result.data as { success: boolean };
 };
 
 export const deleteStory = async (storyId: string, userId: string) => {

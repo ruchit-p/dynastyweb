@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext"
 import { type Story } from "@/utils/storyUtils"
 import { StoryCard } from "@/components/Story"
 import { getUserStories } from "@/utils/functionUtils"
+import { Separator } from "@/components/ui/separator"
 
 // Define the enriched story type that includes author and tagged people
 type EnrichedStory = Story & {
@@ -89,26 +90,17 @@ export default function HistoryBookPage() {
 
         // Transform the stories to ensure they have the expected structure
         const enrichedStories = userStories.map((story: Partial<EnrichedStory>) => {
-          console.log(`[HistoryBook] Transforming story ${story.id}, author present: ${!!story.author}, authorID: ${story.authorID}`);
+          console.log(`[HistoryBook] Processing story ${story.id}, author present: ${!!story.author}`);
           
-          // Ensure the story has an author property with required fields
-          const enrichedStory: EnrichedStory = {
+          // The stories are now properly enriched by the backend function
+          // Just ensure we have empty arrays for required properties if they're missing
+          return {
             ...story as Story,
-            // Ensure required properties are present
             blocks: story.blocks || [],
-            privacy: story.privacy || 'family',
+            taggedPeople: story.taggedPeople || [],
             peopleInvolved: story.peopleInvolved || [],
             isDeleted: story.isDeleted || false,
-            // If author is missing, create it from authorID
-            author: story.author || {
-              id: story.authorID || '',
-              displayName: currentUser?.displayName || 'Unknown User',
-              profilePicture: currentUser?.photoURL || undefined
-            },
-            // Ensure taggedPeople exists
-            taggedPeople: story.taggedPeople || []
-          };
-          return enrichedStory;
+          } as EnrichedStory;
         });
 
         setStories(enrichedStories);
@@ -169,6 +161,8 @@ export default function HistoryBookPage() {
             </Button>
           </Link>
         </div>
+
+        <Separator className="my-4" />
 
         {stories.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16">
