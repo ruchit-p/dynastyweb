@@ -11,9 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Loader2, Mail, Phone, Globe, Apple } from "lucide-react";
+import { Loader2, Phone, Globe, Apple } from "lucide-react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 // Type for the auth method prop
 type AuthMethod = "email" | "phone";
@@ -68,12 +70,12 @@ const checkEmailExistsWithCloudFunction = async (email: string): Promise<boolean
 };
 
 export function AuthForm({ authMethod }: AuthFormProps) {
-  const { signIn, startPhoneAuth, signInWithGoogle, signInWithApple, sendEmailLink } = useAuth();
+  const { signIn, startPhoneAuth, signInWithGoogle, signInWithApple, sendPasswordlessLink } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isEmailExists, setIsEmailExists] = useState<boolean | null>(null);
-  const [usePasswordlessSignIn, setUsePasswordlessSignIn] = useState(false);
+  const [usePasswordlessSignIn, setUsePasswordlessSignIn] = useState(true);
   
   // Email form
   const emailForm = useForm<EmailFormValues>({
@@ -164,7 +166,8 @@ export function AuthForm({ authMethod }: AuthFormProps) {
         } 
         // If email exists and user chose passwordless sign-in OR email doesn't exist (sign-up)
         else {
-          await sendEmailLink(data.email);
+          // Use our new custom passwordless function
+          await sendPasswordlessLink(data.email, !isEmailExists);
           toast({
             title: isEmailExists ? "Sign in link sent" : "Sign up link sent",
             description: `We've sent a ${isEmailExists ? "sign in" : "sign up"} link to your email. Please check your inbox.`,
@@ -181,7 +184,7 @@ export function AuthForm({ authMethod }: AuthFormProps) {
       });
       setIsLoading(false);
     }
-  }, [isEmailExists, router, sendEmailLink, signIn, toast, usePasswordlessSignIn]);
+  }, [isEmailExists, router, sendPasswordlessLink, signIn, toast, usePasswordlessSignIn, checkEmailExists]);
 
   // Toggle between password and passwordless sign-in for existing users
   const togglePasswordlessSignIn = useCallback(() => {
@@ -255,6 +258,71 @@ export function AuthForm({ authMethod }: AuthFormProps) {
     }
   }, [router, signInWithApple, toast]);
 
+  // Render the email form
+  const renderEmailForm = () => {
+    return (
+      <Form {...emailForm}>
+        <form onSubmit={emailForm.handleSubmit(handleEmailSubmit)} className="space-y-4">
+          <FormField
+            control={emailForm.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email</FormLabel>
+                <FormControl>
+                  <Input placeholder="name@example.com" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          {/* Show password field only if email exists and user chose password sign-in */}
+          {isEmailExists !== null && isEmailExists && !usePasswordlessSignIn && (
+            <FormField
+              control={emailForm.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
+                    <Input type="password" placeholder="••••••••" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+          
+          {/* Show toggle for existing users */}
+          {isEmailExists !== null && isEmailExists && (
+            <div className="flex items-center space-x-2 text-sm">
+              <Switch
+                id="passwordless-toggle"
+                checked={usePasswordlessSignIn}
+                onCheckedChange={togglePasswordlessSignIn}
+              />
+              <Label htmlFor="passwordless-toggle">
+                Use passwordless sign-in (magic link)
+              </Label>
+            </div>
+          )}
+          
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {isEmailExists === null ? "Checking..." : (isEmailExists ? "Signing in..." : "Signing up...")}
+              </>
+            ) : (
+              isEmailExists === null ? "Continue" : (isEmailExists ? "Sign in" : "Sign up")
+            )}
+          </Button>
+        </form>
+      </Form>
+    );
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -275,109 +343,7 @@ export function AuthForm({ authMethod }: AuthFormProps) {
       </CardHeader>
       <CardContent>
         {authMethod === "email" ? (
-          <Form {...emailForm}>
-            <form onSubmit={emailForm.handleSubmit(handleEmailSubmit)} className="space-y-4">
-              <FormField
-                control={emailForm.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input 
-                        placeholder="example@mydynastyapp.com" 
-                        type="email" 
-                        {...field} 
-                        disabled={isLoading || isEmailExists !== null}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              {isEmailExists && !usePasswordlessSignIn && (
-                <FormField
-                  control={emailForm.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Enter your password" 
-                          type="password" 
-                          {...field} 
-                          disabled={isLoading}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-              
-              {isEmailExists !== null && (
-                <div className="text-sm text-center space-y-2">
-                  {isEmailExists ? (
-                    <>
-                      <Button 
-                        type="button" 
-                        variant="link" 
-                        onClick={togglePasswordlessSignIn} 
-                        className="p-0 h-auto font-normal"
-                      >
-                        {usePasswordlessSignIn 
-                          ? "Sign in with password instead" 
-                          : "Sign in with email link instead"}
-                      </Button>
-                      
-                      {usePasswordlessSignIn && (
-                        <p className="text-muted-foreground text-xs">
-                          We&apos;ll send a secure link to your email
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-muted-foreground">
-                      New account will be created with this email
-                    </p>
-                  )}
-                </div>
-              )}
-              
-              <Button 
-                type="submit" 
-                className="w-full" 
-                disabled={isLoading}
-                onClick={() => {
-                  if (isEmailExists === null) {
-                    console.log("Continue button clicked");
-                  }
-                }}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {isEmailExists === null ? "Checking..." : (
-                      isEmailExists 
-                        ? (usePasswordlessSignIn ? "Sending Link..." : "Signing in...") 
-                        : "Sending Link..."
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <Mail className="mr-2 h-4 w-4" />
-                    {isEmailExists === null ? "Continue" : (
-                      isEmailExists 
-                        ? (usePasswordlessSignIn ? "Send Sign in Link" : "Sign in") 
-                        : "Send Sign up Link"
-                    )}
-                  </>
-                )}
-              </Button>
-            </form>
-          </Form>
+          renderEmailForm()
         ) : (
           <Form {...phoneForm}>
             <form onSubmit={phoneForm.handleSubmit(handlePhoneSubmit)} className="space-y-4">

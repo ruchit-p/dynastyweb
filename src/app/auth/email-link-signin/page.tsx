@@ -35,6 +35,16 @@ export default function EmailLinkSignInPage() {
     
     setEmail(emailToUse);
     
+    // Check if this is a passwordless authentication
+    const isPasswordless = localStorage.getItem("isNewUser") !== null;
+    
+    if (isPasswordless) {
+      // Redirect to the verify-passwordless page
+      const isNewUser = localStorage.getItem("isNewUser") === "true";
+      router.push(`/auth/verify-passwordless?email=${encodeURIComponent(emailToUse)}&isNewUser=${isNewUser}`);
+      return;
+    }
+    
     // Check if this is a sign-in link
     const handleSignIn = async () => {
       try {

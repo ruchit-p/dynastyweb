@@ -100,6 +100,9 @@ interface AuthContextType {
   confirmPhoneAuth: (verificationId: string, verificationCode: string) => Promise<void>;
   sendEmailLink: (email: string) => Promise<void>;
   signInWithLink: (email: string, link: string) => Promise<void>;
+  sendPasswordlessLink: (email: string, isNewUser?: boolean) => Promise<void>;
+  verifyPasswordlessLink: (token: string, email: string, isNewUser?: boolean) => Promise<string>;
+  completePasswordlessSignUp: (userData: SignUpRequest) => Promise<SignUpResult>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -128,6 +131,9 @@ const AuthContext = createContext<AuthContextType>({
   confirmPhoneAuth: async () => {},
   sendEmailLink: async () => {},
   signInWithLink: async () => {},
+  sendPasswordlessLink: async () => {},
+  verifyPasswordlessLink: async () => '',
+  completePasswordlessSignUp: async () => ({ success: false, userId: '', familyTreeId: '', historyBookId: '' }),
 });
 
 // MARK: - Helper Functions
@@ -382,6 +388,73 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  // Custom passwordless authentication using our Cloud Functions
+  const sendPasswordlessLink = async (email: string, isNewUser = false): Promise<void> => {
+    try {
+      const sendPasswordlessLinkFn = httpsCallable(functions, 'sendPasswordlessLink');
+      const result = await sendPasswordlessLinkFn({ email, isNewUser });
+      
+      if (!result.data || !(result.data as any).success) {
+        throw new Error('Failed to send passwordless link');
+      }
+      
+      // Save the email to localStorage to use it later
+      window.localStorage.setItem('emailForSignIn', email);
+      window.localStorage.setItem('isNewUser', isNewUser.toString());
+    } catch (error) {
+      console.error('[Auth] Send passwordless link error:', error);
+      throw error;
+    }
+  };
+
+  // Verify passwordless link using our Cloud Functions
+  const verifyPasswordlessLink = async (token: string, email: string, isNewUser = false): Promise<string> => {
+    try {
+      const verifyPasswordlessLinkFn = httpsCallable(functions, 'verifyPasswordlessLink');
+      const result = await verifyPasswordlessLinkFn({ token, email, isNewUser });
+      
+      const data = result.data as any;
+      if (!data || !data.success || !data.customToken) {
+        throw new Error('Failed to verify passwordless link');
+      }
+      
+      // Sign in with the custom token
+      await signInWithCredential(auth, GoogleAuthProvider.credential(null, data.customToken));
+      
+      // Return the user ID
+      return data.userId;
+    } catch (error) {
+      console.error('[Auth] Verify passwordless link error:', error);
+      throw error;
+    }
+  };
+
+  // Complete passwordless sign-up using our Cloud Functions
+  const completePasswordlessSignUp = async (userData: SignUpRequest): Promise<SignUpResult> => {
+    try {
+      const completePasswordlessSignUpFn = httpsCallable(functions, 'completePasswordlessSignUp');
+      const result = await completePasswordlessSignUpFn(userData);
+      
+      const data = result.data as any;
+      if (!data || !data.success) {
+        throw new Error('Failed to complete passwordless sign-up');
+      }
+      
+      // Refresh the Firestore user data
+      await refreshFirestoreUser();
+      
+      return {
+        success: true,
+        userId: data.userId,
+        familyTreeId: data.familyTreeId,
+        historyBookId: data.historyBookId
+      };
+    } catch (error) {
+      console.error('[Auth] Complete passwordless sign-up error:', error);
+      throw error;
+    }
+  };
+
   const logout = async () => {
     try {
       await firebaseSignOut(auth);
@@ -481,6 +554,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     confirmPhoneAuth,
     sendEmailLink,
     signInWithLink,
+    sendPasswordlessLink,
+    verifyPasswordlessLink,
+    completePasswordlessSignUp,
   };
 
   return (
