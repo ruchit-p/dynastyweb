@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext"
 import { type Story } from "@/utils/storyUtils"
 import { StoryCard } from "@/components/Story"
 import { getUserStories } from "@/utils/functionUtils"
+import { Spinner } from "@/components/ui/spinner"
 
 // Define the enriched story type that includes author and tagged people
 type EnrichedStory = Story & {
@@ -134,11 +135,11 @@ export default function HistoryBookPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-[#F9FAFB]">
         <main className="container py-6">
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A5C36] mx-auto"></div>
-            <p className="mt-2 text-gray-600">Loading your history book...</p>
+            <Spinner size="lg" variant="primary" className="mb-4" />
+            <p className="text-[#0A5C36] font-medium">Loading your history book...</p>
           </div>
         </main>
       </div>
@@ -147,9 +148,10 @@ export default function HistoryBookPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-[#F9FAFB]">
         <main className="container py-6">
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md shadow-sm" role="alert">
+            <p className="font-medium">Error</p>
             <p>{error}</p>
           </div>
         </main>
@@ -158,12 +160,12 @@ export default function HistoryBookPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#F9FAFB]">
       <main className="container py-6">
         <div className="flex justify-between my-6 items-center mb-6">
-          <h1 className="text-2xl font-bold">My History Book</h1>
+          <h1 className="text-2xl font-bold text-[#0A5C36]">My History Book</h1>
           <Link href="/create-story">
-            <Button>
+            <Button className="bg-[#0A5C36] hover:bg-[#0A5C36]/90 text-white">
               <PenSquare className="mr-2 h-4 w-4" />
               Write Story
             </Button>
@@ -172,11 +174,11 @@ export default function HistoryBookPage() {
 
         {stories.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16">
-            <Book className="h-16 w-16 text-gray-400 mb-4" />
-            <p className="text-xl text-gray-600 mb-2">Your history book is empty</p>
-            <p className="text-gray-500 mb-6">Start writing your family&apos;s history by creating your first story.</p>
+            <Book className="h-16 w-16 text-[#0A5C36]/40 mb-4" />
+            <p className="text-xl text-[#0A5C36] mb-2">Your history book is empty</p>
+            <p className="text-gray-600 mb-6">Start writing your family&apos;s history by creating your first story.</p>
             <Link href="/create-story">
-              <Button>
+              <Button className="bg-[#0A5C36] hover:bg-[#0A5C36]/90 text-white">
                 <PenSquare className="mr-2 h-4 w-4" />
                 Write Your First Story
               </Button>

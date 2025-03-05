@@ -16,6 +16,7 @@ export interface NotificationSettings {
 
 export interface PrivacySettings {
   locationEnabled: boolean
+  strictPrivacy: boolean
   dataRetention: "30days" | "90days" | "1year" | "forever"
 }
 
@@ -29,6 +30,7 @@ const defaultSettings: UserSettings = {
   },
   privacy: {
     locationEnabled: true,
+    strictPrivacy: false,
     dataRetention: "1year",
   },
 }
@@ -87,6 +89,7 @@ export class SettingsManager {
             },
             privacy: {
               locationEnabled: settings.privacy.locationEnabled ?? defaultSettings.privacy.locationEnabled,
+              strictPrivacy: settings.privacy.strictPrivacy ?? defaultSettings.privacy.strictPrivacy,
               dataRetention: settings.privacy.dataRetention ?? defaultSettings.privacy.dataRetention,
             },
             updatedAt: serverTimestamp(),

@@ -32,6 +32,7 @@ export default function PrivacySecurityPage() {
   const { toast } = useToast()
   const [settings, setSettings] = useState<PrivacySettings>({
     locationEnabled: true,
+    strictPrivacy: false,
     dataRetention: "1year",
   })
   const [isLoading, setIsLoading] = useState(true)
@@ -65,7 +66,7 @@ export default function PrivacySecurityPage() {
   }, [currentUser?.uid, toast])
 
   const handleToggle = (key: keyof PrivacySettings) => {
-    if (key === "locationEnabled") {
+    if (key === "locationEnabled" || key === "strictPrivacy") {
       setSettings((prev) => ({ ...prev, [key]: !prev[key] }))
     }
   }
