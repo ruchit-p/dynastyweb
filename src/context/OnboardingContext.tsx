@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from './AuthContext'
 import OnboardingForm from '@/components/OnboardingForm'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
@@ -39,25 +39,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const publicPaths = ['/']
   const isPublicPage = publicPaths.some(path => pathname === path)
 
-  useEffect(() => {
-    // Only check onboarding status if:
-    // 1. User is authenticated and email is verified
-    // 2. We're not already checking
-    // 3. We're not on a skip path or public page
-    // 4. We haven't checked this user already or we need to re-check
-    if (
-      currentUser && 
-      currentUser.emailVerified && 
-      !isCheckingRef.current && 
-      !shouldSkip && 
-      !isPublicPage &&
-      lastCheckedUserIdRef.current !== currentUser.uid
-    ) {
-      checkOnboardingStatus();
-    }
-  }, [currentUser, loading, pathname]);
-
-  const checkOnboardingStatus = async () => {
+  const checkOnboardingStatus = useCallback(async () => {
     if (!currentUser || isCheckingRef.current) return
     
     isCheckingRef.current = true
@@ -106,7 +88,25 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     } finally {
       isCheckingRef.current = false
     }
-  }
+  }, [currentUser, hasCompletedOnboarding, shouldSkip, toast]);
+
+  useEffect(() => {
+    // Only check onboarding status if:
+    // 1. User is authenticated and email is verified
+    // 2. We're not already checking
+    // 3. We're not on a skip path or public page
+    // 4. We haven't checked this user already or we need to re-check
+    if (
+      currentUser && 
+      currentUser.emailVerified && 
+      !isCheckingRef.current && 
+      !shouldSkip && 
+      !isPublicPage &&
+      lastCheckedUserIdRef.current !== currentUser.uid
+    ) {
+      checkOnboardingStatus();
+    }
+  }, [currentUser, loading, pathname, checkOnboardingStatus, shouldSkip, isPublicPage]);
 
   const handleOnboardingComplete = async (userData: {
     firstName: string

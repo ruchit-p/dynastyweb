@@ -57,7 +57,7 @@ export default function HelpSupportPage() {
                 How do I create a family tree?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                To create a family tree, navigate to the Family Tree page and click on "Create New Tree" button. 
+                To create a family tree, navigate to the Family Tree page and click on &quot;Create New Tree&quot; button. 
                 Follow the prompts to add your first family member, which will be the root of your tree. 
                 From there, you can add more family members and their relationships.
               </AccordionContent>
@@ -68,8 +68,8 @@ export default function HelpSupportPage() {
                 How can I invite family members to join?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                You can invite family members by going to your Family Tree page, clicking on the "Invite" button, 
-                and entering their email addresses. They'll receive an invitation with instructions to join your family tree.
+                You can invite family members by going to your Family Tree page, clicking on the &quot;Invite&quot; button, 
+                and entering their email addresses. They&apos;ll receive an invitation with instructions to join your family tree.
               </AccordionContent>
             </AccordionItem>
             
@@ -79,7 +79,7 @@ export default function HelpSupportPage() {
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
                 A History Book is a collection of stories, photos, and other media that you can create to document 
-                your family's history. Think of it as a digital scrapbook where you can preserve memories and share them with family members.
+                your family&apos;s history. Think of it as a digital scrapbook where you can preserve memories and share them with family members.
               </AccordionContent>
             </AccordionItem>
             
