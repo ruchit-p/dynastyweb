@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { User, Bell, Lock, HelpCircle, LogOut, Menu, X } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
 import ProtectedRoute from "@/components/ProtectedRoute"
+import { Spinner } from "@/components/ui/spinner"
 
 // MARK: - Account Settings Item Type
 interface SidebarNavItem {
@@ -51,10 +52,31 @@ export default function AccountSettingsLayout({
 }) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+  const [previousPathname, setPreviousPathname] = useState<string | null>(null)
+  
   const { signOut } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
   const pathname = usePathname()
+
+  // Track navigation state to show spinner during page transitions
+  useEffect(() => {
+    if (previousPathname !== null && previousPathname !== pathname) {
+      // Route has changed, show loading state
+      setIsLoading(true)
+      
+      // Hide loading state after a short delay (content should be loaded by then)
+      const timer = setTimeout(() => {
+        setIsLoading(false)
+      }, 800)
+      
+      return () => clearTimeout(timer)
+    }
+    
+    // Store current pathname for next comparison
+    setPreviousPathname(pathname)
+  }, [pathname, previousPathname])
 
   const handleLogout = async () => {
     try {
@@ -166,7 +188,15 @@ export default function AccountSettingsLayout({
 
           {/* Main Content */}
           <div className="flex-1">
-            <div className="bg-white shadow-xl rounded-xl p-6 mb-4">
+            <div className="bg-white shadow-xl rounded-xl p-6 mb-4 relative">
+              {isLoading ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80 z-10 rounded-xl">
+                  <div className="flex flex-col items-center">
+                    <Spinner size="lg" variant="primary" />
+                    <p className="mt-4 text-[#0A5C36] font-medium">Loading...</p>
+                  </div>
+                </div>
+              ) : null}
               {children}
             </div>
           </div>
