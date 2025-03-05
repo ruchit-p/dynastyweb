@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { auth } from "@/lib/firebase"
 import { User } from "firebase/auth"
 import Navbar from "@/components/Navbar"
-import { Toaster } from "@/components/ui/toaster"
+import { OnboardingProvider } from "@/context/OnboardingContext"
 
 export default function ProtectedLayout({
   children,
@@ -32,10 +32,11 @@ export default function ProtectedLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-16">
-      <Navbar user={user} />
-      {children}
-      <Toaster />
-    </div>
+    <OnboardingProvider>
+      <div className="min-h-screen bg-gray-50 pt-16">
+        <Navbar user={user} />
+        {children}
+      </div>
+    </OnboardingProvider>
   )
 } 

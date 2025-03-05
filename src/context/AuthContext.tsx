@@ -7,6 +7,10 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   updateProfile,
+  setPersistence,
+  browserLocalPersistence,
+  updateEmail as firebaseUpdateEmail,
+  updatePassword as firebaseUpdatePassword,
 } from 'firebase/auth';
 import { auth, functions, db } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -41,13 +45,7 @@ interface FirestoreUser {
 
 interface SignUpRequest {
   email: string;
-  password: string;
-  confirmPassword: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  dateOfBirth: Date;
-  gender: string;
+  password: string
 }
 
 interface SignUpResult {
@@ -61,7 +59,7 @@ interface AuthContextType {
   currentUser: User | null;
   firestoreUser: FirestoreUser | null;
   loading: boolean;
-  signUp: (email: string, password: string, confirmPassword: string, firstName: string, lastName: string, phone: string, dateOfBirth: Date, gender: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -81,6 +79,7 @@ interface AuthContextType {
     inviteeEmail: string;
   }>;
   refreshFirestoreUser: () => Promise<void>;
+  updateUserProfile: (displayName: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -93,6 +92,7 @@ const AuthContext = createContext<AuthContextType>({
   resetPassword: async () => {},
   updateEmail: async () => {},
   updatePassword: async () => {},
+  updateUserProfile: async () => {},
   sendVerificationEmail: async () => {},
   signUpWithInvitation: async () => ({ success: false, userId: '', familyTreeId: '' }),
   verifyInvitation: async () => ({
@@ -120,6 +120,8 @@ const fetchFirestoreUser = async (userId: string): Promise<FirestoreUser | null>
   }
 };
 
+
+
 // MARK: - Provider Component
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -134,41 +136,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        const userData = await fetchFirestoreUser(user.uid);
+    setPersistence(auth, browserLocalPersistence).catch((error) => {
+      console.error("[Auth] Error setting persistence:", error);
+    });
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        const userData = await fetchFirestoreUser(currentUser.uid);
         setFirestoreUser(userData);
       } else {
         setFirestoreUser(null);
       }
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
   const signUp = async (
     email: string,
     password: string,
-    confirmPassword: string,
-    firstName: string,
-    lastName: string,
-    phone: string,
-    dateOfBirth: Date,
-    gender: string
   ): Promise<void> => {
     try {
       const handleSignUp = httpsCallable<SignUpRequest, SignUpResult>(functions, 'handleSignUp');
       await handleSignUp({
         email,
         password,
-        confirmPassword,
-        firstName,
-        lastName,
-        phone,
-        dateOfBirth,
-        gender,
       });
 
       // Sign in the user after successful signup
@@ -264,7 +256,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return result.data;
   };
 
-  const value = {
+  const updateEmail = async (email: string) => {
+    try {
+      if (auth.currentUser) {
+        await firebaseUpdateEmail(auth.currentUser, email);
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const updatePassword = async (password: string) => {
+    try {
+      if (auth.currentUser) { 
+        await firebaseUpdatePassword(auth.currentUser, password);
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const value: AuthContextType = {
     currentUser: user,
     firestoreUser,
     loading,
@@ -272,14 +284,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     signIn,
     signOut: logout,
     resetPassword,
+    updateEmail,
+    updatePassword,
     updateUserProfile,
-    updateEmail: async () => {},
-    updatePassword: async () => {},
     sendVerificationEmail,
     signUpWithInvitation,
     verifyInvitation,
     refreshFirestoreUser,
-  };
+   };
 
   return (
     <AuthContext.Provider value={value}>
@@ -288,6 +300,4 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export const useAuth = () => {
-  return useContext(AuthContext);
-}; 
+export const useAuth = () => useContext(AuthContext);

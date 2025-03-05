@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef, useCallback} from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
+import { useOnboarding } from '@/context/OnboardingContext';
 import calcTree from "relatives-tree";
 import type { Node, ExtNode, Connector } from 'relatives-tree/lib/types';
 import { getFamilyTreeData, createFamilyMember, deleteFamilyMember, updateFamilyMember } from "@/utils/functionUtils";
@@ -83,6 +84,7 @@ interface CustomNode extends Omit<Node, 'placeholder'> {
 
 export default function FamilyTreePage() {
   const { currentUser, firestoreUser } = useAuth();
+  const { hasCompletedOnboarding } = useOnboarding();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -215,25 +217,28 @@ export default function FamilyTreePage() {
 
   const fetchFamilyTreeData = useCallback(async () => {
     if (!currentUser) return;
+    
+    // Don't try to fetch family tree data if onboarding isn't completed
+    if (!hasCompletedOnboarding) {
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
       const { treeNodes } = await getFamilyTreeData(currentUser.uid);
       setTreeData([...treeNodes]); // Convert readonly array to mutable array
-    } catch {
-      toast({
-        title: "Error",
-        description: "Failed to load family tree. Please try again.",
-        variant: "destructive",
-      });
+    } catch (error) {
+      console.error("Failed to load family tree:", error);
+      // Toast removed as requested
     } finally {
       setLoading(false);
     }
-  }, [currentUser, toast]);
+  }, [currentUser, hasCompletedOnboarding]);
 
   // Fetch family tree admin data and members
   const fetchFamilyManagementData = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser || !hasCompletedOnboarding) return;
 
     try {
       setLoading(true);
@@ -267,22 +272,24 @@ export default function FamilyTreePage() {
       }));
       
       setFamilyMembers(formattedMembers);
-      
-    } catch (error) {
-      console.error('Error fetching family management data:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load family management data. Please try again.',
-        variant: 'destructive',
-      });
+    } catch {
+      // Toast removed as requested
+      if (!hasCompletedOnboarding) {
+        console.log("Family management data not available during onboarding - suppressing error");
+      } else {
+        console.error('Error fetching family management data');
+      }
     } finally {
       setLoading(false);
     }
-  }, [currentUser, toast]);
+  }, [currentUser, hasCompletedOnboarding]);
 
   useEffect(() => {
-    void fetchFamilyTreeData();
-  }, [fetchFamilyTreeData]);
+    // Only fetch family tree data if onboarding is completed
+    if (hasCompletedOnboarding) {
+      void fetchFamilyTreeData();
+    }
+  }, [fetchFamilyTreeData, hasCompletedOnboarding]);
 
   // Calculate optimal zoom level to fit the entire tree
   const calculateOptimalZoom = useCallback(() => {

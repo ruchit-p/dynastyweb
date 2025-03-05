@@ -10,34 +10,16 @@ import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
 import { Loader2 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
-import { signupFormSchema, type SignupFormData, validateFormData } from "@/lib/validation"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { format } from "date-fns"
-import { Calendar as CalendarIcon } from "lucide-react"
-import { EnhancedCalendar } from "@/components/ui/enhanced-calendar"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
 
 export default function SignupPage() {
-  const [formData, setFormData] = useState<SignupFormData>({
+  const [formData, setFormData] = useState<{
+    email: string;
+    password: string;
+    confirmPassword: string;
+  }>({
     email: "",
     password: "",
     confirmPassword: "",
-    firstName: "",
-    lastName: "",
-    phone: "",
-    dateOfBirth: new Date(),
-    gender: "other",
   })
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const [isLoading, setIsLoading] = useState(false)
@@ -54,35 +36,30 @@ export default function SignupPage() {
     }
   }
 
-  const handleGenderChange = (value: "male" | "female" | "other") => {
-    setFormData((prev) => ({ ...prev, gender: value }))
-    if (errors.gender) {
-      setErrors((prev) => ({ ...prev, gender: "" }))
-    }
-  }
-
-  const handleDateChange = (date: Date | undefined) => {
-    if (date) {
-      setFormData((prev) => ({ ...prev, dateOfBirth: date }))
-      if (errors.dateOfBirth) {
-        setErrors((prev) => ({ ...prev, dateOfBirth: "" }))
-      }
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setErrors({})
 
-    // Validate form data
-    const validation = validateFormData(signupFormSchema, formData)
-    if (!validation.success) {
-      const newErrors: { [key: string]: string } = {}
-      validation.errors?.forEach((error) => {
-        newErrors[error.field] = error.message
-      })
-      setErrors(newErrors)
+    // Basic validation
+    if (!formData.email) {
+      setErrors(prev => ({ ...prev, email: "Email is required" }))
+      setIsLoading(false)
+      return
+    }
+
+    if (!formData.password) {
+      setErrors(prev => ({ ...prev, password: "Password is required" }))
+      setIsLoading(false)
+      return
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setErrors(prev => ({ 
+        ...prev, 
+        confirmPassword: "Passwords do not match",
+        password: "Passwords do not match"
+      }))
       setIsLoading(false)
       return
     }
@@ -90,13 +67,7 @@ export default function SignupPage() {
     try {
       await signUp(
         formData.email,
-        formData.password,
-        formData.confirmPassword,
-        formData.firstName,
-        formData.lastName,
-        formData.phone || "",
-        formData.dateOfBirth,
-        formData.gender
+        formData.password
       )
       toast({
         title: "Account created!",
@@ -220,140 +191,6 @@ export default function SignupPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="firstName">First Name</Label>
-                <div className="mt-1">
-                  <Input
-                    id="firstName"
-                    name="firstName"
-                    type="text"
-                    autoComplete="given-name"
-                    required
-                    value={formData.firstName}
-                    onChange={handleChange}
-                    className={errors.firstName ? "border-red-500" : ""}
-                  />
-                  {errors.firstName && (
-                    <p className="mt-1 text-xs text-red-500">{errors.firstName}</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="lastName">Last Name</Label>
-                <div className="mt-1">
-                  <Input
-                    id="lastName"
-                    name="lastName"
-                    type="text"
-                    autoComplete="family-name"
-                    required
-                    value={formData.lastName}
-                    onChange={handleChange}
-                    className={errors.lastName ? "border-red-500" : ""}
-                  />
-                  {errors.lastName && (
-                    <p className="mt-1 text-xs text-red-500">{errors.lastName}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="phone">Phone Number</Label>
-              <div className="mt-1">
-                <Input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  autoComplete="tel"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className={errors.phone ? "border-red-500" : ""}
-                />
-                {errors.phone && (
-                  <p className="mt-1 text-xs text-red-500">{errors.phone}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="dateOfBirth">Date of Birth</Label>
-              <div className="mt-1">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant={"outline"}
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !formData.dateOfBirth && "text-muted-foreground",
-                        errors.dateOfBirth && "border-red-500"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {formData.dateOfBirth ? (
-                        format(formData.dateOfBirth, "PPP")
-                      ) : (
-                        <span>Pick a date</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <EnhancedCalendar
-                      mode="single"
-                      selected={formData.dateOfBirth}
-                      onSelect={handleDateChange}
-                      initialFocus
-                      disabled={(date) => {
-                        const today = new Date();
-                        const birthDate = new Date(date);
-                        
-                        let age = today.getFullYear() - birthDate.getFullYear();
-                        const monthDiff = today.getMonth() - birthDate.getMonth();
-                        
-                        // Adjust age if birthday hasn't occurred this year
-                        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-                          age--;
-                        }
-                        
-                        return age < 13;
-                      }}
-                      fromYear={1900}
-                      toYear={new Date().getFullYear()}
-                    />
-                  </PopoverContent>
-                </Popover>
-                {errors.dateOfBirth && (
-                  <p className="mt-1 text-xs text-red-500">{errors.dateOfBirth}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="gender">Gender</Label>
-              <div className="mt-1">
-                <Select
-                  value={formData.gender}
-                  onValueChange={handleGenderChange}
-                >
-                  <SelectTrigger
-                    className={errors.gender ? "border-red-500" : ""}
-                  >
-                    <SelectValue placeholder="Select gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                {errors.gender && (
-                  <p className="mt-1 text-xs text-red-500">{errors.gender}</p>
-                )}
-              </div>
-            </div>
-
             <div>
               <Label htmlFor="password">Password</Label>
               <div className="mt-1">
@@ -395,14 +232,29 @@ export default function SignupPage() {
             <div>
               <Button
                 type="submit"
-                className="w-full flex justify-center items-center"
+                className="w-full bg-[#0A5C36] hover:bg-[#0A5C36]/80"
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-                Create Account
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span>Creating Account...</span>
+                  </>
+                ) : (
+                  "Sign Up"
+                )}
               </Button>
+            </div>
+            
+            <div className="text-center text-sm text-gray-500">
+              By signing up, you agree to our{" "}
+              <Link href="/terms" className="font-medium text-[#0A5C36]">
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="font-medium text-[#0A5C36]">
+                Privacy Policy
+              </Link>
             </div>
           </form>
         </div>

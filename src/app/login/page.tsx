@@ -152,7 +152,7 @@ export default function LoginPage() {
           Sign In to Dynasty
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          Or{" "}
+          Don&apos;t have an account?{" "}
           <Link
             href="/signup"
             className="font-medium text-[#0A5C36] hover:text-[#0A5C36]/80"
@@ -203,7 +203,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-end">
               <div className="text-sm">
                 <Link
                   href="/forgot-password"
@@ -217,14 +217,29 @@ export default function LoginPage() {
             <div>
               <Button
                 type="submit"
-                className="w-full flex justify-center items-center"
+                className="w-full bg-[#0A5C36] hover:bg-[#0A5C36]/80"
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-                Sign In
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span>Signing In...</span>
+                  </>
+                ) : (
+                  "Sign In"
+                )}
               </Button>
+            </div>
+            
+            <div className="text-center text-sm text-gray-500 mt-4">
+              By signing in, you agree to our{" "}
+              <Link href="/terms" className="font-medium text-[#0A5C36]">
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="font-medium text-[#0A5C36]">
+                Privacy Policy
+              </Link>
             </div>
           </form>
         </div>

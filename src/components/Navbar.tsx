@@ -31,6 +31,8 @@ export default function Navbar({ user }: NavbarProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false)
   const [profilePicture, setProfilePicture] = useState<string | null>(null)
+  const [firstName, setFirstName] = useState<string | null>(null)
+  const [lastName, setLastName] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -42,6 +44,8 @@ export default function Navbar({ user }: NavbarProps) {
         if (userDoc.exists()) {
           const data = userDoc.data()
           setProfilePicture(data.profilePicture || null)
+          setFirstName(data.firstName || null)
+          setLastName(data.lastName || null)
         }
       } catch (error) {
         console.error("Error fetching user data:", error)
@@ -81,7 +85,7 @@ export default function Navbar({ user }: NavbarProps) {
             className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#0A5C36]"
           >
             <Home className="h-4 w-4" />
-            Home
+            Feed
           </Link>
           <Link
             href="/family-tree"
@@ -148,7 +152,11 @@ export default function Navbar({ user }: NavbarProps) {
                     height={40}
                   />
                   <div className="flex flex-col">
-                    <span className="text-sm font-medium">{user.displayName || "User"}</span>
+                    <span className="text-sm font-medium">
+                      {firstName && lastName 
+                        ? `${firstName} ${lastName}` 
+                        : user.displayName || "User"}
+                    </span>
                     <span className="text-xs text-gray-500">{user.email}</span>
                   </div>
                 </div>

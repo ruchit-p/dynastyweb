@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
@@ -18,17 +18,17 @@ export default function VerifyEmailPage() {
   const { currentUser, loading, sendVerificationEmail } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
+  const verificationNotified = useRef(false)
+  const hasRedirected = useRef(false)
 
-  // Effect for initial auth state and email setup
   useEffect(() => {
-    // Only take action after the auth state has loaded
     if (!loading) {
-      if (currentUser?.emailVerified) {
+      if (currentUser?.emailVerified && !hasRedirected.current) {
+        hasRedirected.current = true
         router.push("/family-tree")
       } else if (currentUser?.email) {
         setEmail(currentUser.email)
       } else if (!currentUser) {
-        // Only redirect to login if we're sure there's no user
         toast({
           title: "Session expired",
           description: "Please sign in again to verify your email.",
@@ -39,49 +39,46 @@ export default function VerifyEmailPage() {
     }
   }, [currentUser, loading, router, toast])
 
-  // Add this effect to immediately check verification status when the page loads
   useEffect(() => {
-    const checkVerificationImmediately = async () => {
-      if (!currentUser) return;
-      
+    if (!currentUser || loading || verificationNotified.current || hasRedirected.current) return
+    
+    const checkVerification = async () => {
       try {
-        // Force an immediate token refresh when the page loads
-        await auth.currentUser?.reload();
-        const freshUser = auth.currentUser;
+        await auth.currentUser?.reload()
+        const freshUser = auth.currentUser
         
-        if (freshUser?.emailVerified) {
+        if (freshUser?.emailVerified && !verificationNotified.current) {
+          verificationNotified.current = true
           toast({
             title: "Email verified!",
             description: "Your email has been verified. Redirecting to your family tree...",
-          });
-          router.push("/family-tree");
+          })
+          
+          hasRedirected.current = true
+          router.push("/family-tree")
         }
       } catch (error) {
-        console.error("Error checking verification status:", error);
+        console.error("Error checking verification status:", error)
       }
-    };
+    }
     
-    // Run the check immediately when component mounts or user changes
-    checkVerificationImmediately();
-  }, [currentUser, router, toast]);
-
-  // Real-time listener for email verification status
-  useEffect(() => {
-    if (!currentUser) return
-
+    checkVerification()
+    
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user?.emailVerified) {
+      if (user?.emailVerified && !verificationNotified.current) {
+        verificationNotified.current = true
         toast({
           title: "Email verified!",
           description: "Your email has been verified. Redirecting to your family tree...",
         })
-        // Redirect immediately
+        
+        hasRedirected.current = true
         router.push("/family-tree")
       }
     })
-
+    
     return () => unsubscribe()
-  }, [currentUser, router, toast])
+  }, [currentUser, loading, router, toast])
 
   const handleResendVerification = async () => {
     setIsResending(true)
@@ -104,29 +101,32 @@ export default function VerifyEmailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+    <div className="min-h-screen bg-[#F9FAFB] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md relative">
         <div className="flex justify-center">
-          <Image
-            src="/dynasty.png"
-            alt="Dynasty Logo"
-            width={60}
-            height={60}
-            className="mx-auto"
-          />
+          <div className="relative w-20 h-20">
+            <Image
+              src="/dynasty.png"
+              alt="Dynasty Logo"
+              width={80}
+              height={80}
+              className="mx-auto"
+            />
+          </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">Verify your email</h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
+        <h2 className="mt-6 text-center text-3xl font-bold text-[#0A5C36]">
+          Verify Your Email
+        </h2>
+        <p className="mt-2 text-center text-sm text-gray-600 max-w-sm mx-auto">
           We&apos;ve sent a verification email to your inbox. Please verify your email to continue.
-          The verification link will expire in 30 minutes.
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+        <div className="bg-white py-8 px-4 shadow-lg sm:rounded-xl sm:px-10 border border-gray-100">
           <div className="space-y-6">
             <div>
-              <Label htmlFor="email">Email address</Label>
+              <Label htmlFor="email" className="text-gray-700">Email address</Label>
               <div className="mt-1">
                 <Input
                   id="email"
@@ -137,6 +137,7 @@ export default function VerifyEmailPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={!!currentUser?.email}
+                  className="rounded-md border-gray-300 focus:border-[#0A5C36] focus:ring-[#0A5C36]/20"
                 />
               </div>
             </div>
@@ -144,7 +145,7 @@ export default function VerifyEmailPage() {
             <div>
               <Button
                 onClick={handleResendVerification}
-                className="w-full flex justify-center items-center"
+                className="w-full flex justify-center items-center bg-[#0A5C36] hover:bg-[#0A5C36]/90 text-white"
                 disabled={isResending}
               >
                 {isResending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
@@ -159,7 +160,7 @@ export default function VerifyEmailPage() {
           <div className="mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
+                <div className="w-full border-t border-gray-200" />
               </div>
               <div className="relative flex justify-center text-sm">
                 <span className="px-2 bg-white text-gray-500">Need help?</span>
@@ -167,9 +168,9 @@ export default function VerifyEmailPage() {
             </div>
 
             <div className="mt-6 text-center">
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-600">
                 Check your spam folder or contact{" "}
-                <a href="mailto:support@mydynastyapp.com" className="font-medium text-[#0A5C36] hover:text-[#0A5C36]/80">
+                <a href="mailto:support@mydynastyapp.com" className="font-medium text-[#0A5C36] hover:text-[#0A5C36]/80 transition-colors">
                   support@mydynastyapp.com
                 </a>
               </p>
@@ -178,7 +179,7 @@ export default function VerifyEmailPage() {
             <div className="mt-6">
               <Button
                 variant="outline"
-                className="w-full flex justify-center items-center"
+                className="w-full flex justify-center items-center border-[#C4A55C] text-[#C4A55C] hover:bg-[#C4A55C]/10 hover:text-[#C4A55C] hover:border-[#C4A55C]"
                 onClick={() => router.push("/")}
               >
                 <Home className="mr-2 h-4 w-4" />
