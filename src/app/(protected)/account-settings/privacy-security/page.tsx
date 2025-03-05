@@ -17,13 +17,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Fingerprint, Key, Trash, Loader2 } from "lucide-react"
+import { Fingerprint, Key, Trash, Loader2, Shield, Lock, Database } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
 import { doc, deleteDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { deleteUser } from "firebase/auth"
-import ProtectedRoute from "@/components/ProtectedRoute"
 import { ChangePasswordDialog } from "@/components/ChangePasswordDialog"
 import { SettingsManager, type PrivacySettings } from "@/utils/settingsManager"
 
@@ -137,24 +136,32 @@ export default function PrivacySecurityPage() {
 
   if (isLoading) {
     return (
-      <ProtectedRoute>
-        <div className="flex justify-center items-center min-h-[500px]">
-          <Loader2 className="h-8 w-8 animate-spin text-[#0A5C36]" />
-        </div>
-      </ProtectedRoute>
+      <div className="flex justify-center items-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-[#0A5C36]" />
+      </div>
     )
   }
 
   return (
-    <ProtectedRoute>
-      <div className="bg-white shadow-xl rounded-xl overflow-hidden p-6">
-        <div className="space-y-6">
+    <>
+      <h1 className="text-2xl font-bold mb-6 text-[#0A5C36]">Privacy & Security</h1>
+      
+      <div className="space-y-8">
+        {/* Privacy section */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-medium border-b pb-2">Privacy</h2>
+          
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <Fingerprint className="h-5 w-5 text-[#0A5C36]" />
-              <Label htmlFor="location-services" className="text-lg font-semibold">
-                Location Services
-              </Label>
+              <div className="bg-[#F9FAFB] p-2 rounded-lg">
+                <Fingerprint className="h-5 w-5 text-[#0A5C36]" />
+              </div>
+              <div>
+                <Label htmlFor="location-services" className="text-base">
+                  Location Services
+                </Label>
+                <p className="text-xs text-gray-500 mt-1">Allow the app to access your location</p>
+              </div>
             </div>
             <Switch
               id="location-services"
@@ -163,45 +170,115 @@ export default function PrivacySecurityPage() {
             />
           </div>
 
-          <div className="border-t border-gray-200 pt-4">
-            <h2 className="text-xl font-semibold mb-4">Data Retention</h2>
-            <Select onValueChange={handleDataRetentionChange} value={settings.dataRetention}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select data retention period" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="30days">30 days</SelectItem>
-                <SelectItem value="90days">90 days</SelectItem>
-                <SelectItem value="1year">1 year</SelectItem>
-                <SelectItem value="forever">Forever</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="bg-[#F9FAFB] p-2 rounded-lg">
+                <Shield className="h-5 w-5 text-[#0A5C36]" />
+              </div>
+              <div>
+                <Label htmlFor="privacy-mode" className="text-base">
+                  Privacy Mode
+                </Label>
+                <p className="text-xs text-gray-500 mt-1">Enable stricter privacy settings</p>
+              </div>
+            </div>
+            <Switch
+              id="privacy-mode"
+              checked={settings.strictPrivacy}
+              onCheckedChange={() => handleToggle("strictPrivacy")}
+            />
           </div>
+        </div>
 
-          <div className="border-t border-gray-200 pt-4">
-            <h2 className="text-xl font-semibold mb-4">Password</h2>
+        {/* Data retention section */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-medium border-b pb-2">Data Retention</h2>
+          
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="bg-[#F9FAFB] p-2 rounded-lg">
+                <Database className="h-5 w-5 text-[#0A5C36]" />
+              </div>
+              <div>
+                <Label htmlFor="data-retention" className="text-base">
+                  Data Retention Period
+                </Label>
+                <p className="text-xs text-gray-500 mt-1">How long we keep your data</p>
+              </div>
+            </div>
+            <div className="w-40">
+              <Select onValueChange={handleDataRetentionChange} value={settings.dataRetention}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select period" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="30days">30 days</SelectItem>
+                  <SelectItem value="90days">90 days</SelectItem>
+                  <SelectItem value="1year">1 year</SelectItem>
+                  <SelectItem value="forever">Forever</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        {/* Security section */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-medium border-b pb-2">Security</h2>
+          
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="bg-[#F9FAFB] p-2 rounded-lg">
+                <Lock className="h-5 w-5 text-[#0A5C36]" />
+              </div>
+              <div>
+                <Label className="text-base">Password</Label>
+                <p className="text-xs text-gray-500 mt-1">Change your account password</p>
+              </div>
+            </div>
             <Button variant="outline" onClick={() => setShowChangePasswordDialog(true)}>
               <Key className="h-4 w-4 mr-2" />
-              Change Password
-            </Button>
-          </div>
-
-          <div className="border-t border-gray-200 pt-4">
-            <h2 className="text-xl font-semibold mb-4 text-red-600">Danger Zone</h2>
-            <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
-              <Trash className="h-4 w-4 mr-2" />
-              Delete Account
+              Change
             </Button>
           </div>
         </div>
 
-        <div className="mt-6 flex justify-end">
-          <Button onClick={handleSave} disabled={isSaving}>
+        {/* Danger Zone section */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-medium border-b pb-2 text-red-600">Danger Zone</h2>
+          
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="bg-red-50 p-2 rounded-lg">
+                <Trash className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <Label className="text-base">Delete Account</Label>
+                <p className="text-xs text-gray-500 mt-1">Permanently delete your account and data</p>
+              </div>
+            </div>
+            <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+              Delete Account
+            </Button>
+          </div>
+        </div>
+        
+        <div className="pt-4 flex justify-end">
+          <Button 
+            onClick={handleSave} 
+            disabled={isSaving}
+            className="bg-[#0A5C36] hover:bg-[#0A5C36]/90"
+          >
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {isSaving ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </div>
+
+      <ChangePasswordDialog
+        open={showChangePasswordDialog}
+        onOpenChange={setShowChangePasswordDialog}
+      />
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
@@ -224,29 +301,18 @@ export default function PrivacySecurityPage() {
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteAccount}
               disabled={deleteConfirmation !== "DELETE" || isDeleting}
               className="bg-red-600 hover:bg-red-700"
             >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                "Delete Account"
-              )}
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {isDeleting ? "Deleting..." : "Delete Account"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <ChangePasswordDialog
-        open={showChangePasswordDialog}
-        onOpenChange={setShowChangePasswordDialog}
-      />
-    </ProtectedRoute>
+    </>
   )
 } 
