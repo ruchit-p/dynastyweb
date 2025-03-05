@@ -105,6 +105,7 @@ export default function NotificationsPage() {
               id="push-notifications"
               checked={settings.pushEnabled}
               onCheckedChange={() => handleToggle("pushEnabled")}
+              useGoldColor
             />
           </div>
 
@@ -121,6 +122,7 @@ export default function NotificationsPage() {
               id="email-notifications"
               checked={settings.emailEnabled}
               onCheckedChange={() => handleToggle("emailEnabled")}
+              useGoldColor
             />
           </div>
         </div>
@@ -144,6 +146,7 @@ export default function NotificationsPage() {
               id="message-notifications"
               checked={settings.newMessageEnabled}
               onCheckedChange={() => handleToggle("newMessageEnabled")}
+              useGoldColor
             />
           </div>
 
@@ -163,6 +166,7 @@ export default function NotificationsPage() {
               id="request-notifications"
               checked={settings.friendRequestsEnabled}
               onCheckedChange={() => handleToggle("friendRequestsEnabled")}
+              useGoldColor
             />
           </div>
 
@@ -182,6 +186,7 @@ export default function NotificationsPage() {
               id="event-notifications"
               checked={settings.eventRemindersEnabled}
               onCheckedChange={() => handleToggle("eventRemindersEnabled")}
+              useGoldColor
             />
           </div>
         </div>
@@ -190,7 +195,7 @@ export default function NotificationsPage() {
           <Button 
             onClick={handleSave} 
             disabled={isSaving}
-            className="bg-[#0A5C36] hover:bg-[#0A5C36]/90"
+            variant="gold"
           >
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {isSaving ? "Saving..." : "Save Changes"}

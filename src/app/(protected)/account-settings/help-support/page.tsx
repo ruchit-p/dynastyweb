@@ -120,7 +120,7 @@ export default function HelpSupportPage() {
               <Button 
                 type="submit" 
                 disabled={isSending}
-                className="bg-[#0A5C36] hover:bg-[#0A5C36]/90"
+                variant="gold"
               >
                 {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
                 {isSending ? "Sending..." : "Send Message"}

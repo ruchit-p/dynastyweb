@@ -168,6 +168,7 @@ export default function PrivacySecurityPage() {
               id="location-services"
               checked={settings.locationEnabled}
               onCheckedChange={() => handleToggle("locationEnabled")}
+              useGoldColor
             />
           </div>
 
@@ -187,6 +188,7 @@ export default function PrivacySecurityPage() {
               id="privacy-mode"
               checked={settings.strictPrivacy}
               onCheckedChange={() => handleToggle("strictPrivacy")}
+              useGoldColor
             />
           </div>
         </div>
@@ -237,7 +239,7 @@ export default function PrivacySecurityPage() {
                 <p className="text-xs text-gray-500 mt-1">Change your account password</p>
               </div>
             </div>
-            <Button variant="outline" onClick={() => setShowChangePasswordDialog(true)}>
+            <Button variant="gold" onClick={() => setShowChangePasswordDialog(true)}>
               <Key className="h-4 w-4 mr-2" />
               Change
             </Button>
@@ -268,7 +270,7 @@ export default function PrivacySecurityPage() {
           <Button 
             onClick={handleSave} 
             disabled={isSaving}
-            className="bg-[#0A5C36] hover:bg-[#0A5C36]/90"
+            variant="gold"
           >
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {isSaving ? "Saving..." : "Save Changes"}

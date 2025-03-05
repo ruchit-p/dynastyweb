@@ -420,13 +420,13 @@ export default function PersonalInformationPage() {
               <Button variant="outline" onClick={() => setIsEditing(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
+              <Button variant="gold" onClick={handleSave} disabled={isSaving}>
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {isSaving ? "Saving..." : "Save Changes"}
               </Button>
             </>
           ) : (
-            <Button onClick={() => setIsEditing(true)}>Edit Profile</Button>
+            <Button variant="gold" onClick={() => setIsEditing(true)}>Edit Profile</Button>
           )}
         </div>
       </div>
