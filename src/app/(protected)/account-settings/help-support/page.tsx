@@ -2,146 +2,166 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import {
+import { 
   Accordion,
   AccordionContent,
   AccordionItem,
-  AccordionTrigger,
+  AccordionTrigger
 } from "@/components/ui/accordion"
-import { HelpCircle, Mail, MessageSquare, ExternalLink } from "lucide-react"
+import { HelpCircle, Mail, MessageSquare, Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
-import ProtectedRoute from "@/components/ProtectedRoute"
-
-const faqs = [
-  {
-    question: "How do I create a family tree?",
-    answer: "To create a family tree, click on the 'Create Tree' button on your dashboard. Follow the step-by-step guide to add family members and establish relationships.",
-  },
-  {
-    question: "Can I invite family members to join?",
-    answer: "Yes! Once you've created a family tree, you can invite family members by clicking the 'Invite Members' button and entering their email addresses.",
-  },
-  {
-    question: "How do I add stories to my history book?",
-    answer: "Navigate to the History Book section and click 'Write a Story'. You can add text, photos, videos, and audio to preserve your family memories.",
-  },
-  {
-    question: "What happens to my data if I delete my account?",
-    answer: "When you delete your account, all your personal information and stories will be permanently removed. Family trees you've created will be transferred to another family member if available.",
-  },
-]
 
 export default function HelpSupportPage() {
-  const [subject, setSubject] = useState("")
+  const { toast } = useToast()
   const [message, setMessage] = useState("")
   const [isSending, setIsSending] = useState(false)
-  const { toast } = useToast()
-
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    try {
-      setIsSending(true)
-      // TODO: Implement support ticket submission
-      toast({
-        title: "Message Sent",
-        description: "We'll get back to you as soon as possible.",
-      })
-      setSubject("")
-      setMessage("")
-    } catch {
+    
+    if (!message.trim()) {
       toast({
         title: "Error",
-        description: "Failed to send message. Please try again.",
+        description: "Please enter a message before submitting.",
         variant: "destructive",
       })
-    } finally {
-      setIsSending(false)
+      return
     }
+    
+    setIsSending(true)
+    
+    // Simulate sending a message
+    setTimeout(() => {
+      toast({
+        title: "Message Sent",
+        description: "We'll get back to you soon.",
+      })
+      setMessage("")
+      setIsSending(false)
+    }, 1500)
   }
-
+  
   return (
-    <ProtectedRoute>
-      <div className="space-y-8 pb-4">
-        <div>
-          <h3 className="text-lg font-medium">Frequently Asked Questions</h3>
-          <Accordion type="single" collapsible className="mt-4">
-            {faqs.map((faq, index) => (
-              <AccordionItem key={index} value={`item-${index}`}>
-                <AccordionTrigger className="text-left">
-                  {faq.question}
-                </AccordionTrigger>
-                <AccordionContent>{faq.answer}</AccordionContent>
-              </AccordionItem>
-            ))}
+    <>
+      <h1 className="text-2xl font-bold mb-6 text-[#0A5C36]">Help & Support</h1>
+      
+      <div className="space-y-8">
+        {/* FAQs Section */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-medium border-b pb-2">Frequently Asked Questions</h2>
+          
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="item-1">
+              <AccordionTrigger className="text-base font-medium">
+                How do I create a family tree?
+              </AccordionTrigger>
+              <AccordionContent className="text-gray-600">
+                To create a family tree, navigate to the Family Tree page and click on "Create New Tree" button. 
+                Follow the prompts to add your first family member, which will be the root of your tree. 
+                From there, you can add more family members and their relationships.
+              </AccordionContent>
+            </AccordionItem>
+            
+            <AccordionItem value="item-2">
+              <AccordionTrigger className="text-base font-medium">
+                How can I invite family members to join?
+              </AccordionTrigger>
+              <AccordionContent className="text-gray-600">
+                You can invite family members by going to your Family Tree page, clicking on the "Invite" button, 
+                and entering their email addresses. They'll receive an invitation with instructions to join your family tree.
+              </AccordionContent>
+            </AccordionItem>
+            
+            <AccordionItem value="item-3">
+              <AccordionTrigger className="text-base font-medium">
+                What is a History Book?
+              </AccordionTrigger>
+              <AccordionContent className="text-gray-600">
+                A History Book is a collection of stories, photos, and other media that you can create to document 
+                your family's history. Think of it as a digital scrapbook where you can preserve memories and share them with family members.
+              </AccordionContent>
+            </AccordionItem>
+            
+            <AccordionItem value="item-4">
+              <AccordionTrigger className="text-base font-medium">
+                How do I change my privacy settings?
+              </AccordionTrigger>
+              <AccordionContent className="text-gray-600">
+                You can adjust your privacy settings by navigating to Account Settings > Privacy & Security. 
+                There, you can control who can see your information, manage location services, and set data retention preferences.
+              </AccordionContent>
+            </AccordionItem>
           </Accordion>
         </div>
-
-        <div className="border-t pt-8">
-          <h3 className="text-lg font-medium">Contact Support</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Need help? Send us a message and we&apos;ll get back to you.
-          </p>
-          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        
+        {/* Contact Support Section */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-medium border-b pb-2">Contact Support</h2>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Input
-                placeholder="Subject"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                required
-              />
-            </div>
-            <div>
+              <div className="flex items-center space-x-2 mb-2">
+                <MessageSquare className="h-5 w-5 text-[#0A5C36]" />
+                <label htmlFor="support-message" className="text-base font-medium">
+                  Message
+                </label>
+              </div>
               <Textarea
-                placeholder="Describe your issue..."
+                id="support-message"
+                placeholder="Describe your issue or question..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                required
-                className="min-h-[150px]"
+                className="min-h-[120px]"
               />
             </div>
+            
             <div className="flex justify-end">
-              <Button type="submit" disabled={isSending}>
+              <Button 
+                type="submit" 
+                disabled={isSending}
+                className="bg-[#0A5C36] hover:bg-[#0A5C36]/90"
+              >
+                {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
                 {isSending ? "Sending..." : "Send Message"}
               </Button>
             </div>
           </form>
         </div>
-
-        <div className="border-t pt-8">
-          <h3 className="text-lg font-medium">Additional Resources</h3>
-          <div className="grid gap-4 mt-4">
-            <a
-              href="#"
-              className="flex items-center gap-2 text-sm text-primary hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
+        
+        {/* Additional Resources */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-medium border-b pb-2">Additional Resources</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <a 
+              href="#" 
+              className="flex items-center p-4 border rounded-lg hover:bg-[#F9FAFB] transition-colors"
             >
-              <MessageSquare className="h-4 w-4" />
-              Visit our Community Forum
-              <ExternalLink className="h-3 w-3" />
+              <div className="bg-[#F9FAFB] p-2 rounded-lg mr-3">
+                <HelpCircle className="h-5 w-5 text-[#0A5C36]" />
+              </div>
+              <div>
+                <h3 className="font-medium">Help Center</h3>
+                <p className="text-sm text-gray-500">Browse our documentation</p>
+              </div>
             </a>
-            <a
-              href="mailto:support@mydynastyapp.com"
-              className="flex items-center gap-2 text-sm text-primary hover:underline"
+            
+            <a 
+              href="#" 
+              className="flex items-center p-4 border rounded-lg hover:bg-[#F9FAFB] transition-colors"
             >
-              <Mail className="h-4 w-4" />
-              Email Support
-            </a>
-            <a
-              href="#"
-              className="flex items-center gap-2 text-sm text-primary hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <HelpCircle className="h-4 w-4" />
-              Documentation
-              <ExternalLink className="h-3 w-3" />
+              <div className="bg-[#F9FAFB] p-2 rounded-lg mr-3">
+                <Mail className="h-5 w-5 text-[#0A5C36]" />
+              </div>
+              <div>
+                <h3 className="font-medium">Email Support</h3>
+                <p className="text-sm text-gray-500">support@dynasty.com</p>
+              </div>
             </a>
           </div>
         </div>
       </div>
-    </ProtectedRoute>
+    </>
   )
 } 

@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label"
 import { Bell, Mail, MessageSquare, UserPlus, Calendar, Loader2 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
-import ProtectedRoute from "@/components/ProtectedRoute"
 import { SettingsManager, type NotificationSettings } from "@/utils/settingsManager"
 
 export default function NotificationsPage() {
@@ -79,22 +78,26 @@ export default function NotificationsPage() {
 
   if (isLoading) {
     return (
-      <ProtectedRoute>
-        <div className="flex justify-center items-center min-h-[500px]">
-          <Loader2 className="h-8 w-8 animate-spin text-[#0A5C36]" />
-        </div>
-      </ProtectedRoute>
+      <div className="flex justify-center items-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-[#0A5C36]" />
+      </div>
     )
   }
 
   return (
-    <ProtectedRoute>
-      <div className="bg-white shadow-xl rounded-xl overflow-hidden p-6">
-        <div className="space-y-6">
+    <>
+      <h1 className="text-2xl font-bold mb-6 text-[#0A5C36]">Notification Preferences</h1>
+      
+      <div className="space-y-8">
+        <div className="space-y-4">
+          <h2 className="text-lg font-medium border-b pb-2">Notification Channels</h2>
+          
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <Bell className="h-5 w-5 text-[#0A5C36]" />
-              <Label htmlFor="push-notifications" className="text-lg font-semibold">
+              <div className="bg-[#F9FAFB] p-2 rounded-lg">
+                <Bell className="h-5 w-5 text-[#0A5C36]" />
+              </div>
+              <Label htmlFor="push-notifications" className="text-base">
                 Push Notifications
               </Label>
             </div>
@@ -107,8 +110,10 @@ export default function NotificationsPage() {
 
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <Mail className="h-5 w-5 text-[#0A5C36]" />
-              <Label htmlFor="email-notifications" className="text-lg font-semibold">
+              <div className="bg-[#F9FAFB] p-2 rounded-lg">
+                <Mail className="h-5 w-5 text-[#0A5C36]" />
+              </div>
+              <Label htmlFor="email-notifications" className="text-base">
                 Email Notifications
               </Label>
             </div>
@@ -118,63 +123,80 @@ export default function NotificationsPage() {
               onCheckedChange={() => handleToggle("emailEnabled")}
             />
           </div>
-
-          <div className="border-t border-gray-200 pt-4">
-            <h2 className="text-xl font-semibold mb-4">Notification Types</h2>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <MessageSquare className="h-5 w-5 text-[#0A5C36]" />
-                  <Label htmlFor="new-messages" className="font-medium">
-                    New Messages
-                  </Label>
-                </div>
-                <Switch
-                  id="new-messages"
-                  checked={settings.newMessageEnabled}
-                  onCheckedChange={() => handleToggle("newMessageEnabled")}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <UserPlus className="h-5 w-5 text-[#0A5C36]" />
-                  <Label htmlFor="friend-requests" className="font-medium">
-                    Friend Requests
-                  </Label>
-                </div>
-                <Switch
-                  id="friend-requests"
-                  checked={settings.friendRequestsEnabled}
-                  onCheckedChange={() => handleToggle("friendRequestsEnabled")}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <Calendar className="h-5 w-5 text-[#0A5C36]" />
-                  <Label htmlFor="event-reminders" className="font-medium">
-                    Event Reminders
-                  </Label>
-                </div>
-                <Switch
-                  id="event-reminders"
-                  checked={settings.eventRemindersEnabled}
-                  onCheckedChange={() => handleToggle("eventRemindersEnabled")}
-                />
-              </div>
-            </div>
-          </div>
         </div>
 
-        <div className="mt-6 flex justify-end">
-          <Button onClick={handleSave} disabled={isSaving}>
+        <div className="space-y-4">
+          <h2 className="text-lg font-medium border-b pb-2">Notification Types</h2>
+          
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="bg-[#F9FAFB] p-2 rounded-lg">
+                <MessageSquare className="h-5 w-5 text-[#0A5C36]" />
+              </div>
+              <div>
+                <Label htmlFor="message-notifications" className="text-base">
+                  New Messages
+                </Label>
+                <p className="text-xs text-gray-500 mt-1">Receive notifications for new family messages</p>
+              </div>
+            </div>
+            <Switch
+              id="message-notifications"
+              checked={settings.newMessageEnabled}
+              onCheckedChange={() => handleToggle("newMessageEnabled")}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="bg-[#F9FAFB] p-2 rounded-lg">
+                <UserPlus className="h-5 w-5 text-[#0A5C36]" />
+              </div>
+              <div>
+                <Label htmlFor="request-notifications" className="text-base">
+                  Friend Requests
+                </Label>
+                <p className="text-xs text-gray-500 mt-1">Receive notifications for family connection requests</p>
+              </div>
+            </div>
+            <Switch
+              id="request-notifications"
+              checked={settings.friendRequestsEnabled}
+              onCheckedChange={() => handleToggle("friendRequestsEnabled")}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="bg-[#F9FAFB] p-2 rounded-lg">
+                <Calendar className="h-5 w-5 text-[#0A5C36]" />
+              </div>
+              <div>
+                <Label htmlFor="event-notifications" className="text-base">
+                  Event Reminders
+                </Label>
+                <p className="text-xs text-gray-500 mt-1">Receive reminders for upcoming family events</p>
+              </div>
+            </div>
+            <Switch
+              id="event-notifications"
+              checked={settings.eventRemindersEnabled}
+              onCheckedChange={() => handleToggle("eventRemindersEnabled")}
+            />
+          </div>
+        </div>
+        
+        <div className="pt-4 flex justify-end">
+          <Button 
+            onClick={handleSave} 
+            disabled={isSaving}
+            className="bg-[#0A5C36] hover:bg-[#0A5C36]/90"
+          >
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {isSaving ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </div>
-    </ProtectedRoute>
+    </>
   )
 } 

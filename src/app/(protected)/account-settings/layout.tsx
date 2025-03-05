@@ -1,49 +1,48 @@
 "use client"
 
-import type React from "react"
 import { useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-import { User, Bell, Lock, HelpCircle, LogOut, ChevronRight } from "lucide-react"
+import { User, Bell, Lock, HelpCircle, LogOut, Menu, X } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
 import ProtectedRoute from "@/components/ProtectedRoute"
 
+// MARK: - Account Settings Item Type
 interface SidebarNavItem {
-  title: string
   href: string
+  title: string
   icon: React.ReactNode
   description: string
 }
 
+// MARK: - Account Settings Items
 const sidebarNavItems: SidebarNavItem[] = [
   {
-    title: "Personal Information",
     href: "/account-settings/personal-information",
-    icon: <User className="w-4 h-4" />,
+    title: "Personal Information",
+    icon: <User className="h-5 w-5" />,
     description: "Manage your profile details",
   },
   {
-    title: "Notifications",
     href: "/account-settings/notifications",
-    icon: <Bell className="w-4 h-4" />,
+    title: "Notifications",
+    icon: <Bell className="h-5 w-5" />,
     description: "Control your notification preferences",
   },
   {
-    title: "Privacy & Security",
     href: "/account-settings/privacy-security",
-    icon: <Lock className="w-4 h-4" />,
+    title: "Privacy & Security",
+    icon: <Lock className="h-5 w-5" />,
     description: "Manage your account's privacy and security",
   },
   {
-    title: "Help & Support",
     href: "/account-settings/help-support",
-    icon: <HelpCircle className="w-4 h-4" />,
+    title: "Help & Support",
+    icon: <HelpCircle className="h-5 w-5" />,
     description: "Get assistance and view FAQs",
   },
-]
+];
 
 export default function AccountSettingsLayout({
   children,
@@ -51,6 +50,7 @@ export default function AccountSettingsLayout({
   children: React.ReactNode
 }) {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const { signOut } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
@@ -76,48 +76,142 @@ export default function AccountSettingsLayout({
     }
   }
 
+  // Get the current page title to display when sidebar is collapsed
+  const getCurrentPageTitle = () => {
+    const currentNavItem = sidebarNavItems.find(item => item.href === pathname)
+    return currentNavItem?.title || "Account Settings"
+  }
+
   return (
     <ProtectedRoute>
       <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col md:flex-row mt-6 md:space-x-8">
-          <main className="flex-1 bg-white shadow-xl rounded-xl p-6">{children}</main>
+        {/* Toggle button for mobile and tablet */}
+        <div className="md:hidden flex justify-between items-center mb-4 bg-white p-4 rounded-xl shadow-md mt-6">
+          <h2 className="text-xl font-semibold text-[#0A5C36]">{getCurrentPageTitle()}</h2>
+          <button 
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-2 rounded-md bg-[#0A5C36] text-white hover:bg-[#074929] transition-colors"
+            aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+          >
+            {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
 
-          <aside className="md:w-64 mb-8 md:mb-0 ">
-            <nav className="space-y-1">
-              {sidebarNavItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all hover:bg-accent",
-                    pathname === item.href ? "bg-accent" : "transparent",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "flex h-7 w-7 items-center justify-center rounded-lg border",
-                      pathname === item.href ? "border-[#0A5C36] bg-[#0A5C36] text-white" : "border-border",
-                    )}
+        <div className="flex flex-col md:flex-row gap-6 relative mt-6">
+          {/* Sidebar - conditional rendering for mobile and compact for desktop */}
+          <div className={`
+            transition-all duration-300 ease-in-out
+            ${sidebarOpen ? 'max-h-[calc(100vh-150px)] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'} 
+            md:max-h-[calc(100vh-150px)] md:opacity-100 md:overflow-visible
+            ${sidebarOpen ? 'md:w-80' : 'md:w-20'} md:shrink-0
+          `}>
+            <div className={`
+              rounded-xl overflow-hidden bg-white shadow-lg flex flex-col h-[calc(100vh-150px)]
+            `}>
+              {/* Sidebar Header (Sticky) with toggle button */}
+              <div className="bg-[#0A5C36] text-white p-4 shadow-md flex justify-between items-center">
+                <h2 className={`text-xl font-semibold ${!sidebarOpen && 'md:hidden'}`}>
+                  Account Settings
+                </h2>
+                <div className={`${!sidebarOpen && 'md:mx-auto'}`}>
+                  <button 
+                    onClick={() => setSidebarOpen(!sidebarOpen)}
+                    className="p-2 rounded-md hover:bg-[#074929] transition-colors"
+                    aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
                   >
-                    {item.icon}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium leading-none">{item.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                </Link>
-              ))}
-            </nav>
-            <div className="mt-4">
-              <Button variant="destructive" className="w-full" onClick={handleLogout} disabled={isLoggingOut}>
-                <LogOut className="mr-2 h-4 w-4" />
-                {isLoggingOut ? "Logging out..." : "Log Out"}
-              </Button>
+                    {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Sidebar Content (Scrollable) */}
+              <div className="flex-grow overflow-auto p-2">
+                <nav className="space-y-1">
+                  {sidebarNavItems.map((item) => (
+                    <SidebarItem 
+                      key={item.href} 
+                      item={item}
+                      isCollapsed={!sidebarOpen} 
+                      onClick={() => {
+                        // Auto close sidebar on mobile after navigation
+                        if (window.innerWidth < 768) {
+                          setSidebarOpen(false)
+                        }
+                      }}
+                    />
+                  ))}
+                </nav>
+              </div>
+
+              {/* Sidebar Footer (Sticky) */}
+              <div className="p-4 border-t bg-white">
+                <button
+                  className={`
+                    flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white 
+                    rounded-md hover:bg-red-700 transition-colors
+                    ${!sidebarOpen && 'md:px-2 md:w-12 md:h-12 md:mx-auto'}
+                  `}
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  title="Log Out"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className={`${!sidebarOpen && 'md:hidden'}`}>
+                    {isLoggingOut ? "Logging out..." : "Log Out"}
+                  </span>
+                </button>
+              </div>
             </div>
-          </aside>
+          </div>
+
+          {/* Main Content */}
+          <div className="flex-1">
+            <div className="bg-white shadow-xl rounded-xl p-6 mb-4">
+              {children}
+            </div>
+          </div>
         </div>
       </div>
     </ProtectedRoute>
+  )
+}
+
+// MARK: - Sidebar Item Component
+interface SidebarItemProps {
+  item: SidebarNavItem;
+  isCollapsed?: boolean;
+  onClick?: () => void;
+}
+
+function SidebarItem({ item, isCollapsed = false, onClick }: SidebarItemProps) {
+  const pathname = usePathname()
+  const isActive = pathname === item.href
+
+  return (
+    <Link
+      href={item.href}
+      className={`
+        flex items-center space-x-3 px-3 py-3 rounded-lg text-sm transition-all
+        ${isCollapsed && 'md:justify-center md:px-2 md:py-4'}
+        ${isActive 
+          ? 'bg-[#F9FAFB] text-[#0A5C36] border-l-4 border-[#0A5C36]' 
+          : 'text-gray-700 hover:bg-[#F9FAFB]'
+        }
+      `}
+      prefetch={true}
+      onClick={onClick}
+      title={item.title}
+    >
+      <div className={`
+        flex h-8 w-8 items-center justify-center rounded-lg 
+        ${isActive ? 'bg-[#0A5C36] text-white' : 'bg-[#F9FAFB] text-[#0A5C36]'}
+      `}>
+        {item.icon}
+      </div>
+      <div className={`${isCollapsed && 'md:hidden'}`}>
+        <div className="font-medium">{item.title}</div>
+        <div className="text-xs text-gray-500 mt-0.5">{item.description}</div>
+      </div>
+    </Link>
   )
 } 
