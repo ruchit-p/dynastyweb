@@ -88,7 +88,7 @@ export default function HelpSupportPage() {
                 How do I change my privacy settings?
               </AccordionTrigger>
               <AccordionContent className="text-gray-600">
-                You can adjust your privacy settings by navigating to Account Settings > Privacy & Security. 
+                You can adjust your privacy settings by navigating to Account Settings &gt; Privacy & Security. 
                 There, you can control who can see your information, manage location services, and set data retention preferences.
               </AccordionContent>
             </AccordionItem>
