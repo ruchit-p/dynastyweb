@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext"
 import { type Story } from "@/utils/storyUtils"
 import { StoryCard } from "@/components/Story"
 import { getUserStories } from "@/utils/functionUtils"
+import { Spinner } from "@/components/ui/spinner"
 
 // Define the enriched story type that includes author and tagged people
 type EnrichedStory = Story & {
@@ -137,8 +138,8 @@ export default function HistoryBookPage() {
       <div className="min-h-screen bg-gray-50">
         <main className="container py-6">
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A5C36] mx-auto"></div>
-            <p className="mt-2 text-gray-600">Loading your history book...</p>
+            <Spinner size="lg" variant="primary" />
+            <p className="mt-4 text-[#0A5C36] font-medium">Loading your history book...</p>
           </div>
         </main>
       </div>

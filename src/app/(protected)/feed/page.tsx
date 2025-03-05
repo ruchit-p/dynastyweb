@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { PenSquare, BookOpen } from "lucide-react"
 import { StoryCard } from "@/components/Story"
 import { getAccessibleStories } from "@/utils/functionUtils"
+import { Spinner } from "@/components/ui/spinner"
 
 // Define the enriched story type
 type EnrichedStory = Story & {
@@ -95,8 +96,8 @@ export default function FeedPage() {
       <div className="min-h-screen bg-gray-50">
         <main className="container py-6">
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A5C36] mx-auto"></div>
-            <p className="mt-2 text-gray-600">Loading stories...</p>
+            <Spinner size="lg" variant="primary" />
+            <p className="mt-4 text-[#0A5C36] font-medium">Loading stories...</p>
           </div>
         </main>
       </div>
