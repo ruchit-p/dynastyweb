@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { auth, db } from "@/lib/firebase"
 import { signOut } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
@@ -15,7 +15,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Bell, Settings, LogOut, Plus, BookOpen, Users, Home, PenSquare } from "lucide-react"
+import { Bell, Settings, LogOut, Plus, BookOpen, Users, Home, PenSquare, Menu } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface User {
   photoURL: string | null
@@ -30,10 +31,21 @@ interface NavbarProps {
 export default function Navbar({ user }: NavbarProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [profilePicture, setProfilePicture] = useState<string | null>(null)
   const [firstName, setFirstName] = useState<string | null>(null)
   const [lastName, setLastName] = useState<string | null>(null)
   const router = useRouter()
+  const pathname = usePathname()
+
+  // Function to get current page title
+  const getCurrentPageTitle = () => {
+    if (pathname?.includes('/feed')) return 'Feed'
+    if (pathname?.includes('/family-tree')) return 'Family Tree'
+    if (pathname?.includes('/history-book')) return 'History Book'
+    if (pathname?.includes('/story')) return 'Story'
+    return 'Dynasty'
+  }
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -78,25 +90,39 @@ export default function Navbar({ user }: NavbarProps) {
           <span className="text-xl font-bold text-[#0A5C36] hidden sm:inline-block">Dynasty</span>
         </Link>
 
-        {/* Navigation Links */}
-        <div className="flex items-center gap-3 sm:gap-6 mr-2 sm:mr-6">
+        {/* Current Page Title - Only visible on mobile */}
+        <div className="md:hidden flex items-center">
+          <span className="text-base font-medium text-gray-800">{getCurrentPageTitle()}</span>
+        </div>
+
+        {/* Navigation Links - Hidden on mobile, visible on desktop */}
+        <div className="hidden md:flex items-center gap-3 sm:gap-6 mr-2 sm:mr-6">
           <Link
             href="/feed"
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#0A5C36]"
+            className={cn(
+              "flex items-center gap-2 text-sm font-medium hover:text-[#0A5C36]", 
+              pathname?.includes('/feed') ? "text-[#0A5C36]" : "text-gray-600"
+            )}
           >
             <Home className="h-4 w-4" />
             Feed
           </Link>
           <Link
             href="/family-tree"
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#0A5C36]"
+            className={cn(
+              "flex items-center gap-2 text-sm font-medium hover:text-[#0A5C36]", 
+              pathname?.includes('/family-tree') ? "text-[#0A5C36]" : "text-gray-600"
+            )}
           >
             <Users className="h-4 w-4" />
             Family Tree
           </Link>
           <Link
             href="/history-book"
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#0A5C36]"
+            className={cn(
+              "flex items-center gap-2 text-sm font-medium hover:text-[#0A5C36]", 
+              pathname?.includes('/history-book') ? "text-[#0A5C36]" : "text-gray-600"
+            )}
           >
             <BookOpen className="h-4 w-4" />
             History Book
@@ -174,6 +200,40 @@ export default function Navbar({ user }: NavbarProps) {
               >
                 <LogOut className="h-4 w-4" />
                 <span>Sign Out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Mobile Menu Button - Only visible on mobile */}
+          <DropdownMenu open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+            <DropdownMenuTrigger asChild className="md:hidden">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-600 hover:text-[#0A5C36] md:hidden">
+                <Menu className="h-5 w-5" />
+                <span className="sr-only">Menu</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60 md:hidden">
+              <div className="p-2">
+                <h3 className="text-sm font-medium text-gray-500 mb-2">Navigation</h3>
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/feed" className="flex items-center gap-2 cursor-pointer">
+                  <Home className="h-4 w-4" />
+                  <span>Feed</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/family-tree" className="flex items-center gap-2 cursor-pointer">
+                  <Users className="h-4 w-4" />
+                  <span>Family Tree</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/history-book" className="flex items-center gap-2 cursor-pointer">
+                  <BookOpen className="h-4 w-4" />
+                  <span>History Book</span>
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

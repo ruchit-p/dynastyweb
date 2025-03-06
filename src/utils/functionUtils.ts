@@ -74,15 +74,34 @@ export const createStory = async (storyData: {
   customAccessMembers?: string[];
   blocks: Array<{
     type: 'text' | 'image' | 'video' | 'audio';
-    data: string;
+    data: string | string[];
     localId: string;
   }>;
   familyTreeId: string;
   peopleInvolved: string[];
+  coverPhoto?: string;
 }) => {
+  console.log("📞 Creating function reference for createStory");
   const functionRef = httpsCallable(functions, 'createStory');
-  const result = await functionRef(storyData);
-  return result.data as { id: string };
+  
+  try {
+    console.log("📤 Sending story data to Firebase function", { 
+      title: storyData.title,
+      blocksCount: storyData.blocks.length,
+      hasCoverPhoto: !!storyData.coverPhoto,
+      familyTreeId: storyData.familyTreeId
+    });
+    
+    // Add debugger for browser inspection
+    debugger;
+    
+    const result = await functionRef(storyData);
+    console.log("📥 Received response from createStory function", result.data);
+    return result.data as { id: string };
+  } catch (error) {
+    console.error("❌ Error in createStory function call:", error);
+    throw error;
+  }
 };
 
 export const updateStory = async (
@@ -101,7 +120,7 @@ export const updateStory = async (
     customAccessMembers: string[];
     blocks: Array<{
       type: 'text' | 'image' | 'video' | 'audio';
-      data: string;
+      data: string | string[];
       localId: string;
     }>;
     peopleInvolved: string[];

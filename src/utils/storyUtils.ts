@@ -1,5 +1,11 @@
 import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { db, app } from '@/lib/firebase';
+import { toast } from '@/components/ui/use-toast';
+import eventManager from "./eventUtils";
+
+// Initialize Firebase Functions
+const functions = getFunctions(app, 'us-central1');
 
 export interface Story {
   id: string;
@@ -17,12 +23,35 @@ export interface Story {
   customAccessMembers?: string[];
   blocks: Array<{
     type: 'text' | 'image' | 'video' | 'audio';
-    data: string;
+    data: string | string[];
     localId: string;
   }>;
   familyTreeId: string;
   peopleInvolved: string[];
   isDeleted: boolean;
+  likeCount?: number;
+  commentCount?: number;
+}
+
+export interface CommentUser {
+  id: string;
+  displayName: string;
+  profilePicture?: string;
+}
+
+export interface Comment {
+  id: string;
+  storyId: string;
+  userId: string;
+  text: string;
+  createdAt: { seconds: number; nanoseconds: number };
+  likes: string[];
+  isLikedByMe: boolean;
+  user: CommentUser;
+  parentId?: string;
+  parentPath?: string[]; // Path to parent comments (for nested structure)
+  depth?: number; // Nesting level (0 for top-level comments)
+  replies?: Comment[]; // Nested replies
 }
 
 export const fetchUserStories = async (userId: string): Promise<Story[]> => {
@@ -117,5 +146,300 @@ export const fetchAccessibleStories = async (
     throw error instanceof Error 
       ? error 
       : new Error('Failed to fetch accessible stories');
+  }
+};
+
+// MARK: - Social Features
+
+/**
+ * Toggle like on a story and handle optimistic UI updates
+ * 
+ * @param storyId The ID of the story to like/unlike
+ * @param isCurrentlyLiked Whether the story is currently liked by the user
+ * @param onLikeChange Callback that will be called with the new like state and count change
+ * @returns Promise that resolves to true if the operation was successful
+ */
+export const toggleStoryLike = async (
+  storyId: string,
+  isCurrentlyLiked: boolean,
+  onLikeChange?: (liked: boolean, countChange: number) => void
+): Promise<boolean> => {
+  try {
+    // Optimistic update
+    if (onLikeChange) {
+      onLikeChange(!isCurrentlyLiked, isCurrentlyLiked ? -1 : 1);
+    }
+    
+    // Call Firebase Function
+    const likeStoryFunction = httpsCallable(functions, 'likeStory');
+    const result = await likeStoryFunction({ storyId });
+    const data = result.data as { success: boolean; liked: boolean };
+    
+    if (!data.success) {
+      // Revert optimistic update if backend failed
+      if (onLikeChange) {
+        onLikeChange(isCurrentlyLiked, 0);
+      }
+      
+      toast({
+        title: 'Error',
+        description: 'Failed to update like status',
+        variant: 'destructive',
+      });
+      
+      return false;
+    }
+    
+    // Publish event to notify all subscribers
+    const eventType = !isCurrentlyLiked ? 'story:liked' : 'story:unliked';
+    eventManager.publish(eventType, { storyId, liked: !isCurrentlyLiked });
+    
+    return true;
+  } catch (error) {
+    console.error('Error toggling story like:', error);
+    
+    // Revert optimistic update
+    if (onLikeChange) {
+      onLikeChange(isCurrentlyLiked, 0);
+    }
+    
+    toast({
+      title: 'Error',
+      description: 'Failed to update like status',
+      variant: 'destructive',
+    });
+    
+    return false;
+  }
+};
+
+/**
+ * Check if a user has liked a story
+ * 
+ * @param storyId The ID of the story to check
+ * @returns Promise that resolves to true if the user has liked the story
+ */
+export const checkStoryLikeStatus = async (storyId: string): Promise<boolean> => {
+  try {
+    // Use the cloud function instead of direct Firestore access to avoid security rule issues
+    const checkLikeFunction = httpsCallable(functions, 'checkStoryLikeStatus');
+    const result = await checkLikeFunction({ storyId });
+    const data = result.data as { isLiked: boolean };
+    return data.isLiked;
+  } catch (error) {
+    console.error('Error checking story like status:', error);
+    // Don't show a toast for this error as it's not critical for the user experience
+    return false;
+  }
+};
+
+/**
+ * Get users who liked a story
+ * 
+ * @param storyId The ID of the story
+ * @returns Promise that resolves to an array of user objects
+ */
+export const getStoryLikes = async (storyId: string): Promise<CommentUser[]> => {
+  try {
+    const getLikesFunction = httpsCallable(functions, 'getStoryLikes');
+    const result = await getLikesFunction({ storyId });
+    const data = result.data as { likes: Array<{ userId: string; user: CommentUser }> };
+    return data.likes.map(like => like.user);
+  } catch (error) {
+    console.error('Error fetching story likes:', error);
+    
+    toast({
+      title: 'Error',
+      description: 'Failed to load likes',
+      variant: 'destructive',
+    });
+    
+    return [];
+  }
+};
+
+/**
+ * Toggle like on a comment and handle optimistic UI updates
+ * 
+ * @param commentId The ID of the comment to like/unlike
+ * @param isCurrentlyLiked Whether the comment is currently liked by the user
+ * @param onCommentUpdated Callback that will be called with the updated comment status
+ * @returns Promise that resolves to true if the operation was successful
+ */
+export const toggleCommentLike = async (
+  commentId: string,
+  isCurrentlyLiked: boolean,
+  onCommentUpdated?: (liked: boolean) => void
+): Promise<boolean> => {
+  try {
+    // Optimistic update
+    if (onCommentUpdated) {
+      onCommentUpdated(!isCurrentlyLiked);
+    }
+    
+    // Call Firebase Function
+    const likeCommentFunction = httpsCallable(functions, 'likeComment');
+    const result = await likeCommentFunction({ commentId });
+    const data = result.data as { success: boolean; liked: boolean };
+    
+    if (!data.success) {
+      // Revert optimistic update if backend failed
+      if (onCommentUpdated) {
+        onCommentUpdated(isCurrentlyLiked);
+      }
+      
+      toast({
+        title: 'Error',
+        description: 'Failed to update like status',
+        variant: 'destructive',
+      });
+      
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error toggling comment like:', error);
+    
+    // Revert optimistic update
+    if (onCommentUpdated) {
+      onCommentUpdated(isCurrentlyLiked);
+    }
+    
+    toast({
+      title: 'Error',
+      description: 'Failed to update like status',
+      variant: 'destructive',
+    });
+    
+    return false;
+  }
+};
+
+/**
+ * Get users who liked a comment
+ * 
+ * @param commentId The ID of the comment
+ * @returns Promise that resolves to an array of user objects
+ */
+export const getCommentLikes = async (commentId: string): Promise<CommentUser[]> => {
+  try {
+    const getLikesFunction = httpsCallable(functions, 'getCommentLikes');
+    const result = await getLikesFunction({ commentId });
+    const data = result.data as { likes: Array<{ userId: string; user: CommentUser }> };
+    return data.likes.map(like => like.user);
+  } catch (error) {
+    console.error('Error fetching comment likes:', error);
+    
+    toast({
+      title: 'Error',
+      description: 'Failed to load likes',
+      variant: 'destructive',
+    });
+    
+    return [];
+  }
+};
+
+/**
+ * Get comments for a story
+ * 
+ * @param storyId The ID of the story
+ * @returns Promise that resolves to an array of comment objects
+ */
+export const getStoryComments = async (storyId: string): Promise<Comment[]> => {
+  try {
+    console.log(`Fetching comments for story: ${storyId}`);
+    const getCommentsFunction = httpsCallable(functions, 'getStoryComments');
+    const result = await getCommentsFunction({ storyId });
+    const data = result.data as { comments: Comment[] };
+    
+    console.log(`Retrieved ${data.comments?.length || 0} comments from server`);
+    
+    // Ensure all comments have valid timestamps
+    const processedComments = (data.comments || []).map(comment => {
+      // If createdAt is an empty object, add a timestamp
+      if (comment.createdAt && 
+          typeof comment.createdAt === 'object' && 
+          Object.keys(comment.createdAt).length === 0) {
+        console.log(`Comment ${comment.id} has empty timestamp, adding fallback`);
+        return {
+          ...comment,
+          createdAt: {
+            seconds: Math.floor(Date.now() / 1000),
+            nanoseconds: 0
+          }
+        };
+      }
+      return comment;
+    });
+    
+    return processedComments;
+  } catch (error) {
+    console.error('Error fetching comments:', error);
+    
+    toast({
+      title: 'Error',
+      description: 'Failed to load comments',
+      variant: 'destructive',
+    });
+    
+    return [];
+  }
+};
+
+/**
+ * Add a comment to a story
+ * 
+ * @param storyId The ID of the story to comment on
+ * @param text The comment text
+ * @param parentId Optional ID of the parent comment if this is a reply
+ * @returns Promise that resolves to the created comment object or null if failed
+ */
+export const addComment = async (
+  storyId: string,
+  text: string,
+  parentId?: string
+): Promise<Comment | null> => {
+  try {
+    const commentData = {
+      storyId,
+      text: text.trim(),
+      ...(parentId && { parentId }),
+    };
+    
+    const commentFunction = httpsCallable(functions, 'commentOnStory');
+    const result = await commentFunction(commentData);
+    const data = result.data as { success: boolean; comment: Comment };
+    
+    if (data.success) {
+      // If createdAt is an empty object, add a client-side timestamp
+      if (data.comment && typeof data.comment.createdAt === 'object' && 
+          Object.keys(data.comment.createdAt).length === 0) {
+        data.comment.createdAt = { 
+          seconds: Math.floor(Date.now() / 1000),
+          nanoseconds: 0
+        };
+      }
+      return data.comment;
+    }
+    
+    toast({
+      title: 'Error',
+      description: 'Failed to post your comment',
+      variant: 'destructive',
+    });
+    
+    return null;
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    
+    toast({
+      title: 'Error',
+      description: 'Failed to post your comment',
+      variant: 'destructive',
+    });
+    
+    return null;
   }
 }; 

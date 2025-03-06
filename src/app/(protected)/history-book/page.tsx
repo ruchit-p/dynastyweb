@@ -88,31 +88,13 @@ export default function HistoryBookPage() {
           }))
         });
 
-        // Transform the stories to ensure they have the expected structure
-        const enrichedStories = userStories.map((story: Partial<EnrichedStory>) => {
-          console.log(`[HistoryBook] Transforming story ${story.id}, author present: ${!!story.author}, authorID: ${story.authorID}`);
-          
-          // Ensure the story has an author property with required fields
-          const enrichedStory: EnrichedStory = {
-            ...story as Story,
-            // Ensure required properties are present
-            blocks: story.blocks || [],
-            privacy: story.privacy || 'family',
-            peopleInvolved: story.peopleInvolved || [],
-            isDeleted: story.isDeleted || false,
-            // If author is missing, create it from authorID
-            author: story.author || {
-              id: story.authorID || '',
-              displayName: currentUser?.displayName || 'Unknown User',
-              profilePicture: currentUser?.photoURL || undefined
-            },
-            // Ensure taggedPeople exists
-            taggedPeople: story.taggedPeople || []
-          };
-          return enrichedStory;
-        });
+        // Use the stories directly from the API
+        setStories(userStories as EnrichedStory[]);
 
-        setStories(enrichedStories);
+        console.log('[HistoryBook] Stories from API:', {
+          count: userStories.length,
+          firstStory: userStories.length > 0 ? userStories[0] : null
+        });
       } catch (error) {
         console.error('[HistoryBook] Error loading stories:', error);
         if (!mounted) return;

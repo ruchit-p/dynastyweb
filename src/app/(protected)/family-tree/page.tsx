@@ -1418,142 +1418,226 @@ export default function FamilyTreePage() {
 
         {/* View Family Member Sheet */}
         <Sheet open={isViewSheetOpen} onOpenChange={setIsViewSheetOpen}>
-          <SheetContent className="sm:max-w-[425px]">
-            <SheetHeader className="flex items-center justify-between">
-              <SheetTitle>
-                {isEditMode ? "Edit Family Member" : "Family Member Details"}
-              </SheetTitle>
-              {/* Edit toggle for admins */}
-              {(currentUser?.uid === (selectedNode as CustomNode)?.attributes?.treeOwnerId || firestoreUser?.isAdmin) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsEditMode(prev => !prev)}
-                >
-                  {isEditMode ? "View Mode" : "Edit Mode"}
-                </Button>
-              )}
-            </SheetHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="viewFirstName" className="text-right flex justify-end items-center gap-1">
-                  First Name{isEditMode && <span className="text-red-500">*</span>}
-                </Label>
-                {isEditMode ? (
-                  <Input
-                    id="viewFirstName"
-                    className="col-span-3"
-                    value={viewFormData.firstName}
-                    onChange={(e) => setViewFormData(prev => ({ ...prev, firstName: e.target.value }))}
-                    tabIndex={1}
-                  />
-                ) : (
-                  <div className="col-span-3">{viewFormData.firstName}</div>
-                )}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="viewLastName" className="text-right flex justify-end items-center gap-1">
-                  Last Name{isEditMode && <span className="text-red-500">*</span>}
-                </Label>
-                {isEditMode ? (
-                  <Input
-                    id="viewLastName"
-                    className="col-span-3"
-                    value={viewFormData.lastName}
-                    onChange={(e) => setViewFormData(prev => ({ ...prev, lastName: e.target.value }))}
-                    tabIndex={2}
-                  />
-                ) : (
-                  <div className="col-span-3">{viewFormData.lastName}</div>
-                )}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="viewGender" className="text-right flex justify-end items-center gap-1">
-                  Gender{isEditMode && <span className="text-red-500">*</span>}
-                </Label>
-                {isEditMode ? (
-                  <Select
-                    value={viewFormData.gender}
-                    onValueChange={(value) => setViewFormData(prev => ({ ...prev, gender: value }))}
+          <SheetContent className="sm:max-w-[425px] bg-white border-l border-[#0A5C36]/10">
+            <SheetHeader className="border-b pb-4 mb-2">
+              <div className="flex items-center justify-between w-full">
+                <SheetTitle className="text-[#0A5C36] text-xl font-semibold">
+                  {isEditMode ? "Edit Mode" : "Family Member Details"}
+                </SheetTitle>
+                {/* Edit toggle for admins */}
+                {(currentUser?.uid === (selectedNode as CustomNode)?.attributes?.treeOwnerId || firestoreUser?.isAdmin) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsEditMode(prev => !prev)}
+                    className="border-[#0A5C36] text-[#0A5C36] hover:bg-[#0A5C36]/5"
                   >
-                    <SelectTrigger className="col-span-3" tabIndex={3}>
-                      <SelectValue placeholder="Select gender" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">Male</SelectItem>
-                      <SelectItem value="female">Female</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    {isEditMode ? "View Mode" : "Edit Mode"}
+                  </Button>
+                )}
+              </div>
+            </SheetHeader>
+            
+            <div className="py-4">
+              {/* Profile Card */}
+              <div className="bg-[#F9FAFB] rounded-lg p-5 shadow-sm border border-gray-100 mb-6">
+                <div className="flex justify-center mb-5">
+                  <div className="h-24 w-24 rounded-full bg-[#0A5C36] flex items-center justify-center text-white text-xl font-semibold">
+                    {viewFormData.firstName.charAt(0)}{viewFormData.lastName.charAt(0)}
+                  </div>
+                </div>
+                <div className="text-center mb-4">
+                  <h3 className="text-xl font-semibold text-[#0A5C36]">{viewFormData.firstName} {viewFormData.lastName}</h3>
+                  <p className="text-sm mt-1">
+                    {(selectedNode as CustomNode)?.attributes?.isBloodRelated ? 
+                      <span className="inline-flex items-center gap-1 text-[#C4A55C] font-medium">Blood Relative <span className="inline-block w-2 h-2 rounded-full bg-[#C4A55C]"></span></span> : 
+                      'Non-blood Relative'}
+                  </p>
+                </div>
+              </div>
+              
+              {/* Info section */}
+              <div className="space-y-5">
+                {isEditMode ? (
+                  /* Edit mode layout */
+                  <>
+                    <div className="space-y-4">
+                      <h4 className="text-[#0A5C36] font-medium">Personal Information</h4>
+                      
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-4 gap-3">
+                          <Label htmlFor="viewFirstName" className="col-span-1 flex items-center text-gray-600">
+                            First Name<span className="text-red-500 ml-1">*</span>
+                          </Label>
+                          <div className="col-span-3">
+                            <Input
+                              id="viewFirstName"
+                              className="border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36]"
+                              value={viewFormData.firstName}
+                              onChange={(e) => setViewFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                              tabIndex={1}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-4 gap-3">
+                          <Label htmlFor="viewLastName" className="col-span-1 flex items-center text-gray-600">
+                            Last Name<span className="text-red-500 ml-1">*</span>
+                          </Label>
+                          <div className="col-span-3">
+                            <Input
+                              id="viewLastName"
+                              className="border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36]"
+                              value={viewFormData.lastName}
+                              onChange={(e) => setViewFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                              tabIndex={2}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-4 gap-3">
+                          <Label htmlFor="viewGender" className="col-span-1 flex items-center text-gray-600">
+                            Gender<span className="text-red-500 ml-1">*</span>
+                          </Label>
+                          <div className="col-span-3">
+                            <Select
+                              value={viewFormData.gender}
+                              onValueChange={(value) => setViewFormData(prev => ({ ...prev, gender: value }))}
+                            >
+                              <SelectTrigger className="border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 w-full" tabIndex={3}>
+                                <SelectValue placeholder="Select gender" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="male">Male</SelectItem>
+                                <SelectItem value="female">Female</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <h4 className="text-[#0A5C36] font-medium">Contact Information</h4>
+                      
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-4 gap-3">
+                          <Label htmlFor="viewPhone" className="col-span-1 flex items-center text-gray-600">
+                            Phone
+                          </Label>
+                          <div className="col-span-3">
+                            <Input
+                              id="viewPhone"
+                              type="tel"
+                              className="border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36]"
+                              value={viewFormData.phone || ''}
+                              onChange={(e) => setViewFormData(prev => ({ ...prev, phone: e.target.value }))}
+                              placeholder="Enter phone number"
+                              tabIndex={4}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-4 gap-3">
+                          <Label htmlFor="viewEmail" className="col-span-1 flex items-center text-gray-600">
+                            Email
+                          </Label>
+                          <div className="col-span-3">
+                            <Input
+                              id="viewEmail"
+                              type="email"
+                              className="border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36]"
+                              value={viewFormData.email || ''}
+                              onChange={(e) => setViewFormData(prev => ({ ...prev, email: e.target.value }))}
+                              placeholder="Enter email address"
+                              tabIndex={5}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
                 ) : (
-                  <div className="col-span-3">
-                    {viewFormData.gender === 'male' ? 'Male' : 
-                     viewFormData.gender === 'female' ? 'Female' : 'Other'}
+                  /* View mode layout */
+                  <div className="bg-[#F9FAFB] rounded-lg border border-gray-100">
+                    <div className="divide-y divide-gray-100">
+                      {/* Gender field */}
+                      <div className="p-4 flex justify-between items-center">
+                        <div className="font-medium text-gray-500">Gender</div>
+                        <div className="font-medium">
+                          {viewFormData.gender === 'male' ? 'Male' : 
+                           viewFormData.gender === 'female' ? 'Female' : 'Other'}
+                        </div>
+                      </div>
+                      
+                      {/* Phone field with icon */}
+                      <div className="p-4 flex justify-between items-center">
+                        <div className="font-medium text-gray-500 flex items-center gap-2">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#0A5C36]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                          Phone
+                        </div>
+                        {viewFormData.phone ? (
+                          <div className="font-medium">{viewFormData.phone}</div>
+                        ) : (
+                          <div className="text-gray-400 italic">Not available</div>
+                        )}
+                      </div>
+                      
+                      {/* Email field with icon */}
+                      <div className="p-4 flex justify-between items-center">
+                        <div className="font-medium text-gray-500 flex items-center gap-2">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#0A5C36]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                          Email
+                        </div>
+                        {viewFormData.email ? (
+                          <div className="font-medium">{viewFormData.email}</div>
+                        ) : (
+                          <div className="text-gray-400 italic">Not available</div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="viewPhone" className="text-right">
-                  Phone
-                </Label>
-                {isEditMode ? (
-                  <Input
-                    id="viewPhone"
-                    type="tel"
-                    className="col-span-3"
-                    value={viewFormData.phone || ''}
-                    onChange={(e) => setViewFormData(prev => ({ ...prev, phone: e.target.value }))}
-                    tabIndex={4}
-                  />
-                ) : (
-                  <div className="col-span-3">{viewFormData.phone || 'Not available'}</div>
-                )}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="viewEmail" className="text-right">
-                  Email
-                </Label>
-                {isEditMode ? (
-                  <Input
-                    id="viewEmail"
-                    type="email"
-                    className="col-span-3"
-                    value={viewFormData.email || ''}
-                    onChange={(e) => setViewFormData(prev => ({ ...prev, email: e.target.value }))}
-                    tabIndex={5}
-                  />
-                ) : (
-                  <div className="col-span-3">{viewFormData.email || 'Not available'}</div>
-                )}
-              </div>
-              
-              {/* If there's additional information that should be displayed, add it here */}
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">
-                  Relationship
-                </Label>
-                <div className="col-span-3">
-                  {(selectedNode as CustomNode)?.attributes?.isBloodRelated ? 'Blood Relative' : 'Non-blood Relative'}
-                </div>
-              </div>
             </div>
-            <SheetFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsViewSheetOpen(false);
-                  setIsEditMode(false);
-                }}
-                disabled={saving}
-              >
-                Close
-              </Button>
-              {isEditMode && (
-                <Button onClick={handleUpdateMember} disabled={saving}>
-                  {saving ? <Spinner className="mr-2 h-4 w-4" /> : null}
-                  Save Changes
+            
+            <SheetFooter className="border-t pt-4 mt-2">
+              <div className="flex gap-3 w-full">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsViewSheetOpen(false);
+                    setIsEditMode(false);
+                  }}
+                  disabled={saving}
+                  className="flex-1 border-gray-200 hover:bg-gray-50"
+                >
+                  Close
                 </Button>
-              )}
+                {isEditMode ? (
+                  <Button 
+                    onClick={handleUpdateMember} 
+                    disabled={saving} 
+                    className="flex-1 bg-[#0A5C36] hover:bg-[#0A5C36]/90"
+                  >
+                    {saving ? <Spinner className="mr-2 h-4 w-4" /> : null}
+                    Save Changes
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => setIsEditMode(true)}
+                    disabled={!(currentUser?.uid === (selectedNode as CustomNode)?.attributes?.treeOwnerId || firestoreUser?.isAdmin)}
+                    className="flex-1 bg-white border border-[#0A5C36] text-[#0A5C36] hover:bg-[#0A5C36]/5"
+                  >
+                    Edit Details
+                  </Button>
+                )}
+              </div>
             </SheetFooter>
           </SheetContent>
         </Sheet>
