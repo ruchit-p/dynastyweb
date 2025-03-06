@@ -69,7 +69,7 @@ const ImageCropper = ({
     return new Promise((resolve, reject) => {
       try {
         // Create a new image element to draw from
-        const image = new Image();
+        const image = document.createElement('img') as HTMLImageElement;
         image.crossOrigin = "anonymous"; // Handle CORS if needed
         image.src = imageSrc;
         
