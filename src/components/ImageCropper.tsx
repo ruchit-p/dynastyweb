@@ -136,7 +136,7 @@ const ImageCropper = ({
           );
         };
         
-        image.onerror = (error) => {
+        image.onerror = (error: unknown) => {
           console.error('Error loading image for cropping:', error);
           reject(new Error('Failed to load image for cropping'));
         };
