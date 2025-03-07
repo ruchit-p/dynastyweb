@@ -13,6 +13,8 @@ import { useToast } from "@/components/ui/use-toast"
 import { doc, updateDoc, serverTimestamp, FieldValue } from "firebase/firestore"
 import { db, storage } from "@/lib/firebase"
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import ImageCropper from "@/components/ImageCropper"
 
 // MARK: - Helper Constants
 const MONTHS = [
@@ -36,6 +38,9 @@ export default function PersonalInformationPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [newProfilePicture, setNewProfilePicture] = useState<File | null>(null)
+  const [showCropModal, setShowCropModal] = useState(false)
+  const [tempImageUrl, setTempImageUrl] = useState<string | null>(null)
+  const [croppedImage, setCroppedImage] = useState<Blob | null>(null)
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -129,7 +134,38 @@ export default function PersonalInformationPage() {
 
   const handleProfilePictureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setNewProfilePicture(e.target.files[0])
+      // Create a temporary URL for the selected file
+      const file = e.target.files[0];
+      const url = URL.createObjectURL(file);
+      
+      // Store the URL and show the crop modal
+      setTempImageUrl(url);
+      setShowCropModal(true);
+    }
+  }
+  
+  const handleCropComplete = (croppedBlob: Blob) => {
+    // Store the cropped blob and close the modal
+    setCroppedImage(croppedBlob);
+    setShowCropModal(false);
+    
+    // Convert blob to File for preview
+    const croppedFile = new File([croppedBlob], 'cropped-profile.jpg', { type: 'image/jpeg' });
+    setNewProfilePicture(croppedFile);
+    
+    // Clean up the temporary URL
+    if (tempImageUrl) {
+      URL.revokeObjectURL(tempImageUrl);
+    }
+  }
+  
+  const handleCropCancel = () => {
+    setShowCropModal(false);
+    
+    // Clean up the temporary URL
+    if (tempImageUrl) {
+      URL.revokeObjectURL(tempImageUrl);
+      setTempImageUrl(null);
     }
   }
 
@@ -141,12 +177,11 @@ export default function PersonalInformationPage() {
 
       let profilePictureUrl = firestoreUser?.profilePicture
 
-      // Upload new profile picture if one was selected
-      if (newProfilePicture) {
-        // Create a unique filename with timestamp to prevent caching issues
+      // Upload new profile picture if one was cropped and selected
+      if (croppedImage) {
+        // Create a unique filename with timestamp
         const timestamp = new Date().getTime();
-        const fileExtension = newProfilePicture.name.split('.').pop() || 'jpg';
-        const uniqueFileName = `profile_${timestamp}.${fileExtension}`;
+        const uniqueFileName = `profile_${timestamp}.jpg`;
         
         // Create a reference with the unique filename
         const storageRef = ref(storage, `profilePictures/${currentUser.uid}/${uniqueFileName}`);
@@ -154,8 +189,8 @@ export default function PersonalInformationPage() {
         // Log upload start
         console.log(`Uploading profile picture: ${uniqueFileName}`);
         
-        // Upload the file
-        const uploadResult = await uploadBytes(storageRef, newProfilePicture);
+        // Upload the cropped image blob
+        const uploadResult = await uploadBytes(storageRef, croppedImage);
         console.log("Upload complete:", uploadResult);
         
         // Get download URL with alt=media parameter
@@ -282,6 +317,22 @@ export default function PersonalInformationPage() {
               </div>
             )}
           </div>
+          
+          {/* Image Cropper Dialog */}
+          <Dialog open={showCropModal} onOpenChange={setShowCropModal}>
+            <DialogContent className="sm:max-w-md md:max-w-xl max-h-[90vh] p-0 flex flex-col items-center justify-center overflow-hidden w-full">
+              {tempImageUrl && (
+                <ImageCropper
+                  imageSrc={tempImageUrl}
+                  onCropComplete={handleCropComplete}
+                  onCancel={handleCropCancel}
+                  aspectRatio={1} // 1:1 aspect ratio for circle
+                  title="Crop Profile Picture"
+                  circleOverlay={true} // Enable circular overlay
+                />
+              )}
+            </DialogContent>
+          </Dialog>
           <div className="flex-1">
             <h2 className="text-xl font-semibold mb-1">
               {firestoreUser.firstName} {firestoreUser.lastName}

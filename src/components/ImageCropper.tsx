@@ -13,6 +13,8 @@ interface ImageCropperProps {
   onCropComplete: (croppedBlob: Blob) => void;
   onCancel: () => void;
   aspectRatio?: number;
+  title?: string;
+  circleOverlay?: boolean;
 }
 
 function centerAspectCrop(
@@ -20,11 +22,25 @@ function centerAspectCrop(
   mediaHeight: number,
   aspect: number,
 ) {
+  // Calculate the maximum possible crop size while maintaining aspect ratio
+  let cropWidth, cropHeight;
+  
+  if (mediaWidth / mediaHeight > aspect) {
+    // Image is wider than the aspect ratio
+    cropHeight = 100;
+    cropWidth = (cropHeight * aspect * mediaWidth) / mediaHeight;
+  } else {
+    // Image is taller than the aspect ratio
+    cropWidth = 100;
+    cropHeight = (cropWidth / aspect * mediaHeight) / mediaWidth;
+  }
+  
   return centerCrop(
     makeAspectCrop(
       {
         unit: '%',
-        width: 90,
+        width: cropWidth,
+        height: cropHeight,
       },
       aspect,
       mediaWidth,
@@ -39,7 +55,9 @@ const ImageCropper = ({
   imageSrc, 
   onCropComplete, 
   onCancel, 
-  aspectRatio = 1 // Default to square crop (1:1)
+  aspectRatio = 1, // Default to square crop (1:1)
+  title = 'Crop Image',
+  circleOverlay = false
 }: ImageCropperProps) => {
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
@@ -119,6 +137,19 @@ const ImageCropper = ({
             canvas.height / pixelRatio
           );
           
+          // If using circle overlay, create circular crop
+          if (circleOverlay) {
+            const centerX = canvas.width / (2 * pixelRatio);
+            const centerY = canvas.height / (2 * pixelRatio);
+            const radius = Math.min(centerX, centerY);
+            
+            // Create a circular clipping path
+            ctx.globalCompositeOperation = 'destination-in';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI, true);
+            ctx.fill();
+          }
+          
           // Convert to blob with high quality
           canvas.toBlob(
             (blob) => {
@@ -145,7 +176,7 @@ const ImageCropper = ({
         reject(error);
       }
     });
-  }, [completedCrop, imageSrc]);
+  }, [completedCrop, imageSrc, circleOverlay]);
 
   // Handle the crop completion
   const handleComplete = async () => {
@@ -162,57 +193,80 @@ const ImageCropper = ({
     }
   };
 
+  // Custom styles for circular overlay
+  const circleStyle = circleOverlay ? {
+    '--ReactCrop-selection-border-color': '#0A5C36',
+    '--ReactCrop-selection-background-color': 'rgba(10, 92, 54, 0.1)',
+    '--ReactCrop-selection-border-width': '3px',
+    '--ReactCrop-crop-selection': 'round'
+  } as React.CSSProperties : {};
+
   return (
-    <div className="flex flex-col items-center p-4 bg-white rounded-lg shadow-lg">
-      <h3 className="text-lg font-semibold mb-4">Crop Cover Photo</h3>
+    <div className="flex flex-col items-center p-4 bg-white rounded-lg shadow-lg w-full">
+      <h3 className="text-lg font-semibold mb-2">{title}</h3>
+      <p className="text-sm text-gray-500 mb-4">Drag to adjust or click Apply to use this crop</p>
       
-      <div className="mb-4 relative overflow-hidden" style={{ maxWidth: '100%', maxHeight: '70vh' }}>
+      <div className="mb-4 relative flex justify-center items-center w-full" style={{ 
+        height: 'auto',
+        aspectRatio: '1',
+        maxHeight: '60vh'
+      }}>
         <ReactCrop
           crop={crop}
           onChange={(c) => setCrop(c)}
           onComplete={(c) => setCompletedCrop(c)}
           aspect={aspectRatio}
-          className="max-w-full max-h-full"
+          className="max-h-full w-auto mx-auto"
+          circularCrop={circleOverlay}
+          style={circleStyle}
         >
           <Image
             ref={imgRef}
             src={imageSrc}
             alt="Crop me"
+            width={400}
+            height={400}
             style={{ 
               transform: `scale(${scale})`,
-              maxWidth: '100%',
-              maxHeight: '70vh'
+              maxHeight: '60vh',
+              width: 'auto',
+              objectFit: 'contain',
+              display: 'block',
+              margin: '0 auto'
             }}
             onLoad={onImageLoad}
+            unoptimized={imageSrc.includes('blob:') || imageSrc.includes('firebasestorage.googleapis.com')}
           />
         </ReactCrop>
       </div>
 
-      <div className="w-full max-w-md flex items-center gap-4 mb-4">
-        <ZoomOut className="h-4 w-4 text-gray-500" />
-        <Slider
-          defaultValue={[1]}
-          min={0.5}
-          max={3}
-          step={0.1}
-          value={[scale]}
-          onValueChange={handleZoomChange}
-          className="flex-1"
-        />
-        <ZoomIn className="h-4 w-4 text-gray-500" />
+      <div className="w-full px-4 mb-4">
+        <div className="flex items-center gap-2 max-w-xs mx-auto">
+          <ZoomOut className="h-4 w-4 text-gray-500 flex-shrink-0" />
+          <Slider
+            defaultValue={[1]}
+            min={0.5}
+            max={3}
+            step={0.1}
+            value={[scale]}
+            onValueChange={handleZoomChange}
+            className="flex-1"
+          />
+          <ZoomIn className="h-4 w-4 text-gray-500 flex-shrink-0" />
+        </div>
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex justify-center gap-4 w-full px-4">
         <Button
           variant="outline"
           onClick={onCancel}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 flex-1 max-w-[120px]"
         >
           <X className="h-4 w-4" /> Cancel
         </Button>
         <Button
           onClick={handleComplete}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 bg-[#0A5C36] hover:bg-[#084529] flex-1 max-w-[120px]"
         >
           <Check className="h-4 w-4" /> Apply
         </Button>
