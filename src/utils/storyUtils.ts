@@ -391,11 +391,23 @@ export const getStoryComments = async (storyId: string): Promise<Comment[]> => {
     // This is a technical error (network, auth, etc.), not just empty comments
     console.error('Error fetching comments:', error);
     
-    toast({
-      title: 'Error',
-      description: 'Failed to load comments',
-      variant: 'destructive',
-    });
+    // Only show toast for actual errors, not for empty comments
+    // Extract the error message to check for specific conditions
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // Don't show toast if the error is related to no comments being found
+    // This could be customized based on the exact error message from your backend
+    const isNoCommentsError = errorMessage.includes('No comments found') || 
+                             errorMessage.includes('no comments') ||
+                             errorMessage.includes('empty result');
+    
+    if (!isNoCommentsError) {
+      toast({
+        title: 'Error',
+        description: 'Failed to load comments',
+        variant: 'destructive',
+      });
+    }
     
     return [];
   }
