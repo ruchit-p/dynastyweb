@@ -352,7 +352,19 @@ export const getStoryComments = async (storyId: string): Promise<Comment[]> => {
     console.log(`Fetching comments for story: ${storyId}`);
     const getCommentsFunction = httpsCallable(functions, 'getStoryComments');
     const result = await getCommentsFunction({ storyId });
-    const data = result.data as { comments: Comment[] };
+    const data = result.data as { comments: Comment[], error?: string };
+    
+    // Check if there was an error in the response
+    if (data.error) {
+      // This is an explicit error from the server, not just empty comments
+      console.error(`Server returned an error: ${data.error}`);
+      toast({
+        title: 'Error',
+        description: 'Failed to load comments',
+        variant: 'destructive',
+      });
+      return [];
+    }
     
     console.log(`Retrieved ${data.comments?.length || 0} comments from server`);
     
@@ -376,6 +388,7 @@ export const getStoryComments = async (storyId: string): Promise<Comment[]> => {
     
     return processedComments;
   } catch (error) {
+    // This is a technical error (network, auth, etc.), not just empty comments
     console.error('Error fetching comments:', error);
     
     toast({

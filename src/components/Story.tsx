@@ -103,15 +103,31 @@ export function StoryCard({ story, currentUserId }: StoryProps) {
   const isAuthor = story.authorID === currentUserId;
   const formattedTimeAgo = formatTimeAgo(story.createdAt);
 
+  // Helper function to process image URLs
+  const processImageUrl = (url: string): string => {
+    // Check if this is a Firebase Storage URL
+    const isFirebaseStorageUrl = url.includes('firebasestorage.googleapis.com') || 
+                                url.includes('dynasty-eba63.firebasestorage.app');
+    
+    // For Firebase Storage URLs, ensure they have the download token
+    if (isFirebaseStorageUrl && !url.includes('?')) {
+      return `${url}?alt=media`;
+    } else if (isFirebaseStorageUrl && !url.includes('alt=media')) {
+      return `${url}&alt=media`;
+    }
+    
+    return url;
+  };
+
   // Get first image from content if available
   const getCoverImage = () => {
     const imageBlocks = story.blocks.filter(block => block.type === 'image');
     
     if (imageBlocks.length > 0 && imageBlocks[0].data) {
       if (Array.isArray(imageBlocks[0].data)) {
-        return imageBlocks[0].data[0];
+        return processImageUrl(imageBlocks[0].data[0]);
       }
-      return imageBlocks[0].data as string;
+      return processImageUrl(imageBlocks[0].data as string);
     }
     
     return null;
@@ -250,6 +266,10 @@ export function StoryCard({ story, currentUserId }: StoryProps) {
                 sizes="(max-width: 768px) 33vw, 33vw"
                 loading="lazy"
                 quality={80}
+                unoptimized={
+                  coverImage.includes('firebasestorage.googleapis.com') || 
+                  coverImage.includes('dynasty-eba63.firebasestorage.app')
+                }
               />
             </div>
           )}

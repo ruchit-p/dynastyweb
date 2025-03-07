@@ -54,29 +54,52 @@ const getImageUrl = (url: string) => {
   }
   
   try {
-    // Remove any query string parameters that might be causing issues
-    let cleanUrl = url.split('?')[0];
+    // Check if this is a Firebase Storage URL
+    const isFirebaseStorageUrl = url.includes('firebasestorage.googleapis.com') || 
+                                url.includes('dynasty-eba63.firebasestorage.app');
+    
+    // For Firebase Storage URLs, ensure they have the download token
+    if (isFirebaseStorageUrl) {
+      // If URL doesn't already have a query parameter
+      if (!url.includes('?')) {
+        return `${url}?alt=media`;
+      }
+      
+      // If URL has query parameters but not alt=media
+      if (!url.includes('alt=media')) {
+        return `${url}&alt=media`;
+      }
+    }
     
     // Handle relative URLs (ensure they have a leading slash)
-    if (!cleanUrl.startsWith('http') && !cleanUrl.startsWith('/')) {
-      cleanUrl = '/' + cleanUrl;
+    if (!url.startsWith('http') && !url.startsWith('/')) {
+      url = '/' + url;
     }
     
     // Handle Firebase Storage emulator URLs
     if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true' && 
-        cleanUrl.includes('127.0.0.1:9199')) {
-      return cleanUrl.replace(
+        url.includes('127.0.0.1:9199')) {
+      const replaced = url.replace(
         'http://127.0.0.1:9199/v0/b/dynasty-eba63.firebasestorage.app', 
         'https://firebasestorage.googleapis.com'
       );
+      
+      // Add alt=media if not present
+      if (!replaced.includes('?')) {
+        return `${replaced}?alt=media`;
+      } else if (!replaced.includes('alt=media')) {
+        return `${replaced}&alt=media`;
+      }
+      
+      return replaced;
     }
     
     // Handle special characters in URLs
-    if (cleanUrl.includes(' ') || cleanUrl.includes('%20')) {
-      cleanUrl = cleanUrl.replace(/ /g, '%20');
+    if (url.includes(' ') || url.includes('%20')) {
+      url = url.replace(/ /g, '%20');
     }
     
-    return cleanUrl;
+    return url;
   } catch (error) {
     console.error("Error processing image URL:", error, url);
     return "/placeholder.svg";
@@ -186,11 +209,14 @@ export default function StoryDetailsPage() {
         // Log the format of the first comment's timestamp
         console.log("First comment timestamp format:", 
           JSON.stringify(fetchedComments[0].createdAt, null, 2));
+      } else {
+        console.log("No comments found for this story");
       }
       
       setComments(fetchedComments);
     } catch (error) {
-      console.error("Error fetching comments:", error);
+      console.error("Error in fetchComments function:", error);
+      // No toast here since getStoryComments already handles error toasts
     } finally {
       setLoadingComments(false);
     }
