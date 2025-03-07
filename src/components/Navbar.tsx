@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter, usePathname } from "next/navigation"
-import { auth, db } from "@/lib/firebase"
+import { auth } from "@/lib/firebase"
 import { signOut } from "firebase/auth"
-import { doc, getDoc } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Bell, Settings, LogOut, Plus, BookOpen, Users, Home, PenSquare, Menu } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/context/AuthContext"
 
 interface User {
   photoURL: string | null
@@ -32,11 +32,9 @@ export default function Navbar({ user }: NavbarProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [profilePicture, setProfilePicture] = useState<string | null>(null)
-  const [firstName, setFirstName] = useState<string | null>(null)
-  const [lastName, setLastName] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
+  const { firestoreUser } = useAuth()
 
   // Function to get current page title
   const getCurrentPageTitle = () => {
@@ -47,26 +45,6 @@ export default function Navbar({ user }: NavbarProps) {
     return 'Dynasty'
   }
 
-  useEffect(() => {
-    const fetchUserData = async () => {
-      if (!user) return
-
-      try {
-        const userDoc = await getDoc(doc(db, "users", auth.currentUser?.uid || ""))
-        if (userDoc.exists()) {
-          const data = userDoc.data()
-          setProfilePicture(data.profilePicture || null)
-          setFirstName(data.firstName || null)
-          setLastName(data.lastName || null)
-        }
-      } catch (error) {
-        console.error("Error fetching user data:", error)
-      }
-    }
-
-    void fetchUserData()
-  }, [user])
-
   const handleSignOut = async () => {
     try {
       await signOut(auth)
@@ -75,6 +53,11 @@ export default function Navbar({ user }: NavbarProps) {
       console.error("Error signing out:", error)
     }
   }
+
+  // Get profile info from firestoreUser
+  const profilePicture = firestoreUser?.profilePicture || null
+  const firstName = firestoreUser?.firstName || null
+  const lastName = firestoreUser?.lastName || null
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
@@ -164,6 +147,13 @@ export default function Navbar({ user }: NavbarProps) {
                   className="rounded-full object-cover"
                   width={32}
                   height={32}
+                  priority={true}
+                  unoptimized={Boolean(
+                    profilePicture && (
+                      profilePicture.includes('firebasestorage.googleapis.com') || 
+                      profilePicture.includes('dynasty-eba63.firebasestorage.app')
+                    )
+                  )}
                 />
               </Button>
             </DropdownMenuTrigger>
@@ -176,6 +166,13 @@ export default function Navbar({ user }: NavbarProps) {
                     className="rounded-full object-cover"
                     width={40}
                     height={40}
+                    priority={true}
+                    unoptimized={Boolean(
+                      profilePicture && (
+                        profilePicture.includes('firebasestorage.googleapis.com') || 
+                        profilePicture.includes('dynasty-eba63.firebasestorage.app')
+                      )
+                    )}
                   />
                   <div className="flex flex-col">
                     <span className="text-sm font-medium">

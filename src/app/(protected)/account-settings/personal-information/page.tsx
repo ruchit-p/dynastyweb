@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -52,6 +52,17 @@ export default function PersonalInformationPage() {
     month: "",
     year: ""
   })
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  // Function to preload the profile image
+  const preloadProfileImage = useCallback((url: string) => {
+    if (!url || url === "/avatar.svg") return;
+    
+    const img = new window.Image();
+    img.src = url;
+    img.onload = () => setImageLoaded(true);
+    img.onerror = () => console.error("Error preloading profile image:", url);
+  }, []);
 
   // Generate arrays for days and years
   const getDaysInMonth = (month: number, year: number): number[] => {
@@ -101,8 +112,13 @@ export default function PersonalInformationPage() {
       })
       
       setDobData(formatDateForInputs(firestoreUser.dateOfBirth));
+      
+      // Preload the profile image when firestoreUser changes
+      if (firestoreUser.profilePicture) {
+        preloadProfileImage(firestoreUser.profilePicture);
+      }
     }
-  }, [firestoreUser])
+  }, [firestoreUser, preloadProfileImage])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -203,8 +219,24 @@ export default function PersonalInformationPage() {
             : `${downloadUrl}?alt=media`;
         }
         
+        // Add cache buster for immediate refresh
+        const cacheBuster = `&_cb=${Date.now()}`;
+        downloadUrl = downloadUrl.includes('?') 
+          ? `${downloadUrl}${cacheBuster}` 
+          : `${downloadUrl}?${cacheBuster.substring(1)}`;
+        
         console.log("Download URL:", downloadUrl);
         profilePictureUrl = downloadUrl;
+        
+        // Clear the cropped image and new profile picture state to prevent memory leaks
+        setCroppedImage(null);
+        
+        // Clean up any object URLs to prevent memory leaks
+        if (newProfilePicture) {
+          URL.revokeObjectURL(URL.createObjectURL(newProfilePicture));
+          setNewProfilePicture(null);
+        }
+        setTempImageUrl(null);
       }
 
       // Parse date of birth into Date object if all parts exist
@@ -218,46 +250,33 @@ export default function PersonalInformationPage() {
         );
       }
 
-      // Prepare update data
-      const updateData: Partial<{
-        firstName: string;
-        lastName: string;
-        phoneNumber: string | null;
-        dateOfBirth: Date | null;
-        gender: string | null;
-        displayName: string;
-        updatedAt: FieldValue;
-        profilePicture: string;
-      }> = {
+      // Update the user document in Firestore
+      await updateDoc(doc(db, "users", currentUser.uid), {
         firstName: formData.firstName,
         lastName: formData.lastName,
-        phoneNumber: formData.phoneNumber,
-        dateOfBirth: dateOfBirth,
+        phoneNumber: formData.phoneNumber || null,
         gender: formData.gender,
-        displayName: `${formData.firstName} ${formData.lastName}`.trim(),
-        updatedAt: serverTimestamp(),
-        profilePicture: profilePictureUrl || "/avatar.svg"
-      }
-
-      // Update Firestore document
-      const userRef = doc(db, "users", currentUser.uid)
-      await updateDoc(userRef, updateData)
-
-      // Refresh Firestore user data
-      await refreshFirestoreUser()
-
-      toast({
-        title: "Success",
-        description: "Your profile has been updated successfully.",
+        dateOfBirth: dateOfBirth,
+        profilePicture: profilePictureUrl,
+        updatedAt: serverTimestamp() as FieldValue
       })
 
-      setIsEditing(false)
-      setNewProfilePicture(null)
+      // Immediately refresh user data in context to update UI across all components
+      await refreshFirestoreUser();
+      
+      // Reset UI state
+      setIsEditing(false);
+      
+      toast({
+        title: "Profile updated",
+        description: "Your personal information has been saved successfully.",
+        variant: "default",
+      })
     } catch (error) {
       console.error("Error updating profile:", error)
       toast({
-        title: "Error",
-        description: "Failed to update profile. Please try again.",
+        title: "Update failed",
+        description: "There was a problem updating your profile. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -295,9 +314,21 @@ export default function PersonalInformationPage() {
                 alt="Profile"
                 fill
                 className="object-cover"
-                unoptimized={!newProfilePicture && (firestoreUser.profilePicture?.includes('firebasestorage.googleapis.com') || 
-                                firestoreUser.profilePicture?.includes('dynasty-eba63.firebasestorage.app'))}
+                priority={true}
+                unoptimized={Boolean(
+                  !newProfilePicture && 
+                  firestoreUser.profilePicture && (
+                    firestoreUser.profilePicture.includes('firebasestorage.googleapis.com') || 
+                    firestoreUser.profilePicture.includes('dynasty-eba63.firebasestorage.app')
+                  )
+                )}
+                onLoadingComplete={() => setImageLoaded(true)}
               />
+              {!imageLoaded && !newProfilePicture && firestoreUser.profilePicture && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                </div>
+              )}
             </div>
             {isEditing && (
               <div className="absolute bottom-0 right-0">

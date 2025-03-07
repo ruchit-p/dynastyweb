@@ -113,7 +113,33 @@ const fetchFirestoreUser = async (userId: string): Promise<FirestoreUser | null>
       console.warn(`[Auth] No Firestore document found for user ${userId}`);
       return null;
     }
-    return userDoc.data() as FirestoreUser;
+    
+    const userData = userDoc.data() as FirestoreUser;
+    
+    // Ensure profile picture URL has the alt=media parameter if it's a Firebase Storage URL
+    if (userData.profilePicture) {
+      // Add cache-busting parameter for Firebase Storage URLs
+      let pictureUrl = userData.profilePicture;
+      if (
+        (pictureUrl.includes('firebasestorage.googleapis.com') || 
+         pictureUrl.includes('dynasty-eba63.firebasestorage.app'))
+      ) {
+        // Add alt=media parameter if it doesn't exist
+        if (!pictureUrl.includes('alt=media')) {
+          pictureUrl = pictureUrl.includes('?') 
+            ? `${pictureUrl}&alt=media` 
+            : `${pictureUrl}?alt=media`;
+        }
+        
+        // Add cache-busting parameter
+        const cacheBuster = `&_cb=${Date.now()}`;
+        userData.profilePicture = pictureUrl.includes('?') 
+          ? `${pictureUrl}${cacheBuster}` 
+          : `${pictureUrl}?${cacheBuster.substring(1)}`;
+      }
+    }
+    
+    return userData;
   } catch (error) {
     console.error("[Auth] Error fetching Firestore user:", error);
     return null;

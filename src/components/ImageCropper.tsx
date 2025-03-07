@@ -235,7 +235,8 @@ const ImageCropper = ({
               margin: '0 auto'
             }}
             onLoad={onImageLoad}
-            unoptimized={imageSrc.includes('blob:') || imageSrc.includes('firebasestorage.googleapis.com')}
+            priority={true}
+            unoptimized={true}
           />
         </ReactCrop>
       </div>
