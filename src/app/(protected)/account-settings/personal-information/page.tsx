@@ -143,9 +143,33 @@ export default function PersonalInformationPage() {
 
       // Upload new profile picture if one was selected
       if (newProfilePicture) {
-        const storageRef = ref(storage, `profilePictures/${currentUser.uid}/${newProfilePicture.name}`)
-        await uploadBytes(storageRef, newProfilePicture)
-        profilePictureUrl = await getDownloadURL(storageRef)
+        // Create a unique filename with timestamp to prevent caching issues
+        const timestamp = new Date().getTime();
+        const fileExtension = newProfilePicture.name.split('.').pop() || 'jpg';
+        const uniqueFileName = `profile_${timestamp}.${fileExtension}`;
+        
+        // Create a reference with the unique filename
+        const storageRef = ref(storage, `profilePictures/${currentUser.uid}/${uniqueFileName}`);
+        
+        // Log upload start
+        console.log(`Uploading profile picture: ${uniqueFileName}`);
+        
+        // Upload the file
+        const uploadResult = await uploadBytes(storageRef, newProfilePicture);
+        console.log("Upload complete:", uploadResult);
+        
+        // Get download URL with alt=media parameter
+        let downloadUrl = await getDownloadURL(storageRef);
+        
+        // Ensure the URL has the alt=media parameter
+        if (!downloadUrl.includes('alt=media')) {
+          downloadUrl = downloadUrl.includes('?') 
+            ? `${downloadUrl}&alt=media` 
+            : `${downloadUrl}?alt=media`;
+        }
+        
+        console.log("Download URL:", downloadUrl);
+        profilePictureUrl = downloadUrl;
       }
 
       // Parse date of birth into Date object if all parts exist
@@ -168,7 +192,7 @@ export default function PersonalInformationPage() {
         gender: string | null;
         displayName: string;
         updatedAt: FieldValue;
-        profilePicture?: string;
+        profilePicture: string;
       }> = {
         firstName: formData.firstName,
         lastName: formData.lastName,
@@ -177,11 +201,7 @@ export default function PersonalInformationPage() {
         gender: formData.gender,
         displayName: `${formData.firstName} ${formData.lastName}`.trim(),
         updatedAt: serverTimestamp(),
-      }
-
-      // Only include profilePicture if it's not undefined
-      if (profilePictureUrl !== undefined) {
-        updateData.profilePicture = profilePictureUrl;
+        profilePicture: profilePictureUrl || "/avatar.svg"
       }
 
       // Update Firestore document
@@ -240,6 +260,8 @@ export default function PersonalInformationPage() {
                 alt="Profile"
                 fill
                 className="object-cover"
+                unoptimized={!newProfilePicture && (firestoreUser.profilePicture?.includes('firebasestorage.googleapis.com') || 
+                                firestoreUser.profilePicture?.includes('dynasty-eba63.firebasestorage.app'))}
               />
             </div>
             {isEditing && (
