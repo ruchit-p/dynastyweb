@@ -352,17 +352,27 @@ export const getStoryComments = async (storyId: string): Promise<Comment[]> => {
     console.log(`Fetching comments for story: ${storyId}`);
     const getCommentsFunction = httpsCallable(functions, 'getStoryComments');
     const result = await getCommentsFunction({ storyId });
-    const data = result.data as { comments: Comment[], error?: string };
+    const data = result.data as { 
+      status: 'success' | 'error',
+      message?: string,
+      comments: Comment[], 
+      error?: string 
+    };
     
     // Check if there was an error in the response
-    if (data.error) {
-      // This is an explicit error from the server, not just empty comments
-      console.error(`Server returned an error: ${data.error}`);
+    if (data.status === 'error') {
+      console.error(`Server returned an error: ${data.message || data.error}`);
       toast({
         title: 'Error',
         description: 'Failed to load comments',
         variant: 'destructive',
       });
+      return [];
+    }
+    
+    // No need to show any error for no comments - it's a valid state
+    if (data.status === 'success' && data.message === 'No comments found') {
+      console.log('No comments found for this story');
       return [];
     }
     
@@ -391,12 +401,10 @@ export const getStoryComments = async (storyId: string): Promise<Comment[]> => {
     // This is a technical error (network, auth, etc.), not just empty comments
     console.error('Error fetching comments:', error);
     
-    // Only show toast for actual errors, not for empty comments
     // Extract the error message to check for specific conditions
     const errorMessage = error instanceof Error ? error.message : String(error);
     
     // Don't show toast if the error is related to no comments being found
-    // This could be customized based on the exact error message from your backend
     const isNoCommentsError = errorMessage.includes('No comments found') || 
                              errorMessage.includes('no comments') ||
                              errorMessage.includes('empty result');

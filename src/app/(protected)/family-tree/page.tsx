@@ -79,6 +79,8 @@ interface CustomNode extends Omit<Node, 'placeholder'> {
     isBloodRelated: boolean;
     status?: string;
     treeOwnerId?: string;
+    email?: string;
+    phoneNumber?: string;
   };
 }
 
@@ -857,9 +859,9 @@ export default function FamilyTreePage() {
         firstName,
         lastName,
         gender: node.gender,
-        dateOfBirth: undefined,  // We don't have DOB in the tree data
-        phone: '',               // We don't have phone in the tree data
-        email: '',               // We don't have email in the tree data
+        dateOfBirth: undefined,
+        phone: memberData.phoneNumber || '',
+        email: memberData.email || '',
         connectToChildren: false,
         connectToSpouse: false,
         connectToExistingParent: false,
@@ -883,13 +885,16 @@ export default function FamilyTreePage() {
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ') || '';
       
+      // Use the node attributes if available
+      const customNode = node as CustomNode;
+      
       setViewFormData({
         firstName,
         lastName,
         gender: node.gender,
         dateOfBirth: undefined,
-        phone: '',
-        email: '',
+        phone: customNode.attributes?.phoneNumber || '',
+        email: customNode.attributes?.email || '',
         connectToChildren: false,
         connectToSpouse: false,
         connectToExistingParent: false,
@@ -1418,7 +1423,7 @@ export default function FamilyTreePage() {
 
         {/* View Family Member Sheet */}
         <Sheet open={isViewSheetOpen} onOpenChange={setIsViewSheetOpen}>
-          <SheetContent className="sm:max-w-[425px] bg-white border-l border-[#0A5C36]/10">
+          <SheetContent className="sm:max-w-[425px] bg-white border-l border-[#0A5C36]/10" hideCloseButton={true}>
             <SheetHeader className="border-b pb-4 mb-2">
               <div className="flex items-center justify-between w-full">
                 <SheetTitle className="text-[#0A5C36] text-xl font-semibold">

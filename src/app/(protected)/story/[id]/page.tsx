@@ -971,7 +971,10 @@ export default function StoryDetailsPage() {
               <p className="text-[#0A5C36]">Loading comments...</p>
             </div>
           ) : comments.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">No comments yet. Be the first to share your thoughts!</div>
+            <div className="text-center py-8">
+              <p className="text-gray-500 mb-2">No comments yet on this story.</p>
+              <p className="text-[#0A5C36] text-sm">Be the first to share your thoughts or ask a question!</p>
+            </div>
           ) : (
             <div className="space-y-6">
               {comments.map((comment) => (
