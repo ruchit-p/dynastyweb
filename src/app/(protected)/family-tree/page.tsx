@@ -84,6 +84,11 @@ interface CustomNode extends Omit<Node, 'placeholder'> {
   };
 }
 
+interface FirestoreTimestamp {
+  seconds: number;
+  nanoseconds: number;
+}
+
 export default function FamilyTreePage() {
   const { currentUser, firestoreUser } = useAuth();
   const { hasCompletedOnboarding } = useOnboarding();
@@ -1208,58 +1213,60 @@ export default function FamilyTreePage() {
         )}
 
         <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-          <SheetContent className="sm:max-w-[425px]">
-            <SheetHeader>
-              <SheetTitle>Add {relationType?.charAt(0).toUpperCase()}{relationType?.slice(1)}</SheetTitle>
+          <SheetContent className="sm:max-w-[425px] md:max-w-[525px] bg-white overflow-y-auto" hideCloseButton={true}>
+            <SheetHeader className="border-b pb-4 mb-2 sticky top-0 bg-white z-10">
+              <SheetTitle className="text-[#0A5C36] text-xl font-semibold">Add {relationType?.charAt(0).toUpperCase()}{relationType?.slice(1)}</SheetTitle>
             </SheetHeader>
             <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="firstName" className="text-right flex justify-end items-center gap-1">
+              <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
+                <Label htmlFor="firstName" className="sm:text-right flex items-center sm:justify-end gap-1 text-gray-600 text-sm">
                   First Name<span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="firstName"
-                  className="col-span-3"
+                  className="col-span-1 sm:col-span-3 border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36]"
                   value={formData.firstName}
                   onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
                   tabIndex={1}
                 />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="lastName" className="text-right flex justify-end items-center gap-1">
+              <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
+                <Label htmlFor="lastName" className="sm:text-right flex items-center sm:justify-end gap-1 text-gray-600 text-sm">
                   Last Name<span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="lastName"
-                  className="col-span-3"
+                  className="col-span-1 sm:col-span-3 border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36]"
                   value={formData.lastName}
                   onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
                   tabIndex={2}
                 />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="gender" className="text-right flex justify-end items-center gap-1">
+              <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
+                <Label htmlFor="gender" className="sm:text-right flex items-center sm:justify-end gap-1 text-gray-600 text-sm">
                   Gender<span className="text-red-500">*</span>
                 </Label>
-                <Select
-                  value={formData.gender}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, gender: value }))}
-                >
-                  <SelectTrigger className="col-span-3" tabIndex={3}>
-                    <SelectValue placeholder="Select gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="col-span-1 sm:col-span-3">
+                  <Select
+                    value={formData.gender}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, gender: value }))}
+                  >
+                    <SelectTrigger className="w-full border-[#0A5C36]/20 focus:ring-[#0A5C36]/20" tabIndex={3}>
+                      <SelectValue placeholder="Select gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="male">Male</SelectItem>
+                      <SelectItem value="female">Female</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="dateOfBirth" className="text-right">
+              <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
+                <Label htmlFor="dateOfBirth" className="sm:text-right flex items-center sm:justify-end text-gray-600 text-sm">
                   Date of Birth
                 </Label>
-                <div className="col-span-3 flex gap-2">
+                <div className="col-span-1 sm:col-span-3 flex flex-wrap gap-2">
                   <Select
                     value={formData.dateOfBirth?.getMonth()?.toString()}
                     onValueChange={(value) => {
@@ -1268,7 +1275,7 @@ export default function FamilyTreePage() {
                       setFormData(prev => ({ ...prev, dateOfBirth: new Date(newDate) }));
                     }}
                   >
-                    <SelectTrigger className="w-[110px]" tabIndex={4}>
+                    <SelectTrigger className="w-[110px] border-[#0A5C36]/20 focus:ring-[#0A5C36]/20" tabIndex={4}>
                       <SelectValue placeholder="Month" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1288,7 +1295,7 @@ export default function FamilyTreePage() {
                       setFormData(prev => ({ ...prev, dateOfBirth: new Date(newDate) }));
                     }}
                   >
-                    <SelectTrigger className="w-[90px]" tabIndex={5}>
+                    <SelectTrigger className="w-[90px] border-[#0A5C36]/20 focus:ring-[#0A5C36]/20" tabIndex={5}>
                       <SelectValue placeholder="Day" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1308,7 +1315,7 @@ export default function FamilyTreePage() {
                       setFormData(prev => ({ ...prev, dateOfBirth: new Date(newDate) }));
                     }}
                   >
-                    <SelectTrigger className="w-[100px]" tabIndex={6}>
+                    <SelectTrigger className="w-[100px] border-[#0A5C36]/20 focus:ring-[#0A5C36]/20" tabIndex={6}>
                       <SelectValue placeholder="Year" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1321,113 +1328,122 @@ export default function FamilyTreePage() {
                   </Select>
                 </div>
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="phone" className="text-right">
+              <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
+                <Label htmlFor="phone" className="sm:text-right flex items-center sm:justify-end text-gray-600 text-sm">
                   Phone 
                 </Label>
                 <Input
                   id="phone"
                   type="tel"
-                  className="col-span-3"
+                  className="col-span-1 sm:col-span-3 border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36]"
                   value={formData.phone}
                   onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="Enter phone number"
                   tabIndex={7}
                 />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="email" className="text-right">
+              <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
+                <Label htmlFor="email" className="sm:text-right flex items-center sm:justify-end text-gray-600 text-sm">
                   Email 
                 </Label>
                 <Input
                   id="email"
                   type="email"
-                  className="col-span-3"
+                  className="col-span-1 sm:col-span-3 border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36]"
                   value={formData.email}
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="Enter email address"
                   tabIndex={8}
                 />
               </div>
               {relationType === 'spouse' && (selectedNode?.children?.length ?? 0) > 0 && (
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="connectToChildren" className="text-right">
+                <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4 mt-2">
+                  <Label htmlFor="connectToChildren" className="sm:text-right flex items-center sm:justify-end text-gray-600 text-sm">
                     Connect to Children
                   </Label>
-                  <div className="col-span-3 flex items-center">
+                  <div className="col-span-1 sm:col-span-3 flex items-center">
                     <input
                       type="checkbox"
                       id="connectToChildren"
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-[#0A5C36] focus:ring-[#0A5C36]"
                       checked={formData.connectToChildren}
                       onChange={(e) => setFormData(prev => ({ ...prev, connectToChildren: e.target.checked }))}
                     />
-                    <Label htmlFor="connectToChildren">
+                    <Label htmlFor="connectToChildren" className="text-sm">
                       Connect to spouse&apos;s existing children
                     </Label>
                   </div>
                 </div>
               )}
               {relationType === 'child' && (selectedNode?.spouses?.length ?? 0) > 0 && (
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="connectToSpouse" className="text-right">
+                <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4 mt-2">
+                  <Label htmlFor="connectToSpouse" className="sm:text-right flex items-center sm:justify-end text-gray-600 text-sm">
                     Connect to Spouse
                   </Label>
-                  <div className="col-span-3 flex items-center">
+                  <div className="col-span-1 sm:col-span-3 flex items-center">
                     <input
                       type="checkbox"
                       id="connectToSpouse"
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-[#0A5C36] focus:ring-[#0A5C36]"
                       checked={formData.connectToSpouse}
                       onChange={(e) => setFormData(prev => ({ ...prev, connectToSpouse: e.target.checked }))}
                     />
-                    <Label htmlFor="connectToSpouse">
+                    <Label htmlFor="connectToSpouse" className="text-sm">
                       Add child to spouse as well
                     </Label>
                   </div>
                 </div>
               )}
               {relationType === 'parent' && (selectedNode?.parents?.length ?? 0) > 0 && (
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="connectToExistingParent" className="text-right">
+                <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4 mt-2">
+                  <Label htmlFor="connectToExistingParent" className="sm:text-right flex items-center sm:justify-end text-gray-600 text-sm">
                     Connect Parents
                   </Label>
-                  <div className="col-span-3 flex items-center">
+                  <div className="col-span-1 sm:col-span-3 flex items-center">
                     <input
                       type="checkbox"
                       id="connectToExistingParent"
-                      className="mr-2"
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-[#0A5C36] focus:ring-[#0A5C36]"
                       checked={formData.connectToExistingParent}
                       onChange={(e) => setFormData(prev => ({ ...prev, connectToExistingParent: e.target.checked }))}
                     />
-                    <Label htmlFor="connectToExistingParent">
+                    <Label htmlFor="connectToExistingParent" className="text-sm">
                       Connect as spouse to existing parent
                     </Label>
                   </div>
                 </div>
               )}
             </div>
-            <SheetFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsSheetOpen(false)}
-                disabled={saving}
-              >
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? <Spinner className="mr-2 h-4 w-4" /> : null}
-                Save
-              </Button>
+            <SheetFooter className="border-t pt-4 mt-2 sticky bottom-0 bg-white z-10 pb-6">
+              <div className="flex gap-3 w-full">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsSheetOpen(false)}
+                  disabled={saving}
+                  className="flex-1 border-gray-200 hover:bg-gray-50"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleSave} 
+                  disabled={saving}
+                  className="flex-1 bg-[#0A5C36] hover:bg-[#0A5C36]/90 text-white transition-colors"
+                >
+                  {saving ? <Spinner className="mr-2 h-4 w-4" /> : null}
+                  Save
+                </Button>
+              </div>
             </SheetFooter>
           </SheetContent>
         </Sheet>
 
         {/* View Family Member Sheet */}
         <Sheet open={isViewSheetOpen} onOpenChange={setIsViewSheetOpen}>
-          <SheetContent className="sm:max-w-[425px] bg-white border-l border-[#0A5C36]/10" hideCloseButton={true}>
-            <SheetHeader className="border-b pb-4 mb-2">
+          <SheetContent className="sm:max-w-[425px] md:max-w-[525px] bg-white border-l border-[#0A5C36]/10 overflow-y-auto" hideCloseButton={true}>
+            <SheetHeader className="border-b pb-4 mb-2 sticky top-0 bg-white z-10">
               <div className="flex items-center justify-between w-full">
                 <SheetTitle className="text-[#0A5C36] text-xl font-semibold">
-                  {isEditMode ? "Edit Mode" : "Family Member Details"}
+                  {isEditMode ? "Edit Member Details" : "Family Member Details"}
                 </SheetTitle>
                 {/* Edit toggle for admins */}
                 {(currentUser?.uid === (selectedNode as CustomNode)?.attributes?.treeOwnerId || firestoreUser?.isAdmin) && (
@@ -1435,7 +1451,7 @@ export default function FamilyTreePage() {
                     variant="outline"
                     size="sm"
                     onClick={() => setIsEditMode(prev => !prev)}
-                    className="border-[#0A5C36] text-[#0A5C36] hover:bg-[#0A5C36]/5"
+                    className="border-[#0A5C36] text-[#0A5C36] hover:bg-[#0A5C36]/5 transition-colors"
                   >
                     {isEditMode ? "View Mode" : "Edit Mode"}
                   </Button>
@@ -1447,7 +1463,7 @@ export default function FamilyTreePage() {
               {/* Profile Card */}
               <div className="bg-[#F9FAFB] rounded-lg p-5 shadow-sm border border-gray-100 mb-6">
                 <div className="flex justify-center mb-5">
-                  <div className="h-24 w-24 rounded-full bg-[#0A5C36] flex items-center justify-center text-white text-xl font-semibold">
+                  <div className="h-24 w-24 rounded-full bg-[#0A5C36] flex items-center justify-center text-white text-xl font-semibold shadow-md">
                     {viewFormData.firstName.charAt(0)}{viewFormData.lastName.charAt(0)}
                   </div>
                 </div>
@@ -1464,20 +1480,20 @@ export default function FamilyTreePage() {
               {/* Info section */}
               <div className="space-y-5">
                 {isEditMode ? (
-                  /* Edit mode layout */
+                  /* Edit mode layout - improved responsive design */
                   <>
                     <div className="space-y-4">
-                      <h4 className="text-[#0A5C36] font-medium">Personal Information</h4>
+                      <h4 className="text-[#0A5C36] font-medium text-lg">Personal Information</h4>
                       
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-4 gap-3">
-                          <Label htmlFor="viewFirstName" className="col-span-1 flex items-center text-gray-600">
+                      <div className="space-y-4 sm:space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 sm:gap-3 items-start sm:items-center">
+                          <Label htmlFor="viewFirstName" className="sm:col-span-1 flex items-center text-gray-600 text-sm sm:text-right sm:justify-end">
                             First Name<span className="text-red-500 ml-1">*</span>
                           </Label>
-                          <div className="col-span-3">
+                          <div className="sm:col-span-3">
                             <Input
                               id="viewFirstName"
-                              className="border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36]"
+                              className="border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36] w-full"
                               value={viewFormData.firstName}
                               onChange={(e) => setViewFormData(prev => ({ ...prev, firstName: e.target.value }))}
                               tabIndex={1}
@@ -1485,14 +1501,14 @@ export default function FamilyTreePage() {
                           </div>
                         </div>
                         
-                        <div className="grid grid-cols-4 gap-3">
-                          <Label htmlFor="viewLastName" className="col-span-1 flex items-center text-gray-600">
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 sm:gap-3 items-start sm:items-center">
+                          <Label htmlFor="viewLastName" className="sm:col-span-1 flex items-center text-gray-600 text-sm sm:text-right sm:justify-end">
                             Last Name<span className="text-red-500 ml-1">*</span>
                           </Label>
-                          <div className="col-span-3">
+                          <div className="sm:col-span-3">
                             <Input
                               id="viewLastName"
-                              className="border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36]"
+                              className="border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36] w-full"
                               value={viewFormData.lastName}
                               onChange={(e) => setViewFormData(prev => ({ ...prev, lastName: e.target.value }))}
                               tabIndex={2}
@@ -1500,11 +1516,11 @@ export default function FamilyTreePage() {
                           </div>
                         </div>
                         
-                        <div className="grid grid-cols-4 gap-3">
-                          <Label htmlFor="viewGender" className="col-span-1 flex items-center text-gray-600">
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 sm:gap-3 items-start sm:items-center">
+                          <Label htmlFor="viewGender" className="sm:col-span-1 flex items-center text-gray-600 text-sm sm:text-right sm:justify-end">
                             Gender<span className="text-red-500 ml-1">*</span>
                           </Label>
-                          <div className="col-span-3">
+                          <div className="sm:col-span-3">
                             <Select
                               value={viewFormData.gender}
                               onValueChange={(value) => setViewFormData(prev => ({ ...prev, gender: value }))}
@@ -1524,18 +1540,18 @@ export default function FamilyTreePage() {
                     </div>
                     
                     <div className="space-y-4">
-                      <h4 className="text-[#0A5C36] font-medium">Contact Information</h4>
+                      <h4 className="text-[#0A5C36] font-medium text-lg">Contact Information</h4>
                       
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-4 gap-3">
-                          <Label htmlFor="viewPhone" className="col-span-1 flex items-center text-gray-600">
+                      <div className="space-y-4 sm:space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 sm:gap-3 items-start sm:items-center">
+                          <Label htmlFor="viewPhone" className="sm:col-span-1 flex items-center text-gray-600 text-sm sm:text-right sm:justify-end">
                             Phone
                           </Label>
-                          <div className="col-span-3">
+                          <div className="sm:col-span-3">
                             <Input
                               id="viewPhone"
                               type="tel"
-                              className="border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36]"
+                              className="border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36] w-full"
                               value={viewFormData.phone || ''}
                               onChange={(e) => setViewFormData(prev => ({ ...prev, phone: e.target.value }))}
                               placeholder="Enter phone number"
@@ -1544,15 +1560,15 @@ export default function FamilyTreePage() {
                           </div>
                         </div>
                         
-                        <div className="grid grid-cols-4 gap-3">
-                          <Label htmlFor="viewEmail" className="col-span-1 flex items-center text-gray-600">
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 sm:gap-3 items-start sm:items-center">
+                          <Label htmlFor="viewEmail" className="sm:col-span-1 flex items-center text-gray-600 text-sm sm:text-right sm:justify-end">
                             Email
                           </Label>
-                          <div className="col-span-3">
+                          <div className="sm:col-span-3">
                             <Input
                               id="viewEmail"
                               type="email"
-                              className="border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36]"
+                              className="border-[#0A5C36]/20 focus:ring-[#0A5C36]/20 focus:border-[#0A5C36] w-full"
                               value={viewFormData.email || ''}
                               onChange={(e) => setViewFormData(prev => ({ ...prev, email: e.target.value }))}
                               placeholder="Enter email address"
@@ -1565,7 +1581,7 @@ export default function FamilyTreePage() {
                   </>
                 ) : (
                   /* View mode layout */
-                  <div className="bg-[#F9FAFB] rounded-lg border border-gray-100">
+                  <div className="bg-[#F9FAFB] rounded-lg border border-gray-100 shadow-sm">
                     <div className="divide-y divide-gray-100">
                       {/* Gender field */}
                       <div className="p-4 flex justify-between items-center">
@@ -1611,7 +1627,7 @@ export default function FamilyTreePage() {
               </div>
             </div>
             
-            <SheetFooter className="border-t pt-4 mt-2">
+            <SheetFooter className="border-t pt-4 mt-2 sticky bottom-0 bg-white z-10 pb-6">
               <div className="flex gap-3 w-full">
                 <Button
                   variant="outline"
@@ -1628,7 +1644,7 @@ export default function FamilyTreePage() {
                   <Button 
                     onClick={handleUpdateMember} 
                     disabled={saving} 
-                    className="flex-1 bg-[#0A5C36] hover:bg-[#0A5C36]/90"
+                    className="flex-1 bg-[#0A5C36] hover:bg-[#0A5C36]/90 text-white transition-colors"
                   >
                     {saving ? <Spinner className="mr-2 h-4 w-4" /> : null}
                     Save Changes
@@ -1637,7 +1653,7 @@ export default function FamilyTreePage() {
                   <Button
                     onClick={() => setIsEditMode(true)}
                     disabled={!(currentUser?.uid === (selectedNode as CustomNode)?.attributes?.treeOwnerId || firestoreUser?.isAdmin)}
-                    className="flex-1 bg-white border border-[#0A5C36] text-[#0A5C36] hover:bg-[#0A5C36]/5"
+                    className="flex-1 bg-white border border-[#0A5C36] text-[#0A5C36] hover:bg-[#0A5C36]/5 transition-colors"
                   >
                     Edit Details
                   </Button>
@@ -1649,43 +1665,43 @@ export default function FamilyTreePage() {
 
         {/* Family Management Sheet */}
         <Sheet open={isFamilyManagementOpen} onOpenChange={setIsFamilyManagementOpen}>
-          <SheetContent className="w-full sm:max-w-[700px] overflow-y-auto">
-            <SheetHeader>
+          <SheetContent className="sm:max-w-[700px] overflow-y-auto p-0">
+            <SheetHeader className="p-6 border-b sticky top-0 bg-white z-10">
               <SheetTitle>Family Tree Management</SheetTitle>
             </SheetHeader>
             
-            <div className="py-6">
-              <h3 className="text-lg font-semibold mb-4">Family Members</h3>
-              
-              <div className="rounded-md border">
+            <div className="px-6 py-4">
+              <h3 className="text-lg font-medium mb-4">Tree Members</h3>
+              <div className="border rounded-md">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-12"></TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Date Added</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Member</TableHead>
+                      <TableHead>Added</TableHead>
+                      <TableHead>Role</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {familyMembers.map((member) => {
                       const isCurrentUser = member.id === currentUser?.uid;
-                      
-                      // Format the date
-                      const dateAdded = member.createdAt instanceof Date 
-                        ? member.createdAt.toLocaleDateString() 
-                        : new Date(member.createdAt).toLocaleDateString();
-                      
+                      const dateAdded = member.createdAt ? 
+                        (member.createdAt instanceof Date ? 
+                          member.createdAt.toLocaleDateString() : 
+                          (typeof member.createdAt === 'object' && 'seconds' in member.createdAt ? 
+                            new Date((member.createdAt as FirestoreTimestamp).seconds * 1000).toLocaleDateString() : 
+                            new Date(member.createdAt as string | number).toLocaleDateString())) : 
+                        'Unknown';
+                        
                       return (
                         <TableRow key={member.id}>
-                          <TableCell>
-                            <Avatar className="h-10 w-10">
-                              <AvatarImage src={member.profilePicture} alt={member.displayName} />
-                              <AvatarFallback>{member.displayName.substring(0, 2).toUpperCase()}</AvatarFallback>
+                          <TableCell className="font-medium flex items-center gap-2">
+                            <Avatar className="h-8 w-8">
+                              <AvatarImage src={member.profilePicture || undefined} alt={member.displayName} />
+                              <AvatarFallback className="bg-[#0A5C36] text-white text-xs">
+                                {member.displayName.split(' ').map(n => n[0]).join('')}
+                              </AvatarFallback>
                             </Avatar>
-                          </TableCell>
-                          <TableCell>
                             <div className="font-medium">{member.displayName}</div>
                             {isCurrentUser && <span className="text-xs text-muted-foreground">(You)</span>}
                             {member.isOwner && <span className="text-xs text-primary ml-1">(Owner)</span>}
@@ -1732,11 +1748,10 @@ export default function FamilyTreePage() {
               </div>
             </div>
             
-            <SheetFooter>
-              <Button 
-                variant="outline" 
+            <SheetFooter className="p-6 border-t sticky bottom-0 bg-white z-10 pb-8">
+              <Button
+                variant="outline"
                 onClick={() => setIsFamilyManagementOpen(false)}
-                className="w-full sm:w-auto"
               >
                 Close
               </Button>
