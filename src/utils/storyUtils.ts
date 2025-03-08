@@ -2,7 +2,7 @@ import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db, app } from '@/lib/firebase';
 import { toast } from '@/components/ui/use-toast';
-import eventManager from "./eventUtils";
+import eventManager, { LikeEventData } from "./eventUtils";
 
 // Initialize Firebase Functions
 const functions = getFunctions(app, 'us-central1');
@@ -192,7 +192,7 @@ export const toggleStoryLike = async (
     
     // Publish event to notify all subscribers
     const eventType = !isCurrentlyLiked ? 'story:liked' : 'story:unliked';
-    eventManager.publish(eventType, { storyId, liked: !isCurrentlyLiked });
+    eventManager.publish<LikeEventData>(eventType, { storyId, liked: !isCurrentlyLiked });
     
     return true;
   } catch (error) {

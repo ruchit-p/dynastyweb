@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { toggleStoryLike, checkStoryLikeStatus, type Story as StoryType } from "@/utils/storyUtils"
-import eventManager from "@/utils/eventUtils"
+import eventManager, { LikeEventData } from "@/utils/eventUtils"
 import { formatDate, formatTimeAgo } from "@/utils/dateUtils"
 
 interface MediaCount {
@@ -63,7 +63,7 @@ export function StoryCard({ story, currentUserId }: StoryProps) {
       });
     
     // Subscribe to like events for this story
-    const unsubscribeLike = eventManager.subscribe('story:liked', (data) => {
+    const unsubscribeLike = eventManager.subscribe<LikeEventData>('story:liked', (data) => {
       if (data.storyId === story.id && data.liked !== undefined) {
         console.log(`[StoryCard] Received like event for story ${story.id}: ${data.liked}`);
         setIsLiked(data.liked);
@@ -71,7 +71,7 @@ export function StoryCard({ story, currentUserId }: StoryProps) {
       }
     });
     
-    const unsubscribeUnlike = eventManager.subscribe('story:unliked', (data) => {
+    const unsubscribeUnlike = eventManager.subscribe<LikeEventData>('story:unliked', (data) => {
       if (data.storyId === story.id && data.liked !== undefined) {
         console.log(`[StoryCard] Received unlike event for story ${story.id}: ${data.liked}`);
         setIsLiked(data.liked);

@@ -117,8 +117,8 @@ export default function HistoryBookPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F9FAFB]">
-        <main className="container py-6">
+      <div className="min-h-screen bg-[#F9FAFB] flex flex-col">
+        <main className="container py-6 pb-6 flex-grow">
           <div className="text-center py-8">
             <Spinner size="lg" variant="primary" className="mb-4" />
             <p className="text-[#0A5C36] font-medium">Loading your history book...</p>
@@ -130,8 +130,8 @@ export default function HistoryBookPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#F9FAFB]">
-        <main className="container py-6">
+      <div className="min-h-screen bg-[#F9FAFB] flex flex-col">
+        <main className="container py-6 pb-6 flex-grow">
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md shadow-sm" role="alert">
             <p className="font-medium">Error</p>
             <p>{error}</p>
@@ -142,8 +142,8 @@ export default function HistoryBookPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB]">
-      <main className="container py-6">
+    <div className="min-h-screen bg-[#F9FAFB] flex flex-col">
+      <main className="container py-6 pb-6 flex-grow">
         <div className="flex justify-between my-6 items-center mb-6">
           <h1 className="text-2xl font-bold text-[#0A5C36]">My History Book</h1>
           <Link href="/create-story">

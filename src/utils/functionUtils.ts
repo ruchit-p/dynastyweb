@@ -3,6 +3,7 @@ import { app } from '@/lib/firebase';
 import type { Node } from 'relatives-tree/lib/types';
 import type { Story } from './storyUtils';
 import { Timestamp } from 'firebase/firestore';
+import { EventData } from './eventUtils';
 
 // Initialize Firebase Functions
 const functions = getFunctions(app, 'us-central1');
@@ -236,4 +237,32 @@ export const getFamilyManagementData = async () => {
       isOwner: boolean;
     }>;
   };
-}; 
+};
+
+/**
+ * Get events for the feed
+ */
+export async function getEventsForFeed(userId: string, familyTreeId: string) {
+  try {
+    console.log('Fetching events for feed with userId:', userId, 'familyTreeId:', familyTreeId);
+    
+    const getEventsForFeed = httpsCallable<{ userId: string, familyTreeId: string }, { events: EventData[] }>(
+      functions, 
+      'getEventsForFeedApi'
+    );
+    
+    const result = await getEventsForFeed({ userId, familyTreeId });
+    
+    if (!result.data || !Array.isArray(result.data.events)) {
+      console.error('Invalid events data structure:', result.data);
+      return { events: [] };
+    }
+    
+    return { events: result.data.events };
+  } catch (error) {
+    console.error('Error fetching events for feed:', error);
+    // Return empty events array instead of throwing an error
+    // This prevents the feed from breaking if event fetching fails
+    return { events: [] };
+  }
+} 

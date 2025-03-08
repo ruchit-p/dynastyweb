@@ -1,6 +1,5 @@
 "use client"
-
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback} from "react"
 import { useParams, useRouter } from "next/navigation"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
@@ -42,7 +41,7 @@ import {
 } from "@/utils/storyUtils"
 import { deleteStory } from "@/utils/functionUtils"
 import DynastyCarousel from "@/components/DynastyCarousel"
-import eventManager from "@/utils/eventUtils"
+import eventManager, { LikeEventData } from "@/utils/eventUtils"
 import { formatDate, formatTimeAgo, getSmartDate } from "@/utils/dateUtils"
 import { Spinner } from "@/components/ui/spinner"
 
@@ -56,7 +55,7 @@ const getImageUrl = (url: string) => {
   try {
     // Check if this is a Firebase Storage URL
     const isFirebaseStorageUrl = url.includes('firebasestorage.googleapis.com') || 
-                                url.includes('dynasty-eba63.firebasestorage.app');
+                               url.includes('dynasty-eba63.firebasestorage.app');
     
     // For Firebase Storage URLs, ensure they have the download token
     if (isFirebaseStorageUrl) {
@@ -125,8 +124,8 @@ interface StoryData {
 }
 
 export default function StoryDetailsPage() {
-  const params = useParams();
-  const id = params.id as string;
+  const params = useParams()
+  const id = params.id as string
   const router = useRouter();
   const { currentUser } = useAuth();
   const { toast } = useToast();
@@ -160,7 +159,7 @@ export default function StoryDetailsPage() {
   useEffect(() => {
     // Subscribe to like events for this story
     if (id) {
-      const unsubscribeLike = eventManager.subscribe('story:liked', (data) => {
+      const unsubscribeLike = eventManager.subscribe<LikeEventData>('story:liked', (data) => {
         if (data.storyId === id) {
           console.log(`[StoryDetail] Received like event for story ${id}`);
           setIsLiked(true);
@@ -168,7 +167,7 @@ export default function StoryDetailsPage() {
         }
       });
       
-      const unsubscribeUnlike = eventManager.subscribe('story:unliked', (data) => {
+      const unsubscribeUnlike = eventManager.subscribe<LikeEventData>('story:unliked', (data) => {
         if (data.storyId === id) {
           console.log(`[StoryDetail] Received unlike event for story ${id}`);
           setIsLiked(false);
@@ -200,27 +199,33 @@ export default function StoryDetailsPage() {
   const fetchComments = useCallback(async () => {
     if (!id) return;
     
-    try {
-      setLoadingComments(true);
-      const fetchedComments = await getStoryComments(id);
-      console.log("Fetched comments:", fetchedComments);
-      
-      if (fetchedComments.length > 0) {
-        // Log the format of the first comment's timestamp
-        console.log("First comment timestamp format:", 
-          JSON.stringify(fetchedComments[0].createdAt, null, 2));
-      } else {
-        console.log("No comments found for this story");
-      }
-      
+  setLoadingComments(true);
+  try {
+    const fetchedComments = await getStoryComments(id);
+    
+    if (Array.isArray(fetchedComments)) {
       setComments(fetchedComments);
-    } catch (error) {
-      console.error("Error in fetchComments function:", error);
-      // No toast here since getStoryComments already handles error toasts
-    } finally {
-      setLoadingComments(false);
+    } else {
+      console.error("Invalid comments format fetched:", fetchedComments);
+      setComments([]);
     }
-  }, [id]);
+  } catch (error) {
+    console.error("Error fetching comments:", error);
+    setComments([]);
+    toast({
+      title: "Error",
+      description: "Unable to load comments, please try again later.",
+      variant: "destructive",
+    });
+  } finally {
+    setLoadingComments(false);
+  }
+  }, [id, toast]);
+
+  // Ensure fetchComments is called correctly on component mount or updates
+  useEffect(() => {
+    fetchComments();
+  }, [fetchComments]);
 
   const fetchStory = useCallback(async () => {
     if (!id) return;

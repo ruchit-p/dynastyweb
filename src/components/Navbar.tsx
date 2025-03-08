@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Bell, Settings, LogOut, Plus, BookOpen, Users, Home, PenSquare, Menu } from "lucide-react"
+import { Bell, Settings, LogOut, Plus, BookOpen, Users, Home, PenSquare, Menu, Calendar } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext"
 
@@ -41,6 +41,7 @@ export default function Navbar({ user }: NavbarProps) {
     if (pathname?.includes('/feed')) return 'Feed'
     if (pathname?.includes('/family-tree')) return 'Family Tree'
     if (pathname?.includes('/history-book')) return 'History Book'
+    if (pathname?.includes('/events')) return 'Events'
     if (pathname?.includes('/story')) return 'Story'
     return 'Dynasty'
   }
@@ -69,6 +70,7 @@ export default function Navbar({ user }: NavbarProps) {
             alt="Dynasty Logo"
             width={32}
             height={32}
+            style={{ width: 'auto', height: '32px' }}
           />
           <span className="text-xl font-bold text-[#0A5C36] hidden sm:inline-block">Dynasty</span>
         </Link>
@@ -110,6 +112,16 @@ export default function Navbar({ user }: NavbarProps) {
             <BookOpen className="h-4 w-4" />
             History Book
           </Link>
+          <Link
+            href="/events"
+            className={cn(
+              "flex items-center gap-2 text-sm font-medium hover:text-[#0A5C36]", 
+              pathname?.includes('/events') ? "text-[#0A5C36]" : "text-gray-600"
+            )}
+          >
+            <Calendar className="h-4 w-4" />
+            Events
+          </Link>
         </div>
 
         {/* Right Side Icons */}
@@ -127,6 +139,12 @@ export default function Navbar({ user }: NavbarProps) {
                 <Link href="/create-story" className="flex items-center gap-2 cursor-pointer">
                   <PenSquare className="h-4 w-4" />
                   <span>New Story</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/create-event" className="flex items-center gap-2 cursor-pointer">
+                  <Calendar className="h-4 w-4" />
+                  <span>New Event</span>
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -230,6 +248,12 @@ export default function Navbar({ user }: NavbarProps) {
                 <Link href="/history-book" className="flex items-center gap-2 cursor-pointer">
                   <BookOpen className="h-4 w-4" />
                   <span>History Book</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/events" className="flex items-center gap-2 cursor-pointer">
+                  <Calendar className="h-4 w-4" />
+                  <span>Events</span>
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>

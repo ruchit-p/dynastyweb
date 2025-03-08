@@ -5,10 +5,13 @@ import Link from "next/link"
 import { useAuth } from "@/context/AuthContext"
 import { type Story } from "@/utils/storyUtils"
 import { Button } from "@/components/ui/button"
-import { PenSquare, BookOpen } from "lucide-react"
+import { PenSquare, BookOpen, Calendar } from "lucide-react"
 import { StoryCard } from "@/components/Story"
 import { getAccessibleStories } from "@/utils/functionUtils"
 import { Spinner } from "@/components/ui/spinner"
+import { getEventsForFeed } from "@/utils/functionUtils"
+import { EventData } from "@/utils/eventUtils"
+import { EventFeedCard } from "@/components/EventFeedCard"
 
 // Define the enriched story type
 type EnrichedStory = Story & {
@@ -23,58 +26,121 @@ type EnrichedStory = Story & {
   }>;
 };
 
+// Interface for feed items which can be either stories or events
+interface FeedItem {
+  id: string;
+  type: 'story' | 'event';
+  timestamp: string; // ISO date string
+  data: EnrichedStory | EventData;
+}
+
 export default function FeedPage() {
   const { currentUser, firestoreUser } = useAuth()
-  const [stories, setStories] = useState<EnrichedStory[]>([])
+  const [feedItems, setFeedItems] = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let mounted = true;
 
-    const loadStories = async () => {
-      console.log('[Feed] Starting to load stories');
+    const loadFeedContent = async () => {
+      console.log('[Feed] Starting to load feed content');
       
       try {
         setLoading(true);
         setError(null);
 
         if (!currentUser?.uid || !firestoreUser?.familyTreeId) {
-          console.log('[Feed] Missing required IDs, skipping story fetch');
+          console.log('[Feed] Missing required IDs, skipping feed fetch');
           setError('Unable to load feed. Please try logging out and back in.');
           return;
         }
         
-        console.log('[Feed] Fetching accessible stories');
-        const response = await getAccessibleStories(currentUser.uid, firestoreUser.familyTreeId);
-        console.log('[Feed] Stories API response:', response);
+        // Load stories and events in parallel
+        const [storiesResult, eventsResult] = await Promise.all([
+          getAccessibleStories(currentUser.uid, firestoreUser.familyTreeId),
+          getEventsForFeed(currentUser.uid, firestoreUser.familyTreeId)
+        ]);
         
         if (!mounted) {
           console.log('[Feed] Component unmounted, skipping state update');
           return;
         }
         
-        if (!response || !response.stories) {
-          console.error('[Feed] Invalid response format:', response);
-          setError('Received invalid data format from server');
-          return;
+        // Process stories
+        let allFeedItems: FeedItem[] = [];
+        
+        if (storiesResult && Array.isArray(storiesResult.stories)) {
+          const storyItems: FeedItem[] = storiesResult.stories.map(story => {
+            let timestampStr: string;
+            
+            // Convert different timestamp types to ISO string
+            if (story.createdAt) {
+              if (typeof story.createdAt === 'string') {
+                timestampStr = story.createdAt;
+              } else if (typeof story.createdAt === 'object' && 'toDate' in story.createdAt && typeof story.createdAt.toDate === 'function') {
+                // Handle Firebase timestamp-like objects
+                timestampStr = story.createdAt.toDate().toISOString();
+              } else if (story.createdAt instanceof Date) {
+                timestampStr = story.createdAt.toISOString();
+              } else {
+                // Fallback
+                timestampStr = new Date().toISOString();
+              }
+            } else {
+              timestampStr = new Date().toISOString();
+            }
+            
+            return {
+              id: story.id,
+              type: 'story',
+              timestamp: timestampStr,
+              data: story as EnrichedStory
+            }
+          });
+          
+          allFeedItems = [...allFeedItems, ...storyItems];
         }
         
-        const { stories: accessibleStories } = response;
-        console.log('[Feed] Processed stories:', {
-          count: accessibleStories.length,
-          stories: accessibleStories.map(s => ({
-            id: s.id,
-            title: s.title,
-            createdAt: s.createdAt
-          }))
+        // Process events
+        if (eventsResult && Array.isArray(eventsResult.events)) {
+          const eventItems: FeedItem[] = eventsResult.events.map(event => ({
+            id: event.id,
+            type: 'event',
+            timestamp: event.eventDate,
+            data: event
+          }));
+          
+          allFeedItems = [...allFeedItems, ...eventItems];
+        }
+        
+        // Sort by timestamp, newest first
+        allFeedItems.sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        
+        console.log('[Feed] Processed feed items:', {
+          count: allFeedItems.length,
+          types: {
+            stories: allFeedItems.filter(item => item.type === 'story').length,
+            events: allFeedItems.filter(item => item.type === 'event').length
+          }
         });
+        
+        // Add more detailed logging for events
+        const eventItems = allFeedItems.filter(item => item.type === 'event');
+        if (eventItems.length > 0) {
+          console.log('[Feed] Found event items:', eventItems.length);
+          console.log('[Feed] Sample event item:', JSON.stringify(eventItems[0], null, 2));
+        } else {
+          console.log('[Feed] No events found in feed. Events result:', JSON.stringify(eventsResult, null, 2));
+        }
 
-        setStories(accessibleStories);
+        setFeedItems(allFeedItems);
       } catch (error) {
-        console.error('[Feed] Error loading stories:', error);
+        console.error('[Feed] Error loading feed content:', error);
         if (!mounted) return;
-        setError(error instanceof Error ? error.message : 'Failed to load stories');
+        setError(error instanceof Error ? error.message : 'Failed to load feed content');
       } finally {
         if (mounted) {
           setLoading(false);
@@ -83,7 +149,7 @@ export default function FeedPage() {
     };
 
     if (currentUser && firestoreUser?.familyTreeId) {
-      loadStories();
+      loadFeedContent();
     }
 
     return () => {
@@ -120,37 +186,94 @@ export default function FeedPage() {
   return (
     <div className="min-h-screen bg-[#F9FAFB]">
       <main className="container py-6">
-        <div className="flex justify-between my-6 items-center mb-6">
-          <h1 className="text-2xl font-bold text-[#0A5C36]">Feed</h1>
-          <Link href="/create-story">
-            <Button className="bg-[#0A5C36] hover:bg-[#0A5C36]/90 text-white">
-              <PenSquare className="mr-2 h-4 w-4" />
-              Write Story
-            </Button>
-          </Link>
-        </div>
-
-        {stories.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16">
-            <BookOpen className="h-16 w-16 text-[#0A5C36]/40 mb-4" />
-            <p className="text-xl text-[#0A5C36] mb-2">No stories to display yet</p>
-            <p className="text-gray-600 mb-6">Be the first to share a story with your family!</p>
-            <Link href="/create-story">
-              <Button className="bg-[#0A5C36] hover:bg-[#0A5C36]/90 text-white">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 mt-6 gap-4 sm:gap-0">
+          <h1 className="text-2xl font-bold text-[#0A5C36]">Family Feed</h1>
+          <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
+            <Link href="/create-story" className="w-full sm:w-auto">
+              <Button 
+                size="sm" 
+                className="bg-[#0A5C36] hover:bg-[#084c2b] text-white w-full py-3 sm:py-2"
+              >
                 <PenSquare className="mr-2 h-4 w-4" />
-                Share Your First Story
+                <span>Create Story</span>
+              </Button>
+            </Link>
+            <Link href="/create-event" className="w-full sm:w-auto">
+              <Button 
+                size="sm" 
+                variant="outline"
+                className="border-[#0A5C36] text-[#0A5C36] hover:bg-green-50 w-full py-3 sm:py-2"
+              >
+                <Calendar className="mr-2 h-4 w-4" />
+                <span>Create Event</span>
               </Button>
             </Link>
           </div>
-        ) : (
-          <div className="grid gap-6 my-6">
-            {stories.map((story) => (
-              <StoryCard 
-                key={story.id} 
-                story={story} 
-                currentUserId={currentUser?.uid || ''} 
-              />
+        </div>
+
+        {feedItems.length > 0 ? (
+          <div className="space-y-6">
+            {feedItems.map((item) => (
+              <div key={`${item.type}-${item.id}`}>
+                {item.type === 'story' && (
+                  <StoryCard 
+                    story={item.data as EnrichedStory} 
+                    currentUserId={currentUser?.uid || ''}
+                  />
+                )}
+                {item.type === 'event' && (
+                  <EventFeedCard 
+                    id={item.id}
+                    title={(item.data as EventData).title}
+                    date={(item.data as EventData).eventDate}
+                    endDate={(item.data as EventData).endDate}
+                    startTime={(item.data as EventData).startTime}
+                    endTime={(item.data as EventData).endTime}
+                    timezone={(item.data as EventData).timezone}
+                    hasVaryingTimes={!!(item.data as EventData).daySpecificTimes && 
+                      Object.keys((item.data as EventData).daySpecificTimes || {}).length > 0}
+                    location={(item.data as EventData).location?.address}
+                    isVirtual={(item.data as EventData).isVirtual}
+                    coverImage={(item.data as EventData).coverPhotoUrls?.[0]}
+                    host={{
+                      id: (item.data as EventData).host?.id || 'unknown',
+                      name: (item.data as EventData).host?.name || 'Unknown Host',
+                      avatar: (item.data as EventData).host?.avatar
+                    }}
+                    attendees={((item.data as EventData).attendees || []).map(attendee => ({
+                      id: attendee.id,
+                      name: attendee.name,
+                      avatar: attendee.avatar,
+                      status: (attendee.status as 'going' | 'maybe' | 'no' | 'pending' | 'yes' | 'went' | 'declined' | 'invited') || 'invited'
+                    }))}
+                    userStatus={((item.data as EventData).userStatus as 'going' | 'maybe' | 'no' | 'pending' | 'yes' | 'went' | 'declined' | 'invited') || 'invited'}
+                    isCreator={!!(item.data as EventData).isCreator}
+                  />
+                )}
+              </div>
             ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm p-6 text-center">
+            <div className="mb-4">
+              <BookOpen className="mx-auto h-12 w-12 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No items in your feed yet</h3>
+            <p className="text-gray-500 mb-6">Start by creating stories and events to share with your family.</p>
+            <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 justify-center">
+              <Link href="/create-story" className="w-full sm:w-auto">
+                <Button className="w-full sm:w-auto bg-[#0A5C36] hover:bg-[#084c2b] text-white py-3 sm:py-2">
+                  <PenSquare className="mr-2 h-4 w-4" />
+                  Create a Story
+                </Button>
+              </Link>
+              <Link href="/create-event" className="w-full sm:w-auto">
+                <Button variant="outline" className="w-full sm:w-auto border-[#0A5C36] text-[#0A5C36] hover:bg-green-50 py-3 sm:py-2">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Plan an Event
+                </Button>
+              </Link>
+            </div>
           </div>
         )}
       </main>
