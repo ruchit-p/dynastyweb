@@ -208,6 +208,7 @@ export default function DynastyCarousel({
                     fill
                     className="object-contain pointer-events-none"
                     unoptimized={url.includes('firebasestorage.googleapis.com') || 
+                                url.includes('storage.googleapis.com') || 
                                 url.includes('dynasty-eba63.firebasestorage.app') || 
                                 process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true'}
                     draggable={false}
