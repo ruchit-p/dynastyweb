@@ -237,9 +237,11 @@ export default function DynastyCarousel({
             >
               {mediaType === 'image' && (
                 <div 
-                  className="relative" 
+                  className="relative w-full h-full" 
                   style={{ 
-                    height: `${imageHeight}px`,
+                    minHeight: '250px',
+                    height: '100%',
+                    maxHeight: `${imageHeight}px`,
                     userSelect: 'none',
                     WebkitUserSelect: 'none',
                     MozUserSelect: 'none',
@@ -254,6 +256,7 @@ export default function DynastyCarousel({
                     className="object-contain pointer-events-none"
                     unoptimized={true}
                     draggable={false}
+                    sizes="(max-width: 640px) 100vw, (max-width: 768px) 80vw, 60vw"
                   />
                   {caption && (
                     <div className="p-4 bg-gray-50 text-sm text-gray-700 mt-2">{caption}</div>

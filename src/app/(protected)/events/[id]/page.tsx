@@ -192,13 +192,14 @@ export default function EventDetailsPage({ params }: { params: Promise<{ id: str
         <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
           {/* Cover Image Carousel */}
           {coverPhotos.length > 0 && (
-            <div className="relative h-64 md:h-80">
+            <div className="relative w-full aspect-[16/9] sm:aspect-[21/9] md:h-80">
               <DynastyCarousel
                 items={coverPhotos}
                 infiniteLoop={true}
                 showIndicators={coverPhotos.length > 1}
                 showThumbs={false}
                 className="h-full"
+                imageHeight={400}
               />
             </div>
           )}

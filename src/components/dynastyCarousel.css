@@ -5,6 +5,7 @@
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+  height: 100%;
 }
 
 .dynasty-carousel-container * {
@@ -38,4 +39,24 @@
 /* Override react-responsive-carousel's slide styles */
 .dynasty-carousel-container .slide {
   touch-action: pan-y; /* Allow vertical scrolling but horizontal swipes will be for the carousel */
+  height: 100%;
+}
+
+/* Responsive styling */
+@media (max-width: 768px) {
+  .dynasty-carousel-container .carousel-root {
+    height: 100%;
+  }
+  
+  .dynasty-carousel-container .carousel {
+    height: 100%;
+  }
+  
+  .dynasty-carousel-container .carousel .slider-wrapper {
+    height: 100%;
+  }
+  
+  .dynasty-carousel-container .carousel .slider {
+    height: 100%;
+  }
 } 
