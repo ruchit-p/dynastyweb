@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Carousel } from "react-responsive-carousel"
 import "react-responsive-carousel/lib/styles/carousel.min.css"
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import AudioPlayer from "@/components/AudioPlayer"
 import VideoPlayer from "@/components/VideoPlayer"
+import { ensureAccessibleStorageUrl } from "@/utils/mediaUtils"
 
 // Add global styles to prevent highlighting in carousels
 import "./dynastyCarousel.css"
@@ -48,9 +49,17 @@ interface DynastyCarouselProps {
 
 // Helper function to get URL from different item types
 const getItemUrl = (item: MediaItem): string => {
-  if (typeof item === 'string') return item
-  if (item instanceof File) return URL.createObjectURL(item)
-  return item.url
+  let url = '';
+  if (typeof item === 'string') url = item;
+  else if (item instanceof File) url = URL.createObjectURL(item);
+  else url = item.url;
+  
+  // Fix Firebase Storage URLs by ensuring they have proper access parameters
+  if (url && (url.includes('storage.googleapis.com') || url.includes('firebasestorage.googleapis.com'))) {
+    return ensureAccessibleStorageUrl(url);
+  }
+  
+  return url;
 }
 
 // Helper function to determine media type from URL or File
@@ -59,9 +68,34 @@ const getMediaType = (item: MediaItem, providedType?: MediaType): MediaType => {
   
   // For string URLs, check extensions
   if (typeof item === 'string') {
-    if (item.startsWith('data:image') || item.match(/\.(jpg|jpeg|png|gif|webp)$/i)) return 'image'
-    if (item.match(/\.(mp4|webm|mov|avi)$/i)) return 'video'
-    if (item.match(/\.(mp3|wav|m4a|aac)$/i)) return 'audio'
+    // Add logging for debugging
+    console.log(`[DynastyCarousel] Determining media type for URL: ${item.substring(0, 50)}...`);
+    
+    if (item.startsWith('data:image') || item.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+      console.log(`[DynastyCarousel] Detected as image`);
+      return 'image'
+    }
+    if (item.match(/\.(mp4|webm|mov|avi)$/i)) {
+      console.log(`[DynastyCarousel] Detected as video`);
+      return 'video'
+    }
+    if (item.match(/\.(mp3|wav|m4a|aac)$/i)) {
+      console.log(`[DynastyCarousel] Detected as audio`);
+      return 'audio'
+    }
+    
+    // Check for common image hosting patterns
+    if (item.includes('firebasestorage.googleapis.com') || 
+        item.includes('storage.googleapis.com') || 
+        item.includes('dynasty-eba63.firebasestorage.app')) {
+      // For Firebase storage URLs, check for image extensions in the full path
+      if (item.match(/\.(jpg|jpeg|png|gif|webp)/i)) {
+        console.log(`[DynastyCarousel] Firebase URL detected as image`);
+        return 'image'
+      }
+    }
+    
+    console.log(`[DynastyCarousel] Could not determine media type, defaulting to unknown`);
     return 'unknown'
   }
   
@@ -120,6 +154,17 @@ export default function DynastyCarousel({
   
   // If no items or all items are filtered out, don't render anything
   const filteredItems = filterItem ? items.filter(filterItem) : items
+
+  // Add logging to help debug image issues
+  useEffect(() => {
+    console.log("[DynastyCarousel] Rendering carousel with items:", 
+      filteredItems.length > 0 
+        ? filteredItems.map((item, i) => typeof item === 'string' 
+            ? `Item ${i}: ${item.substring(0, 50)}...` 
+            : `Item ${i}: ${item instanceof File ? 'File' : 'Object'}`)
+        : 'No items');
+  }, [filteredItems]);
+  
   if (!filteredItems.length) return null
   
   // If only one item and showIndicators is not explicitly set, hide them
@@ -207,10 +252,7 @@ export default function DynastyCarousel({
                     alt={alt}
                     fill
                     className="object-contain pointer-events-none"
-                    unoptimized={url.includes('firebasestorage.googleapis.com') || 
-                                url.includes('storage.googleapis.com') || 
-                                url.includes('dynasty-eba63.firebasestorage.app') || 
-                                process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true'}
+                    unoptimized={true}
                     draggable={false}
                   />
                   {caption && (

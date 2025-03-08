@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import { format, isPast, parseISO } from "date-fns"
 import { getEventDetails, updateEventRsvp, EventData, downloadEventCalendar } from "@/utils/eventUtils"
+import { ensureAccessibleStorageUrl } from "@/utils/mediaUtils"
 import { useAuth } from "@/context/AuthContext"
 import DynastyCarousel from "@/components/DynastyCarousel"
 
@@ -169,7 +170,7 @@ export default function EventDetailsPage({ params }: { params: Promise<{ id: str
   }
 
   const isPastEvent = isPast(parseISO(event.eventDate))
-  const coverPhotos = event.coverPhotoUrls || []
+  const coverPhotos = event.coverPhotoUrls?.map(url => ensureAccessibleStorageUrl(url)) || []
   const eventDate = parseISO(event.eventDate)
   // const comments = event.comments || [] // Commented out as discussion feature is temporarily removed
   const isCreator = currentUser?.uid === event.hostId

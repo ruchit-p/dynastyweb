@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { 
-  Upload, 
   X, 
   Plus, 
   Users, 
@@ -23,18 +22,20 @@ import {
   Shirt, 
   Loader2, 
   ImagePlus,
-  ArrowLeft
+  ArrowLeft,
+  AlertTriangle
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DateSelector } from "@/components/date-selector"
 import { DateRangePicker } from "@/components/date-range-picker"
 import { LocationSearch } from "@/components/location-search"
-import DynastyCarousel from "@/components/DynastyCarousel"
 import { getEventDetails, updateEvent, EventData } from "@/utils/eventUtils"
 import { useAuth } from "@/context/AuthContext"
 import { parseISO } from "date-fns"
 import React from "react"
 import { useToast } from "@/components/ui/use-toast"
+import { uploadMedia, ensureAccessibleStorageUrl } from "@/utils/mediaUtils"
+import Image from "next/image"
 
 export default function EditEventPage({ params }: { params: Promise<{ id: string }> }) {
   const unwrappedParams = React.use(params) as { id: string }
@@ -94,6 +95,8 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
   // Cover photos
   const [photos, setPhotos] = useState<File[]>([])
   const [photoPreviewUrls, setPhotoPreviewUrls] = useState<string[]>([])
+  const [photoUploadProgress, setPhotoUploadProgress] = useState<number[]>([])
+  const [photoUploadErrors, setPhotoUploadErrors] = useState<(string | null)[]>([])
   const [existingPhotos, setExistingPhotos] = useState<string[]>([])
   const photoInputRef = useRef<HTMLInputElement>(null)
 
@@ -192,10 +195,11 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
           })
         }
 
-        // Set existing photos
+        // Set existing photos if available
         if (event.coverPhotoUrls) {
-          setExistingPhotos(event.coverPhotoUrls)
-          setPhotoPreviewUrls(event.coverPhotoUrls)
+          const accessibleUrls = event.coverPhotoUrls.map(url => ensureAccessibleStorageUrl(url));
+          setExistingPhotos(accessibleUrls);
+          setPhotoPreviewUrls(accessibleUrls);
         }
 
       } catch (error) {
@@ -220,7 +224,7 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
     if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files)
       
-      if (photos.length + newFiles.length > 5) {
+      if (photos.length + existingPhotos.length + newFiles.length > 5) {
         toast({
           variant: "destructive",
           title: "Upload limit reached",
@@ -234,6 +238,10 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
       // Create preview URLs
       const newPreviewUrls = newFiles.map(file => URL.createObjectURL(file))
       setPhotoPreviewUrls(prev => [...prev, ...newPreviewUrls])
+      
+      // Initialize progress and errors arrays for new photos
+      setPhotoUploadProgress(prev => [...prev, ...newFiles.map(() => 0)])
+      setPhotoUploadErrors(prev => [...prev, ...newFiles.map(() => null)])
     }
   }
 
@@ -248,6 +256,15 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
       const adjustedIndex = index - existingPhotos.length
       setPhotos(prev => prev.filter((_, i) => i !== adjustedIndex))
       URL.revokeObjectURL(photoPreviewUrls[index])
+      
+      // Update progress and errors arrays
+      const newProgress = [...photoUploadProgress]
+      const newErrors = [...photoUploadErrors]
+      newProgress.splice(adjustedIndex, 1)
+      newErrors.splice(adjustedIndex, 1)
+      setPhotoUploadProgress(newProgress)
+      setPhotoUploadErrors(newErrors)
+      
       setPhotoPreviewUrls(prev => prev.filter((_, i) => i !== index))
     }
   }
@@ -285,19 +302,43 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
         return
       }
 
-      // Convert uploaded photos to base64 format
-      const photoPromises = photos.map(async (file) => {
-        return new Promise<string>((resolve) => {
-          const reader = new FileReader()
-          reader.onloadend = () => {
-            resolve(reader.result as string)
-          }
-          reader.readAsDataURL(file)
-        })
+      // Upload new photos using the standardized uploadMedia function
+      const photoUploadPromises = photos.map(async (file, index) => {
+        try {
+          return await uploadMedia(
+            file, 
+            eventId, // Use actual event ID for uploads
+            'image',
+            {
+              onProgress: (progress) => {
+                setPhotoUploadProgress(prev => {
+                  const newProgress = [...prev]
+                  newProgress[index] = progress
+                  return newProgress
+                })
+              },
+              onError: (error) => {
+                setPhotoUploadErrors(prev => {
+                  const newErrors = [...prev]
+                  newErrors[index] = error.message
+                  return newErrors
+                })
+                console.error(`Error uploading photo ${index}:`, error)
+              }
+            }
+          )
+        } catch (error) {
+          console.error(`Failed to upload photo ${index}:`, error)
+          throw error
+        }
       })
 
-      const base64Photos = await Promise.all(photoPromises)
-      const allPhotos = [...existingPhotos, ...base64Photos]
+      // Wait for all photos to upload and get their URLs
+      const newPhotoUrls = await Promise.all(photoUploadPromises)
+      console.log(`Successfully uploaded ${newPhotoUrls.length} new photos for event`)
+      
+      // Combine existing and new photo URLs
+      const allPhotos = [...existingPhotos, ...newPhotoUrls]
 
       // Format dates for API
       const formattedStartDate = `${eventDate.year}-${String(eventDate.month).padStart(2, '0')}-${String(eventDate.day).padStart(2, '0')}`
@@ -522,44 +563,58 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
             </h2>
 
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-              {photoPreviewUrls.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="relative">
-                    <DynastyCarousel
-                      items={photoPreviewUrls}
-                      type="image"
-                      showThumbs={true}
-                      imageHeight={300}
-                      onItemClick={removePhoto}
-                      className="cursor-pointer"
+              <div className="grid grid-cols-5 gap-2 mt-4">
+                {photoPreviewUrls.map((url, index) => (
+                  <div key={index} className="relative rounded-md overflow-hidden h-24 bg-gray-100">
+                    <Image 
+                      src={url} 
+                      width={100}
+                      height={100}
+                      alt={`Preview ${index + 1}`} 
+                      className="w-full h-full object-cover" 
                     />
-                    <div className="mt-2 text-xs text-gray-500 text-center">
-                      Click on any photo to remove it
-                    </div>
-                  </div>
-
-                  {photoPreviewUrls.length < 5 && (
-                    <Button
+                    <button
                       type="button"
-                      variant="outline"
-                      className="w-full border-dashed"
-                      onClick={() => photoInputRef.current?.click()}
+                      onClick={() => removePhoto(index)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition"
+                      aria-label="Remove photo"
                     >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add More Photos ({photoPreviewUrls.length}/5)
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div
-                  className="flex flex-col items-center justify-center py-12 cursor-pointer"
-                  onClick={() => photoInputRef.current?.click()}
-                >
-                  <Upload className="h-12 w-12 text-gray-400 mb-4" />
-                  <p className="text-sm font-medium text-gray-700">Click to upload event photos</p>
-                  <p className="text-xs text-gray-500 mt-1">Upload up to 5 photos (PNG, JPG)</p>
-                </div>
-              )}
+                      <X className="h-3 w-3" />
+                    </button>
+                    
+                    {/* Show upload progress for new photos */}
+                    {index >= existingPhotos.length && 
+                     photoUploadProgress[index - existingPhotos.length] > 0 && 
+                     photoUploadProgress[index - existingPhotos.length] < 100 && (
+                      <div className="absolute bottom-0 left-0 w-full bg-gray-200 h-1">
+                        <div 
+                          className="bg-[#0A5C36] h-1 transition-all duration-300"
+                          style={{ width: `${photoUploadProgress[index - existingPhotos.length]}%` }}
+                        ></div>
+                      </div>
+                    )}
+                    
+                    {/* Show error if upload failed */}
+                    {index >= existingPhotos.length && 
+                     photoUploadErrors[index - existingPhotos.length] && (
+                      <div className="absolute inset-0 bg-red-500 bg-opacity-60 flex items-center justify-center">
+                        <AlertTriangle className="text-white h-8 w-8" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                
+                {/* Photo upload button */}
+                {photoPreviewUrls.length < 5 && (
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    className="flex items-center justify-center border-2 border-dashed border-gray-300 rounded-md h-24 hover:border-gray-400 transition"
+                  >
+                    <ImagePlus className="h-6 w-6 text-gray-400" />
+                  </button>
+                )}
+              </div>
 
               <input
                 type="file"

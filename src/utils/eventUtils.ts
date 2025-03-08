@@ -200,6 +200,51 @@ export async function updateEventRsvp(eventId: string, status: 'yes' | 'maybe' |
   }
 }
 
+// Add this helper function for image validation
+/**
+ * Validates images before sending to Firebase, checking size and format.
+ * @param images Array of image URLs or base64 data
+ * @returns Object containing isValid flag and optional error message
+ */
+export function validateEventImages(images?: string[]): { isValid: boolean; error?: string } {
+  if (!images || !images.length) {
+    return { isValid: true };
+  }
+
+  const MAX_IMAGE_SIZE_MB = 5; // 5MB limit per image
+  const MAX_TOTAL_IMAGES = 10; // Maximum number of images per event
+
+  // Check number of images
+  if (images.length > MAX_TOTAL_IMAGES) {
+    return {
+      isValid: false,
+      error: `Too many images. Maximum allowed is ${MAX_TOTAL_IMAGES}.`
+    };
+  }
+
+  // Check size of base64 images
+  for (let i = 0; i < images.length; i++) {
+    const image = images[i];
+    if (typeof image === 'string' && image.startsWith('data:image')) {
+      // Estimate base64 size - each base64 character represents ~0.75 bytes
+      const base64Data = image.split(',')[1];
+      if (base64Data) {
+        const sizeInBytes = (base64Data.length * 3) / 4;
+        const sizeInMB = sizeInBytes / (1024 * 1024);
+        
+        if (sizeInMB > MAX_IMAGE_SIZE_MB) {
+          return {
+            isValid: false,
+            error: `Image ${i + 1} is too large (${sizeInMB.toFixed(1)}MB). Maximum allowed is ${MAX_IMAGE_SIZE_MB}MB.`
+          };
+        }
+      }
+    }
+  }
+
+  return { isValid: true };
+}
+
 /**
  * Update an existing event
  */
@@ -211,9 +256,18 @@ export async function updateEvent(eventId: string, eventData: Partial<EventData>
       eventData.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     }
     
+    // Validate images before sending to the server
+    if (eventData.coverPhotoUrls) {
+      const validationResult = validateEventImages(eventData.coverPhotoUrls);
+      if (!validationResult.isValid) {
+        throw new Error(validationResult.error);
+      }
+    }
+    
     console.log("[eventUtils] Updating event with data:", { 
       eventId, 
-      daySpecificTimes: eventData.daySpecificTimes 
+      daySpecificTimes: eventData.daySpecificTimes,
+      hasCoverPhotos: eventData.coverPhotoUrls ? eventData.coverPhotoUrls.length : 0
     });
     
     // Create a copy of the data to ensure it's not modified by reference
@@ -228,7 +282,17 @@ export async function updateEvent(eventId: string, eventData: Partial<EventData>
       }
     };
     
-    console.log("[eventUtils] Final data being sent to Firebase:", JSON.stringify(dataToSend));
+    // Log data being sent, but truncate large values like base64 images
+    const logData = JSON.parse(JSON.stringify(dataToSend));
+    if (logData.eventData.coverPhotoUrls) {
+      logData.eventData.coverPhotoUrls = logData.eventData.coverPhotoUrls.map((url: string) => {
+        if (typeof url === 'string' && url.startsWith('data:image')) {
+          return `${url.substring(0, 30)}...truncated base64 image...`;
+        }
+        return url;
+      });
+    }
+    console.log("[eventUtils] Final data being sent to Firebase:", logData);
     
     const updateEventFunc = httpsCallable<{ eventId: string, eventData: Partial<EventData> }, { success: boolean }>(
       functions, 

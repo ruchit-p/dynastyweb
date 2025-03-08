@@ -11,6 +11,7 @@ import { Calendar, Clock, MapPin, Check, X, HelpCircle, Loader2 } from "lucide-r
 import { useRouter } from "next/navigation"
 import { EventCardProps, STATUS_COLORS } from "./EventCard"
 import { updateEventRsvp } from "@/utils/eventUtils"
+import { ensureAccessibleStorageUrl } from "@/utils/mediaUtils"
 
 export function EventFeedCard({
   id,
@@ -127,7 +128,7 @@ export function EventFeedCard({
         {coverImage && (
           <div className="relative h-40">
             <Image
-              src={coverImage}
+              src={ensureAccessibleStorageUrl(coverImage)}
               alt={title}
               fill
               className="object-cover"

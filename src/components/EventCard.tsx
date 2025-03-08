@@ -12,6 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { httpsCallable } from "firebase/functions"
 import { functions } from "@/lib/firebase"
 import { useRouter } from "next/navigation"
+import { ensureAccessibleStorageUrl } from "@/utils/mediaUtils"
 
 // Event categories
 export const EVENT_CATEGORIES = [
@@ -236,7 +237,7 @@ export function EventCard({
         {coverImage && (
           <div className="relative h-48">
             <Image 
-              src={coverImage} 
+              src={ensureAccessibleStorageUrl(coverImage)} 
               alt={title} 
               fill 
               className="object-cover" 

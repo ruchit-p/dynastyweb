@@ -15,16 +15,16 @@ import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
-import { Upload, X, Plus, Users, User, Info, Tag, Globe, Lock, ChevronRight, Search, Shirt, Loader2, AlertTriangle, ImagePlus} from "lucide-react"
+import { X, Plus, Users, User, Info, Tag, Globe, Lock, ChevronRight, Search, Shirt, Loader2, AlertTriangle, ImagePlus} from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DateSelector } from "@/components/date-selector"
 import { DateRangePicker } from "@/components/date-range-picker"
 import { LocationSearch } from "@/components/location-search"
-import DynastyCarousel from "@/components/DynastyCarousel"
 import { functions } from "@/lib/firebase"
 import { httpsCallable } from "firebase/functions"
 import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
+import { uploadMedia } from "@/utils/mediaUtils"
 
 export default function CreateEventPage() {
   const router = useRouter()
@@ -95,6 +95,8 @@ export default function CreateEventPage() {
   // Cover photos
   const [photos, setPhotos] = useState<File[]>([])
   const [photoPreviewUrls, setPhotoPreviewUrls] = useState<string[]>([])
+  const [photoUploadProgress, setPhotoUploadProgress] = useState<number[]>([])
+  const [photoUploadErrors, setPhotoUploadErrors] = useState<(string | null)[]>([])
   const photoInputRef = useRef<HTMLInputElement>(null)
 
   // Invite settings
@@ -244,21 +246,31 @@ export default function CreateEventPage() {
     // Create preview URLs
     const newPreviewUrls = newFiles.map((file) => URL.createObjectURL(file))
     setPhotoPreviewUrls([...photoPreviewUrls, ...newPreviewUrls])
+    
+    // Initialize progress and errors arrays for new photos
+    setPhotoUploadProgress(prev => [...prev, ...newFiles.map(() => 0)])
+    setPhotoUploadErrors(prev => [...prev, ...newFiles.map(() => null)])
   }
 
   // Remove a photo
   const removePhoto = (index: number) => {
     const newPhotos = [...photos]
     const newPreviewUrls = [...photoPreviewUrls]
+    const newProgress = [...photoUploadProgress]
+    const newErrors = [...photoUploadErrors]
 
     // Revoke the object URL to avoid memory leaks
     URL.revokeObjectURL(newPreviewUrls[index])
 
     newPhotos.splice(index, 1)
     newPreviewUrls.splice(index, 1)
+    newProgress.splice(index, 1)
+    newErrors.splice(index, 1)
 
     setPhotos(newPhotos)
     setPhotoPreviewUrls(newPreviewUrls)
+    setPhotoUploadProgress(newProgress)
+    setPhotoUploadErrors(newErrors)
   }
 
   // Toggle member selection
@@ -307,18 +319,43 @@ export default function CreateEventPage() {
     try {
       setLoading(true)
 
-      // Convert uploaded photos to base64 format
-      const photoPromises = photos.map(async (file) => {
-        return new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            resolve(reader.result as string);
-          };
-          reader.readAsDataURL(file);
-        });
-      });
+      // Generate a temporary ID for the event (will be replaced by actual ID after creation)
+      const tempEventId = `temp_event_${Date.now()}_${Math.random().toString(36).substring(2)}`
+      
+      // Upload photos using the standardized uploadMedia function instead of base64 conversion
+      const photoUploadPromises = photos.map(async (file, index) => {
+        try {
+          return await uploadMedia(
+            file, 
+            tempEventId, 
+            'image',
+            {
+              onProgress: (progress) => {
+                setPhotoUploadProgress(prev => {
+                  const newProgress = [...prev]
+                  newProgress[index] = progress
+                  return newProgress
+                })
+              },
+              onError: (error) => {
+                setPhotoUploadErrors(prev => {
+                  const newErrors = [...prev]
+                  newErrors[index] = error.message
+                  return newErrors
+                })
+                console.error(`Error uploading photo ${index}:`, error)
+              }
+            }
+          )
+        } catch (error) {
+          console.error(`Failed to upload photo ${index}:`, error)
+          throw error
+        }
+      })
 
-      const base64Photos = await Promise.all(photoPromises);
+      // Wait for all photos to upload and get their URLs
+      const photoUrls = await Promise.all(photoUploadPromises)
+      console.log(`Successfully uploaded ${photoUrls.length} photos for event`)
 
       // Format dates for API
       const formattedStartDate = `${eventDate.year}-${String(eventDate.month).padStart(2, '0')}-${String(eventDate.day).padStart(2, '0')}`;
@@ -357,7 +394,7 @@ export default function CreateEventPage() {
         rsvpDeadline: formattedRsvpDeadline,
         hostId: currentUser?.uid, 
         invitedMembers: inviteType === "all" ? familyMembers.map(member => member.id) : selectedMembers,
-        coverPhotos: base64Photos,
+        coverPhotos: photoUrls,
       }
 
       console.log("Submitting event data to Firebase...");
@@ -478,44 +515,49 @@ export default function CreateEventPage() {
             </h2>
 
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-              {photoPreviewUrls.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="relative">
-                    <DynastyCarousel
-                      items={photoPreviewUrls}
-                      type="image"
-                      showThumbs={true}
-                      imageHeight={300}
-                      onItemClick={removePhoto}
-                      className="cursor-pointer"
-                    />
-                    <div className="mt-2 text-xs text-gray-500 text-center">
-                      Click on any photo to remove it
-                    </div>
-                  </div>
-
-                  {photoPreviewUrls.length < 5 && (
-                    <Button
+              <div className="grid grid-cols-5 gap-2 mt-4">
+                {photoPreviewUrls.map((url, index) => (
+                  <div key={index} className="relative rounded-md overflow-hidden h-24 bg-gray-100">
+                    <Image src={url} width={100} height={100} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
+                    <button
                       type="button"
-                      variant="outline"
-                      className="w-full border-dashed"
-                      onClick={() => photoInputRef.current?.click()}
+                      onClick={() => removePhoto(index)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition"
+                      aria-label="Remove photo"
                     >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add More Photos ({photoPreviewUrls.length}/5)
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div
-                  className="flex flex-col items-center justify-center py-12 cursor-pointer"
-                  onClick={() => photoInputRef.current?.click()}
-                >
-                  <Upload className="h-12 w-12 text-gray-400 mb-4" />
-                  <p className="text-sm font-medium text-gray-700">Click to upload event photos</p>
-                  <p className="text-xs text-gray-500 mt-1">Upload up to 5 photos (PNG, JPG)</p>
-                </div>
-              )}
+                      <X className="h-3 w-3" />
+                    </button>
+                    
+                    {/* Show upload progress if this is a new photo being uploaded */}
+                    {photoUploadProgress[index] > 0 && photoUploadProgress[index] < 100 && (
+                      <div className="absolute bottom-0 left-0 w-full bg-gray-200 h-1">
+                        <div 
+                          className="bg-[#0A5C36] h-1 transition-all duration-300"
+                          style={{ width: `${photoUploadProgress[index]}%` }}
+                        ></div>
+                      </div>
+                    )}
+                    
+                    {/* Show error if upload failed */}
+                    {photoUploadErrors[index] && (
+                      <div className="absolute inset-0 bg-red-500 bg-opacity-60 flex items-center justify-center">
+                        <AlertTriangle className="text-white h-8 w-8" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                
+                {/* Photo upload button */}
+                {photoPreviewUrls.length < 5 && (
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    className="flex items-center justify-center border-2 border-dashed border-gray-300 rounded-md h-24 hover:border-gray-400 transition"
+                  >
+                    <ImagePlus className="h-6 w-6 text-gray-400" />
+                  </button>
+                )}
+              </div>
 
               <input
                 type="file"

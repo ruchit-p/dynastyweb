@@ -292,4 +292,101 @@ export const uploadMedia = async (
     callbacks?.onError?.(finalError);
     throw finalError;
   }
+};
+
+/**
+ * Uploads a profile picture blob to Firebase Storage with progress tracking
+ * This function is designed to work with Blob objects from image cropping
+ */
+export const uploadProfilePicture = async (
+  imageBlob: Blob,
+  userId: string,
+  callbacks?: UploadProgressCallback
+): Promise<string> => {
+  try {
+    // Create a unique filename with timestamp
+    const timestamp = Date.now();
+    const randomString = Math.random().toString(36).substring(2);
+    const filename = `profile_${timestamp}_${randomString}.jpg`;
+    const storageRef = ref(storage, `profilePictures/${userId}/${filename}`);
+
+    // Upload the blob with progress tracking
+    return new Promise((resolve, reject) => {
+      const uploadTask = uploadBytesResumable(storageRef, imageBlob, {
+        contentType: 'image/jpeg',
+        customMetadata: {
+          uploadedBy: userId,
+          uploadedAt: new Date().toISOString(),
+          mediaType: 'profile'
+        }
+      });
+
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          callbacks?.onProgress?.(progress);
+        },
+        (error) => {
+          const uploadError = new Error(
+            `Failed to upload profile picture: ${error.message || 'Unknown error'}`
+          );
+          callbacks?.onError?.(uploadError);
+          reject(uploadError);
+        },
+        async () => {
+          try {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            
+            // Ensure the URL has the alt=media parameter for direct viewing
+            const formattedUrl = downloadURL.includes('?') 
+              ? (downloadURL.includes('alt=media') ? downloadURL : `${downloadURL}&alt=media`)
+              : `${downloadURL}?alt=media`;
+              
+            resolve(formattedUrl);
+          } catch (error) {
+            const urlError = new Error(
+              `Failed to get download URL for profile picture: ${(error as Error).message || 'Unknown error'}`
+            );
+            callbacks?.onError?.(urlError);
+            reject(urlError);
+          }
+        }
+      );
+    });
+  } catch (error) {
+    const finalError = error as Error;
+    callbacks?.onError?.(finalError);
+    throw finalError;
+  }
+};
+
+/**
+ * Ensures Firebase Storage URLs are properly formatted for access
+ * Handles both signed URLs and public URLs with alt=media parameter
+ */
+export const ensureAccessibleStorageUrl = (url: string): string => {
+  if (!url) return url;
+  
+  // If it's not a Storage URL, return as is
+  if (!url.includes('storage.googleapis.com') && !url.includes('firebasestorage.googleapis.com')) {
+    return url;
+  }
+  
+  // If it's already a signed URL, return as is
+  if (url.includes('token=')) {
+    return url;
+  }
+  
+  // For non-signed storage URLs, ensure they have alt=media parameter
+  if (url.includes('?')) {
+    // URL already has parameters
+    if (!url.includes('alt=media')) {
+      return `${url}&alt=media`;
+    }
+    return url;
+  } else {
+    // URL has no parameters yet
+    return `${url}?alt=media`;
+  }
 }; 

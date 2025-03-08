@@ -1,20 +1,19 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect, useCallback } from "react"
-import Image from "next/image"
+import { useState, useEffect } from "react"
+import { useAuth } from "@/context/AuthContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Camera, Loader2 } from "lucide-react"
-import { useAuth } from "@/context/AuthContext"
 import { useToast } from "@/components/ui/use-toast"
-import { doc, updateDoc, serverTimestamp, FieldValue } from "firebase/firestore"
-import { db, storage } from "@/lib/firebase"
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
+import Image from "next/image"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import ImageCropper from "@/components/ImageCropper"
+import { uploadProfilePicture } from "@/utils/mediaUtils"
+import { httpsCallable } from "firebase/functions"
+import { functions } from "@/lib/firebase"
 
 // MARK: - Helper Constants
 const MONTHS = [
@@ -55,14 +54,14 @@ export default function PersonalInformationPage() {
   const [imageLoaded, setImageLoaded] = useState(false);
 
   // Function to preload the profile image
-  const preloadProfileImage = useCallback((url: string) => {
+  const preloadProfileImage = (url: string) => {
     if (!url || url === "/avatar.svg") return;
     
     const img = new window.Image();
     img.src = url;
     img.onload = () => setImageLoaded(true);
     img.onerror = () => console.error("Error preloading profile image:", url);
-  }, []);
+  }
 
   // Generate arrays for days and years
   const getDaysInMonth = (month: number, year: number): number[] => {
@@ -195,48 +194,47 @@ export default function PersonalInformationPage() {
 
       // Upload new profile picture if one was cropped and selected
       if (croppedImage) {
-        // Create a unique filename with timestamp
-        const timestamp = new Date().getTime();
-        const uniqueFileName = `profile_${timestamp}.jpg`;
-        
-        // Create a reference with the unique filename
-        const storageRef = ref(storage, `profilePictures/${currentUser.uid}/${uniqueFileName}`);
-        
-        // Log upload start
-        console.log(`Uploading profile picture: ${uniqueFileName}`);
-        
-        // Upload the cropped image blob
-        const uploadResult = await uploadBytes(storageRef, croppedImage);
-        console.log("Upload complete:", uploadResult);
-        
-        // Get download URL with alt=media parameter
-        let downloadUrl = await getDownloadURL(storageRef);
-        
-        // Ensure the URL has the alt=media parameter
-        if (!downloadUrl.includes('alt=media')) {
-          downloadUrl = downloadUrl.includes('?') 
-            ? `${downloadUrl}&alt=media` 
-            : `${downloadUrl}?alt=media`;
+        try {
+          // Use the standardized uploadProfilePicture function
+          profilePictureUrl = await uploadProfilePicture(
+            croppedImage,
+            currentUser.uid,
+            {
+              onProgress: (progress) => {
+                console.log(`Profile picture upload progress: ${progress}%`)
+              },
+              onError: (error) => {
+                console.error("Profile picture upload error:", error)
+                toast({
+                  title: "Upload Error",
+                  description: error.message || "Failed to upload profile picture",
+                  variant: "destructive",
+                })
+              }
+            }
+          )
+          
+          console.log("Profile picture uploaded successfully:", profilePictureUrl)
+          
+          // Clean up the cropped image and new profile picture state to prevent memory leaks
+          setCroppedImage(null)
+          
+          // Clean up any object URLs to prevent memory leaks
+          if (newProfilePicture) {
+            URL.revokeObjectURL(URL.createObjectURL(newProfilePicture))
+            setNewProfilePicture(null)
+          }
+          setTempImageUrl(null)
+        } catch (error) {
+          console.error("Failed to upload profile picture:", error)
+          toast({
+            title: "Upload Error",
+            description: "Failed to upload profile picture. Please try again.",
+            variant: "destructive",
+          })
+          setIsSaving(false)
+          return
         }
-        
-        // Add cache buster for immediate refresh
-        const cacheBuster = `&_cb=${Date.now()}`;
-        downloadUrl = downloadUrl.includes('?') 
-          ? `${downloadUrl}${cacheBuster}` 
-          : `${downloadUrl}?${cacheBuster.substring(1)}`;
-        
-        console.log("Download URL:", downloadUrl);
-        profilePictureUrl = downloadUrl;
-        
-        // Clear the cropped image and new profile picture state to prevent memory leaks
-        setCroppedImage(null);
-        
-        // Clean up any object URLs to prevent memory leaks
-        if (newProfilePicture) {
-          URL.revokeObjectURL(URL.createObjectURL(newProfilePicture));
-          setNewProfilePicture(null);
-        }
-        setTempImageUrl(null);
       }
 
       // Parse date of birth into Date object if all parts exist
@@ -247,25 +245,31 @@ export default function PersonalInformationPage() {
           parseInt(dobData.year),
           parseInt(dobData.month) - 1,
           parseInt(dobData.day)
-        );
+        )
       }
 
-      // Update the user document in Firestore
-      await updateDoc(doc(db, "users", currentUser.uid), {
+      // Prepare the update data
+      const updateData = {
         firstName: formData.firstName,
         lastName: formData.lastName,
         phoneNumber: formData.phoneNumber || null,
         gender: formData.gender,
         dateOfBirth: dateOfBirth,
         profilePicture: profilePictureUrl,
-        updatedAt: serverTimestamp() as FieldValue
+      }
+
+      // Call the Firebase function to update the user profile
+      const updateUserProfile = httpsCallable(functions, 'updateUserProfile')
+      await updateUserProfile({
+        userId: currentUser.uid,
+        updates: updateData
       })
 
       // Immediately refresh user data in context to update UI across all components
-      await refreshFirestoreUser();
+      await refreshFirestoreUser()
       
       // Reset UI state
-      setIsEditing(false);
+      setIsEditing(false)
       
       toast({
         title: "Profile updated",
