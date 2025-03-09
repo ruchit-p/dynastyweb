@@ -83,11 +83,6 @@ export const invitedSignupFormSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   confirmPassword: z.string(),
-  firstName: nameSchema,
-  lastName: nameSchema,
-  phone: phoneSchema,
-  dateOfBirth: dateOfBirthSchema,
-  gender: genderSchema,
   invitationId: z.string(),
   token: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {

@@ -3,11 +3,18 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from './AuthContext'
 import OnboardingForm from '@/components/OnboardingForm'
-import { doc, getDoc, updateDoc } from 'firebase/firestore'
-import { db, functions } from '@/lib/firebase'
+import { functions } from '@/lib/firebase'
 import { usePathname } from 'next/navigation'
 import { useToast } from '@/components/ui/use-toast'
 import { httpsCallable } from 'firebase/functions'
+
+type PrefillData = {
+  firstName?: string
+  lastName?: string
+  dateOfBirth?: Date | null
+  gender?: string
+  phoneNumber?: string
+}
 
 type OnboardingContextType = {
   showOnboarding: boolean
@@ -25,6 +32,7 @@ const OnboardingContext = createContext<OnboardingContextType | undefined>(undef
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true)
+  const [prefillData, setPrefillData] = useState<PrefillData | null>(null)
   const { currentUser, loading } = useAuth()
   const isCheckingRef = useRef(false)
   const lastCheckedUserIdRef = useRef<string | null>(null)
@@ -46,32 +54,75 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     lastCheckedUserIdRef.current = currentUser.uid
     
     try {
-      // Add a slight delay to ensure Firestore has the latest data
+      // Add a slight delay to ensure data is ready
       await new Promise(resolve => setTimeout(resolve, 500))
       
-      const userDocRef = doc(db, 'users', currentUser.uid)
-      const userDoc = await getDoc(userDocRef)
+      // Use Cloud Function to get user data instead of direct Firestore access
+      const getUserData = httpsCallable<{ userId: string }, { 
+        userData: {
+          onboardingCompleted: boolean;
+          firstName?: string;
+          lastName?: string;
+          dateOfBirth?: string | null;
+          gender?: string;
+          phoneNumber?: string;
+        };
+        success: boolean;
+        message?: string;
+      }>(functions, 'getUserData');
       
-      if (!userDoc.exists()) {
-        // If user document doesn't exist yet, assume onboarding not completed
-        setHasCompletedOnboarding(false)
-        setShowOnboarding(true)
-        return
+      const { data } = await getUserData({ userId: currentUser.uid });
+      
+      if (!data.success) {
+        // If we get a 'not found' message, it means the user doesn't exist yet
+        if (data.message === "User not found") {
+          setHasCompletedOnboarding(false);
+          setShowOnboarding(true);
+          return;
+        }
+        
+        throw new Error(data.message || 'Failed to fetch user data');
       }
       
-      const userData = userDoc.data()
+      const userData = data.userData;
+      
+      if (!userData) {
+        // If user document doesn't exist yet, assume onboarding not completed
+        setHasCompletedOnboarding(false);
+        setShowOnboarding(true);
+        return;
+      }
       
       // Check if onboarding has been completed
-      const onboardingCompleted = userData?.onboardingCompleted || false
+      const onboardingCompleted = userData.onboardingCompleted || false;
       
-      setHasCompletedOnboarding(onboardingCompleted)
+      setHasCompletedOnboarding(onboardingCompleted);
+      
+      // Extract prefill data from user document
+      if (!onboardingCompleted) {
+        const dateOfBirth = userData.dateOfBirth;
+        let parsedDate = null;
+        
+        if (dateOfBirth) {
+          // Parse the date from the response
+          parsedDate = new Date(dateOfBirth);
+        }
+        
+        setPrefillData({
+          firstName: userData.firstName || '',
+          lastName: userData.lastName || '',
+          dateOfBirth: parsedDate,
+          gender: userData.gender || 'unspecified',
+          phoneNumber: userData.phoneNumber || ''
+        });
+      }
       
       // Only show onboarding modal if onboarding is not completed
       // and we're not on a page that should skip the onboarding check
       if (!onboardingCompleted && !shouldSkip) {
-        setShowOnboarding(true)
+        setShowOnboarding(true);
       } else {
-        setShowOnboarding(false)
+        setShowOnboarding(false);
       }
     } catch (error) {
       console.error('Error checking onboarding status:', error)
@@ -119,23 +170,14 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
         throw new Error('User not authenticated')
       }
 
-      // Update user document to mark onboarding as completed
-      const userDocRef = doc(db, 'users', currentUser.uid)
-      await updateDoc(userDocRef, {
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        displayName: `${userData.firstName} ${userData.lastName}`,
-        dateOfBirth: userData.dateOfBirth,
-        gender: userData.gender || 'unspecified',
-        onboardingCompleted: true,
-      })
-
-      // Call the Cloud Function to complete onboarding (create family tree, history book, etc.)
+      // Call the Cloud Function to complete onboarding
+      // This will handle all database operations in one call
       const completeOnboardingFunction = httpsCallable(functions, 'completeOnboarding')
       await completeOnboardingFunction({
         userId: currentUser.uid,
         firstName: userData.firstName,
         lastName: userData.lastName,
+        displayName: `${userData.firstName} ${userData.lastName}`,
         dateOfBirth: userData.dateOfBirth,
         gender: userData.gender || 'unspecified',
       })
@@ -170,6 +212,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
           isOpen={showOnboarding}
           onComplete={handleOnboardingComplete}
           userEmail={currentUser.email || undefined}
+          prefillData={prefillData}
         />
       )}
     </OnboardingContext.Provider>

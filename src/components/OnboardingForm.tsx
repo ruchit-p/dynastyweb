@@ -59,15 +59,22 @@ interface OnboardingFormProps {
     gender?: 'male' | 'female' | 'other' | 'unspecified'
   }) => Promise<void>
   userEmail?: string
+  prefillData?: {
+    firstName?: string
+    lastName?: string
+    dateOfBirth?: Date | null
+    gender?: string
+    phoneNumber?: string
+  } | null
 }
 
-export default function OnboardingForm({ isOpen, onComplete, userEmail }: OnboardingFormProps) {
-  const [firstName, setFirstName] = useState("")
-  const [lastName, setLastName] = useState("")
+export default function OnboardingForm({ isOpen, onComplete, userEmail, prefillData }: OnboardingFormProps) {
+  const [firstName, setFirstName] = useState(prefillData?.firstName || "")
+  const [lastName, setLastName] = useState(prefillData?.lastName || "")
   const [birthMonth, setBirthMonth] = useState<string>("")
   const [birthDay, setBirthDay] = useState<string>("")
   const [birthYear, setBirthYear] = useState<string>("")
-  const [gender, setGender] = useState<string>("unspecified")
+  const [gender, setGender] = useState<string>(prefillData?.gender || "unspecified")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState({
     firstName: "",
@@ -76,6 +83,19 @@ export default function OnboardingForm({ isOpen, onComplete, userEmail }: Onboar
     gender: "",
   })
   const { toast } = useToast()
+
+  // Set date of birth from prefillData if available
+  useEffect(() => {
+    if (prefillData?.dateOfBirth) {
+      const date = new Date(prefillData.dateOfBirth);
+      
+      if (!isNaN(date.getTime())) {
+        setBirthYear(date.getFullYear().toString());
+        setBirthMonth((date.getMonth() + 1).toString());
+        setBirthDay(date.getDate().toString());
+      }
+    }
+  }, [prefillData]);
 
   const months = useMemo(() => [
     { value: "1", label: "January" },
