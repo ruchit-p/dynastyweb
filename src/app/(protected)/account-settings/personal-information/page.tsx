@@ -53,16 +53,6 @@ export default function PersonalInformationPage() {
   })
   const [imageLoaded, setImageLoaded] = useState(false);
 
-  // Function to preload the profile image
-  const preloadProfileImage = (url: string) => {
-    if (!url || url === "/avatar.svg") return;
-    
-    const img = new window.Image();
-    img.src = url;
-    img.onload = () => setImageLoaded(true);
-    img.onerror = () => console.error("Error preloading profile image:", url);
-  }
-
   // Generate arrays for days and years
   const getDaysInMonth = (month: number, year: number): number[] => {
     const daysInMonth = new Date(year, month, 0).getDate();
@@ -112,12 +102,11 @@ export default function PersonalInformationPage() {
       
       setDobData(formatDateForInputs(firestoreUser.dateOfBirth));
       
-      // Preload the profile image when firestoreUser changes
-      if (firestoreUser.profilePicture) {
-        preloadProfileImage(firestoreUser.profilePicture);
-      }
+      // Reset image loaded state when firestoreUser changes
+      // The Image component will handle setting it to true via onLoadingComplete
+      setImageLoaded(false);
     }
-  }, [firestoreUser, preloadProfileImage])
+  }, [firestoreUser])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
