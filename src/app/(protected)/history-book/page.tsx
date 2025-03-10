@@ -145,7 +145,7 @@ export default function HistoryBookPage() {
     <div className="min-h-screen bg-[#F9FAFB] flex flex-col">
       <main className="container py-6 pb-6 flex-grow">
         <div className="flex justify-between my-6 items-center mb-6">
-          <h1 className="text-2xl font-bold text-[#0A5C36]">My History Book</h1>
+          <h1 className="text-2xl font-bold text-[#000000]">My History Book</h1>
           <Link href="/create-story">
             <Button className="bg-[#0A5C36] hover:bg-[#0A5C36]/90 text-white">
               <PenSquare className="mr-2 h-4 w-4" />

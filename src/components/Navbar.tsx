@@ -14,9 +14,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Bell, Settings, LogOut, Plus, BookOpen, Users, Home, PenSquare, Menu, Calendar } from "lucide-react"
+import { Settings, LogOut, Plus, BookOpen, Users, Home, PenSquare, Menu, Calendar } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext"
+import NotificationBell from "./NotificationBell"
 
 interface User {
   photoURL: string | null
@@ -150,10 +151,7 @@ export default function Navbar({ user }: NavbarProps) {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-600 hover:text-[#0A5C36]">
-            <Bell className="h-5 w-5" />
-            <span className="sr-only">Notifications</span>
-          </Button>
+          <NotificationBell />
 
           {/* Profile Dropdown */}
           <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>

@@ -165,6 +165,9 @@ export function DateRangePicker({
 
   // Clear dates function
   const clearDates = () => {
+    // Set the flag to indicate we're updating
+    isUpdatingDateRange.current = true;
+    
     setDateRange({ from: undefined, to: undefined });
     
     // Update parent component
@@ -180,7 +183,18 @@ export function DateRangePicker({
       year: 0,
     });
     
-    onMultiDayChange(false);
+    // Reset isMultiDay if needed
+    if (isMultiDay) {
+      onMultiDayChange(false);
+    }
+    
+    // Reset time setup mode
+    setIsTimeSetupMode(false);
+    
+    // Reset the update flag after all changes are applied
+    setTimeout(() => {
+      isUpdatingDateRange.current = false;
+    }, 0);
   };
 
   // Handle month navigation
@@ -262,11 +276,18 @@ export function DateRangePicker({
   
   // Simplified date range select handler
   const handleDateRangeSelect = (range: DateRange | undefined) => {
+    // Prevent infinite update loops by checking if we're already updating
+    if (isUpdatingDateRange.current) {
+      isUpdatingDateRange.current = false;
+      return;
+    }
+
     if (!range) {
       clearDates();
       return;
     }
 
+    // Set the flag to indicate we're updating
     isUpdatingDateRange.current = true;
     setDateRange(range);
     
@@ -278,11 +299,30 @@ export function DateRangePicker({
         year: range.from.getFullYear(),
       });
     } else {
+      // Clear start date if it's deselected
       onStartDateChange({
         day: 0,
         month: 0,
         year: 0,
       });
+      
+      // If start date is cleared, also clear end date to prevent inconsistent state
+      onEndDateChange({
+        day: 0,
+        month: 0,
+        year: 0,
+      });
+      
+      // Reset isMultiDay when clearing dates
+      if (isMultiDay) {
+        onMultiDayChange(false);
+      }
+      
+      // Reset the update flag and exit early
+      setTimeout(() => {
+        isUpdatingDateRange.current = false;
+      }, 0);
+      return;
     }
     
     // Update parent component with end date
@@ -294,23 +334,28 @@ export function DateRangePicker({
       });
       
       // Only update multiDay if it's different from current state
-      const newIsMultiDay = range.from ? !isSameDay(range.from, range.to) : false;
+      const newIsMultiDay = !isSameDay(range.from, range.to);
       if (newIsMultiDay !== isMultiDay) {
         onMultiDayChange(newIsMultiDay);
       }
     } else {
+      // Clear end date if it's deselected
       onEndDateChange({
         day: 0,
         month: 0,
         year: 0,
       });
       
-      // Only update if current value is true
+      // Reset isMultiDay when clearing end date
       if (isMultiDay) {
         onMultiDayChange(false);
       }
     }
-    isUpdatingDateRange.current = false;
+    
+    // Reset the update flag after all changes are applied
+    setTimeout(() => {
+      isUpdatingDateRange.current = false;
+    }, 0);
   };
 
   // Add this ref to track changes to dateTimeRanges

@@ -13,18 +13,16 @@
     
     /* Dynasty theme colors */
     --dynasty-green: 145 78% 20%; /* #0A5C36 - Deep Forest Green */
-    --dynasty-gold: 42 38% 56%; /* #C4A55C - Gold/Amber */
+    --dynasty-gold: #ffb81f; /* #ffb81f - Gold/Amber */
     --dynasty-bg-light: 220 14% 98%; /* #F9FAFB - Light gray background */
     
     /* Updated primary colors to match Dynasty theme */
     --primary: 145 78% 20%; /* #0A5C36 - Deep Forest Green */
     --primary-foreground: 0 0% 100%; /* White text on primary */
-    --secondary: 42 38% 56%; /* #C4A55C - Gold/Amber */
     --secondary-foreground: 0 0% 20%; /* Dark text on secondary */
     
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 42 38% 56%; /* Gold accent */
     --accent-foreground: 0 0% 20%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;

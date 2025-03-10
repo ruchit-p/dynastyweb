@@ -18,7 +18,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { X, Plus, Users, User, Info, Tag, Globe, Lock, ChevronRight, Search, Shirt, Loader2, AlertTriangle, ImagePlus} from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DateSelector } from "@/components/date-selector"
-import { DateRangePicker } from "@/components/date-range-picker"
+import { DateRangePicker, SimpleDate } from "@/components/date-range-picker"
 import { LocationSearch } from "@/components/location-search"
 import { functions } from "@/lib/firebase"
 import { httpsCallable } from "firebase/functions"
@@ -105,17 +105,32 @@ export default function CreateEventPage() {
   const [searchQuery, setSearchQuery] = useState("")
 
   // Memoize handlers with improved state management
-  const handleStartDateChange = useCallback((date: { day: number; month: number; year: number }) => {
-    formStateTracker.current.isUpdatingDates = true;
+  const handleStartDateChange = (date: SimpleDate) => {
+    if (date.day === 0 && date.month === 0 && date.year === 0) {
+      // Date was cleared, reset all date-related fields
+      setEventDate({ day: 0, month: 0, year: 0 });
+      setEndDate(null);
+      setIsMultiDay(false);
+      return;
+    }
+    
     setEventDate(date);
-    formStateTracker.current.isUpdatingDates = false;
-  }, []);
+  };
 
-  const handleEndDateChange = useCallback((date: { day: number; month: number; year: number } | null) => {
-    formStateTracker.current.isUpdatingDates = true;
+  const handleEndDateChange = (date: SimpleDate) => {
+    if (date.day === 0 && date.month === 0 && date.year === 0) {
+      // End date was cleared
+      setEndDate(null);
+      
+      // If end date is cleared but we have a start date, we're back to single day
+      if (eventDate.day !== 0) {
+        setIsMultiDay(false);
+      }
+      return;
+    }
+    
     setEndDate(date);
-    formStateTracker.current.isUpdatingDates = false;
-  }, []);
+  };
 
   const handleStartTimeChange = useCallback((time: string) => {
     setStartTime(time);

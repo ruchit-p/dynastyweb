@@ -2,6 +2,7 @@ import './globals.css'
 import { Inter } from 'next/font/google'
 import { AuthProvider } from '@/context/AuthContext'
 import { EmulatorProvider } from '@/context/EmulatorContext'
+import { NotificationProvider } from '@/context/NotificationContext'
 import { Toaster } from '@/components/ui/toaster'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -25,8 +26,10 @@ export default function RootLayout({
       <body className={inter.className}>
         <EmulatorProvider>
           <AuthProvider>
-            {children}
-            <Toaster />
+            <NotificationProvider>
+              {children}
+              <Toaster />
+            </NotificationProvider>
           </AuthProvider>
         </EmulatorProvider>
       </body>

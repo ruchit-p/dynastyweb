@@ -4,6 +4,7 @@ import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getAnalytics, isSupported } from 'firebase/analytics';
+import { getMessaging } from 'firebase/messaging';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -24,6 +25,16 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 const functions = getFunctions(app, 'us-central1');
 
+// Initialize messaging - but only on the client side
+let messaging = null;
+if (typeof window !== 'undefined') {
+  try {
+    messaging = getMessaging(app);
+  } catch (error) {
+    console.error('Error initializing Firebase Messaging:', error);
+  }
+}
+
 // Connect to emulators in development
 if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
   console.log('Using Firebase Emulators');
@@ -43,4 +54,4 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export { app, auth, db, storage, functions, analytics }; 
+export { app, auth, db, storage, functions, analytics, messaging }; 

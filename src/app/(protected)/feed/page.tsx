@@ -187,7 +187,7 @@ export default function FeedPage() {
     <div className="min-h-screen bg-[#F9FAFB]">
       <main className="container py-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 mt-6 gap-4 sm:gap-0">
-          <h1 className="text-2xl font-bold text-[#0A5C36]">Family Feed</h1>
+          <h1 className="text-2xl font-bold text-[#000000]">Family Feed</h1>
           <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
             <Link href="/create-story" className="w-full sm:w-auto">
               <Button 
