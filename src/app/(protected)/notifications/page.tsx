@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { logNotificationInteraction } from "@/utils/notificationUtils";
+import { Notification } from "@/utils/notificationUtils";
 
 export default function NotificationsPage() {
   const { 
@@ -21,7 +22,7 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const router = useRouter();
   
-  const handleNotificationClick = async (notification: any) => {
+  const handleNotificationClick = async (notification: Notification) => {
     // Mark as read
     if (!notification.isRead) {
       await markAsRead(notification.id);
@@ -99,7 +100,7 @@ export default function NotificationsPage() {
           <Bell className="h-12 w-12 mx-auto mb-4 text-gray-300" />
           <h3 className="text-lg font-medium">No notifications</h3>
           <p className="text-gray-500">
-            You don't have any {filter === 'unread' ? 'unread' : ''} notifications
+            You don&apos;t have any {filter === 'unread' ? 'unread' : ''} notifications
           </p>
         </div>
       ) : (

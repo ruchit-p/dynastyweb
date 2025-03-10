@@ -29,6 +29,9 @@ export default function NotificationBell() {
   
   const router = useRouter();
   
+  // Filter to only show unread notifications in the dropdown
+  const unreadNotifications = notifications.filter(notification => !notification.isRead);
+  
   const handleNotificationClick = async (notification: Notification) => {
     // Mark as read
     if (!notification.isRead) {
@@ -119,24 +122,20 @@ export default function NotificationBell() {
           <div className="flex justify-center items-center py-8">
             <div className="animate-spin h-5 w-5 border-t-2 border-[#0A5C36] border-r-2 rounded-full"></div>
           </div>
-        ) : notifications.length === 0 ? (
+        ) : unreadNotifications.length === 0 ? (
           <div className="py-6 text-center text-sm text-gray-500">
-            No notifications
+            No unread notifications
           </div>
         ) : (
-          notifications.slice(0, 8).map((notification) => (
+          unreadNotifications.slice(0, 8).map((notification) => (
             <DropdownMenuItem
               key={notification.id}
-              className={`flex flex-col items-start p-3 cursor-pointer 
-                ${notification.isRead 
-                  ? 'opacity-75 hover:opacity-100 hover:bg-[#0A5C36]/5' 
-                  : 'bg-slate-50 hover:bg-[#0A5C36]/10'
-                } transition-colors duration-150`}
+              className="flex flex-col items-start p-3 cursor-pointer bg-slate-50 hover:bg-[#0A5C36]/10 transition-colors duration-150"
               onClick={() => handleNotificationClick(notification)}
             >
               <div className="flex w-full justify-between items-start">
                 <div className="flex items-start gap-2">
-                  <div className={`mt-0.5 ${!notification.isRead ? 'text-[#0A5C36]' : 'text-gray-400'}`}>
+                  <div className="mt-0.5 text-[#0A5C36]">
                     {getNotificationIcon()}
                   </div>
                   <div className="flex flex-col">
@@ -145,26 +144,22 @@ export default function NotificationBell() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  {!notification.isRead && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 rounded-full hover:bg-[#0A5C36]/10 text-gray-400 hover:text-[#0A5C36]"
-                      onClick={(e) => handleMarkAsRead(e, notification.id)}
-                      title="Mark as read"
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                      <span className="sr-only">Mark as read</span>
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 rounded-full hover:bg-[#0A5C36]/10 text-gray-400 hover:text-[#0A5C36]"
+                    onClick={(e) => handleMarkAsRead(e, notification.id)}
+                    title="Mark as read"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    <span className="sr-only">Mark as read</span>
+                  </Button>
                   <span className="text-xs text-gray-400 whitespace-nowrap">
                     {getTimeAgo(notification.createdAt)}
                   </span>
                 </div>
               </div>
-              {!notification.isRead && (
-                <div className="absolute top-1 right-1 h-2 w-2 rounded-full bg-[#0A5C36]" />
-              )}
+              <div className="absolute top-1 right-1 h-2 w-2 rounded-full bg-[#0A5C36]" />
             </DropdownMenuItem>
           ))
         )}

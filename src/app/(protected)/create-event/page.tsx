@@ -105,7 +105,7 @@ export default function CreateEventPage() {
   const [searchQuery, setSearchQuery] = useState("")
 
   // Memoize handlers with improved state management
-  const handleStartDateChange = (date: SimpleDate) => {
+  const handleStartDateChange = useCallback((date: SimpleDate) => {
     if (date.day === 0 && date.month === 0 && date.year === 0) {
       // Date was cleared, reset all date-related fields
       setEventDate({ day: 0, month: 0, year: 0 });
@@ -115,9 +115,9 @@ export default function CreateEventPage() {
     }
     
     setEventDate(date);
-  };
+  }, []);
 
-  const handleEndDateChange = (date: SimpleDate) => {
+  const handleEndDateChange = useCallback((date: SimpleDate) => {
     if (date.day === 0 && date.month === 0 && date.year === 0) {
       // End date was cleared
       setEndDate(null);
@@ -130,7 +130,7 @@ export default function CreateEventPage() {
     }
     
     setEndDate(date);
-  };
+  }, [eventDate]);
 
   const handleStartTimeChange = useCallback((time: string) => {
     setStartTime(time);

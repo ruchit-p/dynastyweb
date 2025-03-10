@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { 
   initializeMessaging, 
