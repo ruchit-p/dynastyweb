@@ -12,7 +12,6 @@ import {
   updateEmail as firebaseUpdateEmail,
   updatePassword as firebaseUpdatePassword,
   GoogleAuthProvider,
-  OAuthProvider,
   signInWithPopup,
 } from 'firebase/auth';
 import { auth, functions, db } from '@/lib/firebase';
@@ -65,7 +64,6 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
-  signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updateEmail: (email: string) => Promise<void>;
@@ -94,7 +92,6 @@ const AuthContext = createContext<AuthContextType>({
   signUp: async () => {},
   signIn: async () => {},
   signInWithGoogle: async () => {},
-  signInWithApple: async () => {},
   signOut: async () => {},
   resetPassword: async () => {},
   updateEmail: async () => {},
@@ -244,40 +241,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const signInWithApple = async () => {
-    try {
-      const provider = new OAuthProvider('apple.com');
-      // Add scopes
-      provider.addScope('email');
-      provider.addScope('name');
-      
-      // Set custom parameters
-      provider.setCustomParameters({
-        client_id: process.env.NEXT_PUBLIC_APPLE_CLIENT_ID || 'com.mydynastyapp.web',
-      });
-      
-      const result = await signInWithPopup(auth, provider);
-      
-      // If this is the first time the user is signing in with Apple,
-      // we need to create a Firestore user document
-      if (result.user) {
-        const userDoc = await getDoc(doc(db, "users", result.user.uid));
-        if (!userDoc.exists()) {
-          // Create a new user document in Firestore
-          const handleAppleSignIn = httpsCallable(functions, 'handleAppleSignIn');
-          await handleAppleSignIn({
-            userId: result.user.uid,
-            email: result.user.email,
-            displayName: result.user.displayName || '',
-            photoURL: result.user.photoURL || '',
-          });
-        }
-      }
-    } catch (error) {
-      throw error;
-    }
-  };
-
   const logout = async () => {
     try {
       await firebaseSignOut(auth);
@@ -383,7 +346,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     signUp,
     signIn,
     signInWithGoogle,
-    signInWithApple,
     signOut: logout,
     resetPassword,
     updateEmail,
