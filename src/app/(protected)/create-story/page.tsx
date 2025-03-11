@@ -60,6 +60,28 @@ interface Location {
   address: string
 }
 
+// Add a CSS style block for touch dragging
+const touchDraggingStyles = `
+  .touch-dragging {
+    box-shadow: 0 10px 25px -5px rgba(10, 92, 54, 0.3);
+    transform: scale(1.02);
+    opacity: 0.9;
+    border-color: #0A5C36;
+    position: relative;
+    z-index: 10;
+  }
+  
+  @media (max-width: 768px) {
+    .story-block-drag-handle {
+      opacity: 0.8 !important;
+      display: flex;
+      align-items: center;
+      background-color: rgba(249, 250, 251, 0.8);
+      border-radius: 4px;
+    }
+  }
+`;
+
 export default function CreateStoryPage() {
   const router = useRouter()
   const { currentUser, firestoreUser } = useAuth()
@@ -85,6 +107,33 @@ export default function CreateStoryPage() {
   const [locationPickerKey, setLocationPickerKey] = useState(0)
   const [tempCoverPhotoUrl, setTempCoverPhotoUrl] = useState<string | null>(null)
   const [showCropModal, setShowCropModal] = useState(false)
+  const [draggedOverIndex, setDraggedOverIndex] = useState<number | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [touchDragIndex, setTouchDragIndex] = useState<number | null>(null)
+  const [touchTargetIndex, setTouchTargetIndex] = useState<number | null>(null)
+
+  // Add a function to detect if we're on a mobile device
+  const isMobileDevice = () => {
+    return window.innerWidth <= 768 || 
+      ('ontouchstart' in window) || 
+      (navigator.maxTouchPoints > 0);
+  };
+
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile device on component mount
+  useEffect(() => {
+    setIsMobile(isMobileDevice());
+    
+    const handleResize = () => {
+      setIsMobile(isMobileDevice());
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   // Handle setting members to ensure current user is filtered
   const setFilteredCustomAccessMembers = useCallback((members: string[]) => {
@@ -168,6 +217,22 @@ export default function CreateStoryPage() {
       }
     };
   }, [coverPhotoPreview, tempCoverPhotoUrl]);
+
+  // Prevent page scrolling when dragging on mobile
+  useEffect(() => {
+    const preventDefault = (e: TouchEvent) => {
+      if (isDragging) {
+        e.preventDefault();
+      }
+    };
+
+    // Add passive: false to override default browser behavior
+    document.addEventListener('touchmove', preventDefault, { passive: false });
+    
+    return () => {
+      document.removeEventListener('touchmove', preventDefault);
+    };
+  }, [isDragging]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -390,6 +455,143 @@ export default function CreateStoryPage() {
     setBlocks([...blocks, newBlock])
   }
 
+  // Add reorderBlocks function to handle changing the order of blocks
+  const reorderBlocks = (startIndex: number, endIndex: number) => {
+    const result = Array.from(blocks);
+    const [removed] = result.splice(startIndex, 1);
+    result.splice(endIndex, 0, removed);
+    setBlocks(result);
+  };
+
+  // Helper function to determine if a touch point is over a specific element
+  const isTouchOverElement = (touch: React.Touch, element: Element): boolean => {
+    const rect = element.getBoundingClientRect();
+    return (
+      touch.clientX >= rect.left &&
+      touch.clientX <= rect.right &&
+      touch.clientY >= rect.top &&
+      touch.clientY <= rect.bottom
+    );
+  };
+
+  // Improved touch start handler
+  const handleTouchStart = (e: React.TouchEvent, index: number) => {
+    // Mark that we're dragging and store the starting index
+    setIsDragging(true);
+    setTouchDragIndex(index);
+    
+    // Get the parent element
+    const blockElement = e.currentTarget.closest('div[draggable]') as HTMLElement;
+    if (blockElement) {
+      // Add a class to indicate this is being dragged by touch
+      blockElement.classList.add('touch-dragging');
+      
+      // Add visual feedback
+      setTimeout(() => {
+        blockElement.classList.add('opacity-50');
+      }, 0);
+    }
+  };
+
+  // Handle touch move to determine which block we're over
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || touchDragIndex === null) return;
+    
+    const touch = e.touches[0];
+    
+    // Find which block we're currently hovering over
+    const blockElements = document.querySelectorAll('div[draggable]');
+    
+    let foundTargetIndex = null;
+    blockElements.forEach((element, index) => {
+      if (isTouchOverElement(touch, element)) {
+        foundTargetIndex = index;
+      }
+    });
+    
+    // If we found a target and it's different from the current target, update
+    if (foundTargetIndex !== null && foundTargetIndex !== touchTargetIndex) {
+      setTouchTargetIndex(foundTargetIndex);
+      setDraggedOverIndex(foundTargetIndex);
+    }
+  };
+
+  // Updated touch end handler
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    // Reset the dragging state
+    setIsDragging(false);
+    
+    // If we have both a drag source and target, perform the reordering
+    if (touchDragIndex !== null && touchTargetIndex !== null && touchDragIndex !== touchTargetIndex) {
+      reorderBlocks(touchDragIndex, touchTargetIndex);
+    }
+    
+    // Get the parent element
+    const blockElement = e.currentTarget.closest('div[draggable]') as HTMLElement;
+    if (blockElement) {
+      // Remove the visual indicators
+      blockElement.classList.remove('opacity-50', 'touch-dragging');
+    }
+    
+    // Reset indices
+    setTouchDragIndex(null);
+    setTouchTargetIndex(null);
+    setDraggedOverIndex(null);
+  };
+
+  // Updated function to handle the drag start event
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    // Set data transfer with the index of the dragged item
+    e.dataTransfer.setData('text/plain', index.toString());
+    // Set the drag effect
+    e.dataTransfer.effectAllowed = 'move';
+    // Mark that we're dragging
+    setIsDragging(true);
+    // Add a class to the dragged element for visual feedback
+    const target = e.target as HTMLElement;
+    setTimeout(() => {
+      target.classList.add('opacity-50');
+    }, 0);
+  };
+
+  // Updated function to handle the drag over event
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDraggedOverIndex(index);
+  };
+
+  // Updated function to handle the drag leave event
+  const handleDragLeave = () => {
+    setDraggedOverIndex(null);
+  };
+
+  // Updated function to handle the drag end event
+  const handleDragEnd = (e: React.DragEvent) => {
+    // Remove the class from the dragged element
+    const target = e.target as HTMLElement;
+    target.classList.remove('opacity-50');
+    setDraggedOverIndex(null);
+    setIsDragging(false);
+  };
+
+  // Function to handle the drop event
+  const handleDrop = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    
+    // Get the index of the dragged item
+    const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'));
+    
+    // Don't do anything if dropping onto the same element
+    if (draggedIndex === index) {
+      return;
+    }
+    
+    // Reorder the blocks
+    reorderBlocks(draggedIndex, index);
+    setDraggedOverIndex(null);
+  };
+
   const updateBlock = (id: string, content: string | File | File[]) => {
     setBlocks(blocks.map(block => {
       if (block.id === id) {
@@ -576,6 +778,9 @@ export default function CreateStoryPage() {
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 py-8">
+      {/* Add the CSS styles */}
+      <style jsx global>{touchDraggingStyles}</style>
+      
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         {showCropModal && tempCoverPhotoUrl && (
           <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
@@ -875,7 +1080,23 @@ export default function CreateStoryPage() {
 
             {/* Story Content Section */}
             <div className="border-t pt-6 mt-6">
-              <h2 className="text-lg font-semibold mb-6">Story Content</h2>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-lg font-semibold">Story Content</h2>
+                {blocks.length > 1 && (
+                  <div className="text-sm text-gray-500 flex items-center">
+                    <GripVertical className="h-4 w-4 mr-1 text-gray-400" />
+                    <span>{isMobile ? "Hold & drag to reorder" : "Drag to reorder blocks"}</span>
+                  </div>
+                )}
+              </div>
+              
+              {/* Mobile specific instructions */}
+              {isMobile && blocks.length > 1 && (
+                <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-md mb-4 flex items-center">
+                  <span className="mr-2">💡</span>
+                  <span>Tap and hold the <GripVertical className="h-3 w-3 mx-1 inline" /> icon to reorder story blocks.</span>
+                </div>
+              )}
               
               {blocks.length === 0 ? (
                 <div className="flex justify-center my-8">
@@ -907,89 +1128,122 @@ export default function CreateStoryPage() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {blocks.map((block) => (
-                    <div key={block.id} className="group relative border rounded-lg p-4 hover:border-gray-400 transition-colors">
+                  {blocks.map((block, index) => (
+                    <div 
+                      key={block.id} 
+                      className={`group relative border rounded-lg p-4 transition-all duration-200
+                        ${draggedOverIndex === index ? 'border-[#0A5C36] shadow-md bg-[#0A5C36]/5' : 'hover:border-gray-400'}
+                        ${touchDragIndex === index ? 'touch-dragging z-10' : ''}
+                      `}
+                      draggable={true}
+                      onDragStart={(e) => handleDragStart(e, index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragLeave={handleDragLeave}
+                      onDragEnd={handleDragEnd}
+                      onDrop={(e) => handleDrop(e, index)}
+                    >
+                      {/* Drag indicator line - shows only when dragging over this element */}
+                      {draggedOverIndex === index && (
+                        <div className="absolute -top-2 left-0 right-0 h-1 bg-[#0A5C36] rounded-full"></div>
+                      )}
+
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="absolute -right-2 -top-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white shadow-sm hover:bg-gray-100"
+                        className="absolute -right-2 -top-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white shadow-sm hover:bg-gray-100 z-10"
                         onClick={() => removeBlock(block.id)}
                       >
                         <X className="h-4 w-4" />
                       </Button>
-                      <div className="absolute left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-move">
-                        <GripVertical className="h-4 w-4 text-gray-400" />
+                      <div 
+                        className="absolute left-2 top-1/2 -translate-y-1/2 story-block-drag-handle opacity-0 group-hover:opacity-100 transition-opacity cursor-move pl-2 pr-4 py-4"
+                        title="Drag to reorder"
+                        onMouseDown={(e) => {
+                          // Ensure the parent div gets dragged when clicking the handle
+                          e.currentTarget.parentElement?.setAttribute('draggable', 'true');
+                        }}
+                        onMouseUp={(e) => {
+                          // Reset draggable attribute after mouseup
+                          e.currentTarget.parentElement?.setAttribute('draggable', 'false');
+                        }}
+                        onTouchStart={(e) => handleTouchStart(e, index)}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
+                      >
+                        <GripVertical className="h-5 w-5 text-gray-500" />
                       </div>
                       
-                      {block.type === "text" && (
-                        <textarea
-                          value={block.content as string}
-                          onChange={(e) => updateBlock(block.id, e.target.value as string)}
-                          placeholder="Start writing..."
-                          className="w-full min-h-[100px] p-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-[#0A5C36] focus:border-transparent"
-                        />
-                      )}
-                      
-                      {(block.type === "image" || block.type === "video" || block.type === "audio") && (
-                        <div className="space-y-2">
-                          {/* Display carousel if multiple files exist */}
-                          {Array.isArray(block.content) && block.content.length > 1 ? (
-                            <div>
-                              <DynastyCarousel
-                                items={block.content as File[]}
-                                itemType={block.type === "image" ? "image" : block.type === "audio" ? "audio" : "video"}
-                                onItemClick={(index: number) => removeMediaItem(block.id, index)}
+                      <div className="ml-6">
+                        {block.type === "text" && (
+                          <textarea
+                            value={block.content as string}
+                            onChange={(e) => updateBlock(block.id, e.target.value as string)}
+                            placeholder="Start writing..."
+                            className="w-full min-h-[100px] p-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-[#0A5C36] focus:border-transparent"
+                          />
+                        )}
+                        
+                        {(block.type === "image" || block.type === "video" || block.type === "audio") && (
+                          <div className="space-y-2">
+                            {/* Display carousel if multiple files exist */}
+                            {Array.isArray(block.content) && block.content.length > 1 ? (
+                              <div>
+                                <DynastyCarousel
+                                  items={block.content as File[]}
+                                  itemType={block.type === "image" ? "image" : block.type === "audio" ? "audio" : "video"}
+                                  onItemClick={(index: number) => removeMediaItem(block.id, index)}
+                                />
+                                <p className="text-xs text-gray-500 mt-2 text-center">Click on an item to remove it</p>
+                              </div>
+                            ) : Array.isArray(block.content) && block.content.length === 1 ? (
+                              <MediaUpload
+                                type={block.type}
+                                onFileSelect={(file) => handleFileSelect(block.id, file)}
+                                onMultipleFilesSelect={(files) => handleMultipleFilesSelect(block.id, files)}
+                                value={
+                                  URL.createObjectURL(block.content[0] as File)
+                                }
+                                onRemove={() => updateBlock(block.id, [])}
+                                showMultiple={true}
+                                allowMultiple={true}
                               />
-                              <p className="text-xs text-gray-500 mt-2 text-center">Click on an item to remove it</p>
-                            </div>
-                          ) : Array.isArray(block.content) && block.content.length === 1 ? (
-                            <MediaUpload
-                              type={block.type}
-                              onFileSelect={(file) => handleFileSelect(block.id, file)}
-                              onMultipleFilesSelect={(files) => handleMultipleFilesSelect(block.id, files)}
-                              value={
-                                URL.createObjectURL(block.content[0] as File)
-                              }
-                              onRemove={() => updateBlock(block.id, [])}
-                              showMultiple={true}
-                              allowMultiple={true}
-                            />
-                          ) : (
-                            // Empty state - show MediaUpload with appropriate type
-                            <MediaUpload
-                              type={block.type === "image" ? "media" : block.type}
-                              onFileSelect={(file) => handleFileSelect(block.id, file)}
-                              onMultipleFilesSelect={(files) => handleMultipleFilesSelect(block.id, files)}
-                              showMultiple={true}
-                              allowMultiple={true}
-                            />
-                          )}
-                          
-                          {block.uploadProgress !== undefined && block.uploadProgress < 100 && (
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
-                              <div
-                                className="bg-[#0A5C36] h-2.5 rounded-full transition-all duration-300"
-                                style={{ width: `${block.uploadProgress}%` }}
+                            ) : (
+                              // Empty state - show MediaUpload with appropriate type
+                              <MediaUpload
+                                type={block.type === "image" ? "media" : block.type}
+                                onFileSelect={(file) => handleFileSelect(block.id, file)}
+                                onMultipleFilesSelect={(files) => handleMultipleFilesSelect(block.id, files)}
+                                showMultiple={true}
+                                allowMultiple={true}
                               />
-                            </div>
-                          )}
-                          
-                          {block.error && (
-                            <div className="text-sm text-red-500 mt-1">
-                              {block.error}
-                            </div>
-                          )}
-                          
-                          {block.type === "audio" && Array.isArray(block.content) && block.content.length === 0 && (
-                            <>
-                              <div className="text-sm text-gray-500 text-center">or</div>
-                              <AudioRecorder
-                                onRecordingComplete={(blob) => handleAudioRecord(block.id, blob)}
-                              />
-                            </>
-                          )}
-                        </div>
-                      )}
+                            )}
+                            
+                            {block.uploadProgress !== undefined && block.uploadProgress < 100 && (
+                              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                <div
+                                  className="bg-[#0A5C36] h-2.5 rounded-full transition-all duration-300"
+                                  style={{ width: `${block.uploadProgress}%` }}
+                                />
+                              </div>
+                            )}
+                            
+                            {block.error && (
+                              <div className="text-sm text-red-500 mt-1">
+                                {block.error}
+                              </div>
+                            )}
+                            
+                            {block.type === "audio" && Array.isArray(block.content) && block.content.length === 0 && (
+                              <>
+                                <div className="text-sm text-gray-500 text-center">or</div>
+                                <AudioRecorder
+                                  onRecordingComplete={(blob) => handleAudioRecord(block.id, blob)}
+                                />
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                   
