@@ -13,7 +13,6 @@ import { useAuth } from "@/context/AuthContext"
 import { validateFormData } from "@/lib/validation"
 import { z } from "zod"
 import { GoogleSignInButton } from '@/components/ui/google-sign-in-button';
-import { AppleSignInButton } from '@/components/ui/apple-sign-in-button';
 
 // Simplified schema for invited signup - only password fields required
 const invitedPasswordSchema = z.object({
@@ -42,11 +41,10 @@ export default function InvitedSignupPage() {
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
-  const [isAppleLoading, setIsAppleLoading] = useState(false)
   const [inviteeEmail, setInviteeEmail] = useState<string>("")
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { signUpWithInvitation, verifyInvitation, signInWithGoogle, signInWithApple } = useAuth()
+  const { signUpWithInvitation, verifyInvitation, signInWithGoogle } = useAuth()
   const { toast } = useToast()
 
   useEffect(() => {
@@ -142,10 +140,6 @@ export default function InvitedSignupPage() {
     setIsGoogleLoading(true)
     try {
       await signInWithGoogle()
-      toast({
-        title: "Welcome!",
-        description: "You have successfully signed in with Google.",
-      })
       router.push('/family-tree')
     } catch (error) {
       console.error("Google sign-in error:", error)
@@ -156,27 +150,6 @@ export default function InvitedSignupPage() {
       })
     } finally {
       setIsGoogleLoading(false)
-    }
-  }
-
-  const handleAppleSignIn = async () => {
-    setIsAppleLoading(true)
-    try {
-      await signInWithApple()
-      toast({
-        title: "Welcome!",
-        description: "You have successfully signed in with Apple.",
-      })
-      router.push('/family-tree')
-    } catch (error) {
-      console.error("Apple sign-in error:", error)
-      toast({
-        title: "Sign-in Failed",
-        description: "Unable to sign in with Apple. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsAppleLoading(false)
     }
   }
 
@@ -263,14 +236,6 @@ export default function InvitedSignupPage() {
                 onClick={handleGoogleSignIn} 
                 loading={isGoogleLoading}
                 label="Sign up with Google" 
-              />
-            </div>
-            
-            <div className="mt-3">
-              <AppleSignInButton 
-                onClick={handleAppleSignIn} 
-                loading={isAppleLoading}
-                label="Sign up with Apple" 
               />
             </div>
           </form>

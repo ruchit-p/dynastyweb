@@ -12,7 +12,6 @@ import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { loginFormSchema, type LoginFormData, validateFormData } from '@/lib/validation';
 import { GoogleSignInButton } from '@/components/ui/google-sign-in-button';
-import { AppleSignInButton } from '@/components/ui/apple-sign-in-button';
 
 export default function LoginPage() {
   const [formData, setFormData] = useState<LoginFormData>({
@@ -22,9 +21,8 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [isAppleLoading, setIsAppleLoading] = useState(false);
   const router = useRouter();
-  const { signIn, signInWithGoogle, signInWithApple, currentUser } = useAuth();
+  const { signIn, signInWithGoogle, currentUser } = useAuth();
   const { toast } = useToast();
 
   // Add effect to handle post-login navigation
@@ -160,26 +158,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleAppleSignIn = async () => {
-    setIsAppleLoading(true);
-    try {
-      await signInWithApple();
-      toast({
-        title: "Welcome!",
-        description: "You have successfully signed in with Apple.",
-      });
-    } catch (error) {
-      console.error("Apple login error:", error);
-      toast({
-        title: "Sign-in Failed",
-        description: "Unable to sign in with Apple. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsAppleLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -288,13 +266,6 @@ export default function LoginPage() {
               <GoogleSignInButton 
                 onClick={handleGoogleSignIn} 
                 loading={isGoogleLoading} 
-              />
-            </div>
-            
-            <div className="mt-3">
-              <AppleSignInButton 
-                onClick={handleAppleSignIn} 
-                loading={isAppleLoading} 
               />
             </div>
             
