@@ -10,21 +10,23 @@ import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
 import { Loader2 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
+import { GoogleSignInButton } from '@/components/ui/google-sign-in-button';
+import { AppleSignInButton } from '@/components/ui/apple-sign-in-button';
 
 export default function SignupPage() {
   const [formData, setFormData] = useState<{
     email: string;
     password: string;
-    confirmPassword: string;
   }>({
     email: "",
     password: "",
-    confirmPassword: "",
   })
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const [isLoading, setIsLoading] = useState(false)
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const [isAppleLoading, setIsAppleLoading] = useState(false)
   const router = useRouter()
-  const { signUp } = useAuth()
+  const { signUp, signInWithGoogle, signInWithApple } = useAuth()
   const { toast } = useToast()
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -50,16 +52,6 @@ export default function SignupPage() {
 
     if (!formData.password) {
       setErrors(prev => ({ ...prev, password: "Password is required" }))
-      setIsLoading(false)
-      return
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      setErrors(prev => ({ 
-        ...prev, 
-        confirmPassword: "Passwords do not match",
-        password: "Passwords do not match"
-      }))
       setIsLoading(false)
       return
     }
@@ -143,6 +135,48 @@ export default function SignupPage() {
     }
   }
 
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true)
+    try {
+      await signInWithGoogle()
+      toast({
+        title: "Welcome!",
+        description: "You have successfully signed in with Google.",
+      })
+      router.push('/family-tree')
+    } catch (error) {
+      console.error("Google sign-in error:", error)
+      toast({
+        title: "Sign-in Failed",
+        description: "Unable to sign in with Google. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGoogleLoading(false)
+    }
+  }
+
+  const handleAppleSignIn = async () => {
+    setIsAppleLoading(true)
+    try {
+      await signInWithApple()
+      toast({
+        title: "Welcome!",
+        description: "You have successfully signed in with Apple.",
+      })
+      router.push('/family-tree')
+    } catch (error) {
+      console.error("Apple sign-in error:", error)
+      toast({
+        title: "Sign-in Failed",
+        description: "Unable to sign in with Apple. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAppleLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -211,25 +245,6 @@ export default function SignupPage() {
             </div>
 
             <div>
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <div className="mt-1">
-                <Input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className={errors.confirmPassword ? "border-red-500" : ""}
-                />
-                {errors.confirmPassword && (
-                  <p className="mt-1 text-xs text-red-500">{errors.confirmPassword}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
               <Button
                 type="submit"
                 className="w-full bg-[#0A5C36] hover:bg-[#0A5C36]/80"
@@ -244,6 +259,31 @@ export default function SignupPage() {
                   "Sign Up"
                 )}
               </Button>
+            </div>
+            
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">Or continue with</span>
+              </div>
+            </div>
+            
+            <div>
+              <GoogleSignInButton 
+                onClick={handleGoogleSignIn} 
+                loading={isGoogleLoading}
+                label="Sign up with Google" 
+              />
+            </div>
+            
+            <div className="mt-3">
+              <AppleSignInButton 
+                onClick={handleAppleSignIn} 
+                loading={isAppleLoading}
+                label="Sign up with Apple" 
+              />
             </div>
             
             <div className="text-center text-sm text-gray-500">

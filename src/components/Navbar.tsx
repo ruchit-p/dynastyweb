@@ -196,7 +196,7 @@ export default function Navbar({ user }: NavbarProps) {
                         ? `${firstName} ${lastName}` 
                         : user.displayName || "User"}
                     </span>
-                    <span className="text-xs text-gray-500">{user.email}</span>
+                    <span className="text-xs text-gray-500 truncate max-w-[180px]">{user.email}</span>
                   </div>
                 </div>
               </div>

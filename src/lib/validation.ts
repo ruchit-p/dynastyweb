@@ -67,27 +67,19 @@ export const loginFormSchema = z.object({
 export const signupFormSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
-  confirmPassword: z.string(),
   firstName: nameSchema,
   lastName: nameSchema,
   phone: phoneSchema,
   dateOfBirth: dateOfBirthSchema,
   gender: genderSchema,
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"],
 });
 
 // Invited signup form schema
 export const invitedSignupFormSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
-  confirmPassword: z.string(),
   invitationId: z.string(),
   token: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"],
 });
 
 // Types

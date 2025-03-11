@@ -11,6 +11,8 @@ import { useToast } from '@/components/ui/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { loginFormSchema, type LoginFormData, validateFormData } from '@/lib/validation';
+import { GoogleSignInButton } from '@/components/ui/google-sign-in-button';
+import { AppleSignInButton } from '@/components/ui/apple-sign-in-button';
 
 export default function LoginPage() {
   const [formData, setFormData] = useState<LoginFormData>({
@@ -19,8 +21,10 @@ export default function LoginPage() {
   });
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isAppleLoading, setIsAppleLoading] = useState(false);
   const router = useRouter();
-  const { signIn, currentUser } = useAuth();
+  const { signIn, signInWithGoogle, signInWithApple, currentUser } = useAuth();
   const { toast } = useToast();
 
   // Add effect to handle post-login navigation
@@ -136,6 +140,46 @@ export default function LoginPage() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    try {
+      await signInWithGoogle();
+      toast({
+        title: "Welcome!",
+        description: "You have successfully signed in with Google.",
+      });
+    } catch (error) {
+      console.error("Google login error:", error);
+      toast({
+        title: "Sign-in Failed",
+        description: "Unable to sign in with Google. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setIsAppleLoading(true);
+    try {
+      await signInWithApple();
+      toast({
+        title: "Welcome!",
+        description: "You have successfully signed in with Apple.",
+      });
+    } catch (error) {
+      console.error("Apple login error:", error);
+      toast({
+        title: "Sign-in Failed",
+        description: "Unable to sign in with Apple. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAppleLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -229,6 +273,29 @@ export default function LoginPage() {
                   "Sign In"
                 )}
               </Button>
+            </div>
+            
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">Or continue with</span>
+              </div>
+            </div>
+            
+            <div>
+              <GoogleSignInButton 
+                onClick={handleGoogleSignIn} 
+                loading={isGoogleLoading} 
+              />
+            </div>
+            
+            <div className="mt-3">
+              <AppleSignInButton 
+                onClick={handleAppleSignIn} 
+                loading={isAppleLoading} 
+              />
             </div>
             
             <div className="text-center text-sm text-gray-500 mt-4">
