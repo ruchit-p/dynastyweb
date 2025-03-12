@@ -136,12 +136,18 @@ export default function SignupPage() {
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true)
     try {
-      await signInWithGoogle()
+      // The result will contain information about whether this is a new user
+      const isNewUser = await signInWithGoogle()
       toast({
         title: "Welcome!",
         description: "You have successfully signed in with Google.",
       })
-      router.push('/family-tree')
+      
+      // Only redirect to family-tree if not a new user
+      // If it's a new user, let the OnboardingContext handle the redirect
+      if (!isNewUser) {
+        router.push('/family-tree')
+      }
     } catch (error) {
       console.error("Google sign-in error:", error)
       toast({

@@ -63,7 +63,7 @@ interface AuthContextType {
   loading: boolean;
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: () => Promise<boolean>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updateEmail: (email: string) => Promise<void>;
@@ -91,7 +91,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: false,
   signUp: async () => {},
   signIn: async () => {},
-  signInWithGoogle: async () => {},
+  signInWithGoogle: async () => false,
   signOut: async () => {},
   resetPassword: async () => {},
   updateEmail: async () => {},
@@ -208,7 +208,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (): Promise<boolean> => {
     try {
       const provider = new GoogleAuthProvider();
       // Add scopes if needed
@@ -220,6 +220,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
       
       const result = await signInWithPopup(auth, provider);
+      let isNewUser = false;
       
       // If this is the first time the user is signing in with Google,
       // we need to create a Firestore user document
@@ -234,8 +235,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             displayName: result.user.displayName || '',
             photoURL: result.user.photoURL || '',
           });
+          isNewUser = true;
         }
       }
+      
+      return isNewUser;
     } catch (error) {
       throw error;
     }
