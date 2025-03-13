@@ -39,6 +39,14 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const pathname = usePathname()
   const { toast } = useToast()
   
+  // Debugging log for initial state
+  useEffect(() => {
+    if (currentUser) {
+      console.log("OnboardingProvider initialized with user:", currentUser.uid);
+      console.log("Current pathname:", pathname);
+    }
+  }, [currentUser, pathname]);
+  
   // Skip onboarding paths
   const skipPaths = ['/login', '/signup', '/verify-email', '/reset-password']
   const shouldSkip = skipPaths.some(path => pathname?.startsWith(path))
@@ -49,6 +57,8 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
   const checkOnboardingStatus = useCallback(async () => {
     if (!currentUser || isCheckingRef.current) return
+    
+    console.log("Checking onboarding status for user:", currentUser.uid);
     
     isCheckingRef.current = true
     lastCheckedUserIdRef.current = currentUser.uid
@@ -71,11 +81,14 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
         message?: string;
       }>(functions, 'getUserData');
       
+      console.log("Calling getUserData cloud function for user:", currentUser.uid);
       const { data } = await getUserData({ userId: currentUser.uid });
+      console.log("getUserData response:", data);
       
       if (!data.success) {
         // If we get a 'not found' message, it means the user doesn't exist yet
         if (data.message === "User not found") {
+          console.log("User not found in Firestore, showing onboarding");
           setHasCompletedOnboarding(false);
           setShowOnboarding(true);
           return;
@@ -88,6 +101,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       
       if (!userData) {
         // If user document doesn't exist yet, assume onboarding not completed
+        console.log("User data is null, showing onboarding");
         setHasCompletedOnboarding(false);
         setShowOnboarding(true);
         return;
@@ -95,6 +109,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       
       // Check if onboarding has been completed
       const onboardingCompleted = userData.onboardingCompleted || false;
+      console.log("User onboardingCompleted status:", onboardingCompleted);
       
       setHasCompletedOnboarding(onboardingCompleted);
       
@@ -115,13 +130,21 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
           gender: userData.gender || 'unspecified',
           phoneNumber: userData.phoneNumber || ''
         });
+        
+        console.log("Setting prefill data:", {
+          firstName: userData.firstName || '',
+          lastName: userData.lastName || '',
+          gender: userData.gender || 'unspecified',
+        });
       }
       
       // Only show onboarding modal if onboarding is not completed
       // and we're not on a page that should skip the onboarding check
       if (!onboardingCompleted && !shouldSkip) {
+        console.log("Setting showOnboarding to true");
         setShowOnboarding(true);
       } else {
+        console.log("Setting showOnboarding to false");
         setShowOnboarding(false);
       }
     } catch (error) {
@@ -155,7 +178,19 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       !isPublicPage &&
       lastCheckedUserIdRef.current !== currentUser.uid
     ) {
-      checkOnboardingStatus();
+      console.log("Triggering onboarding check for user:", currentUser.uid);
+      // Add a slight delay to ensure Firebase data is ready
+      const timer = setTimeout(() => {
+        checkOnboardingStatus();
+      }, 800);
+      
+      return () => clearTimeout(timer);
+    } else if (currentUser) {
+      console.log("Skipping onboarding check for user:", currentUser.uid);
+      if (isCheckingRef.current) console.log("Reason: Already checking");
+      if (shouldSkip) console.log("Reason: Should skip this path");
+      if (isPublicPage) console.log("Reason: On a public page");
+      if (lastCheckedUserIdRef.current === currentUser.uid) console.log("Reason: Already checked this user");
     }
   }, [currentUser, loading, pathname, checkOnboardingStatus, shouldSkip, isPublicPage]);
 

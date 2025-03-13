@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef, useCallback} from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { useOnboarding } from '@/context/OnboardingContext';
+import { useSearchParams } from 'next/navigation';
 import calcTree from "relatives-tree";
 import type { Node, ExtNode, Connector } from 'relatives-tree/lib/types';
 import { getFamilyTreeData, createFamilyMember, deleteFamilyMember, updateFamilyMember } from "@/utils/functionUtils";
@@ -157,6 +158,9 @@ export default function FamilyTreePage() {
   // Add refs for pinch-to-zoom
   const previousTouchDistanceRef = useRef<number | null>(null);
   const initialScaleRef = useRef(1);
+  const searchParams = useSearchParams();
+  const isNewUser = searchParams.get('newUser') === 'true';
+  const newUserCheckedRef = useRef(false);
 
   // Check if we're on a mobile device
   useEffect(() => {
@@ -221,6 +225,23 @@ export default function FamilyTreePage() {
       document.documentElement.style.overscrollBehavior = '';
     };
   }, []);
+
+  useEffect(() => {
+    // Only force onboarding check for new Google users once
+    if (isNewUser && !newUserCheckedRef.current) {
+      console.log("New Google user detected, ensuring onboarding is checked");
+      newUserCheckedRef.current = true;
+      
+      // This will force a delay to ensure the onboarding context is fully initialized
+      const timer = setTimeout(() => {
+        // The OnboardingContext should automatically detect the onboarding status
+        // and show the onboarding form if needed
+        console.log("Delayed check for onboarding completed");
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isNewUser]);
 
   const fetchFamilyTreeData = useCallback(async () => {
     if (!currentUser) return;

@@ -148,9 +148,9 @@ export default function LoginPage() {
         description: "You have successfully signed in with Google.",
       });
       
-      // For new users, redirect to the onboarding redirect page
+      // For new users, redirect to the family-tree page with a newUser query parameter
       if (isNewUser) {
-        router.push('/onboarding-redirect');
+        router.push('/family-tree?newUser=true');
       }
       // For existing users, the useEffect at the top of this component
       // will handle the redirection based on email verification status

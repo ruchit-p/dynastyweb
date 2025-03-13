@@ -146,8 +146,8 @@ export default function SignupPage() {
       // For new users, redirect to a page that will trigger the onboarding flow
       // For existing users, go directly to family-tree
       if (isNewUser) {
-        // This ensures the onboarding context has time to initialize and check status
-        router.push('/onboarding-redirect')
+        // This path is within the protected layout, which has the OnboardingProvider
+        router.push('/family-tree?newUser=true')
       } else {
         router.push('/family-tree')
       }
