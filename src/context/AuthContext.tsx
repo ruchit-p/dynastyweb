@@ -225,8 +225,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // If this is the first time the user is signing in with Google,
       // we need to create a Firestore user document
       if (result.user) {
+        console.log("Google sign-in successful for user:", result.user.uid);
         const userDoc = await getDoc(doc(db, "users", result.user.uid));
+        
         if (!userDoc.exists()) {
+          console.log("This is a new Google user, creating Firestore document");
           // Create a new user document in Firestore
           const handleGoogleSignIn = httpsCallable(functions, 'handleGoogleSignIn');
           await handleGoogleSignIn({
@@ -236,11 +239,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             photoURL: result.user.photoURL || '',
           });
           isNewUser = true;
+          console.log("New Google user document created, isNewUser =", isNewUser);
+        } else {
+          // Check if this is an existing user who hasn't completed onboarding
+          const userData = userDoc.data();
+          if (userData && userData.onboardingCompleted === false) {
+            console.log("Existing Google user but onboarding not completed");
+            isNewUser = true;
+          } else {
+            console.log("Existing Google user with completed onboarding");
+          }
         }
       }
       
       return isNewUser;
     } catch (error) {
+      console.error("Error in Google sign-in:", error);
       throw error;
     }
   };

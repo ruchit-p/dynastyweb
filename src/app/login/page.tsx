@@ -141,11 +141,19 @@ export default function LoginPage() {
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
     try {
-      await signInWithGoogle();
+      // Check if this is a new Google user
+      const isNewUser = await signInWithGoogle();
       toast({
         title: "Welcome!",
         description: "You have successfully signed in with Google.",
       });
+      
+      // For new users, redirect to the onboarding redirect page
+      if (isNewUser) {
+        router.push('/onboarding-redirect');
+      }
+      // For existing users, the useEffect at the top of this component
+      // will handle the redirection based on email verification status
     } catch (error) {
       console.error("Google login error:", error);
       toast({
