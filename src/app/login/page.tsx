@@ -141,19 +141,21 @@ export default function LoginPage() {
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
     try {
-      // Check if this is a new Google user
+      // Check if this is a new Google user or a user who hasn't completed onboarding
       const isNewUser = await signInWithGoogle();
       toast({
         title: "Welcome!",
         description: "You have successfully signed in with Google.",
       });
       
-      // For new users, redirect to the family-tree page with a newUser query parameter
+      // For new users or users who haven't completed onboarding, 
+      // redirect to onboarding-redirect page to ensure the onboarding form shows
       if (isNewUser) {
-        router.push('/family-tree?newUser=true');
+        console.log("New Google user detected, ensuring onboarding is checked");
+        router.push('/onboarding-redirect');
       }
-      // For existing users, the useEffect at the top of this component
-      // will handle the redirection based on email verification status
+      // For existing users with completed onboarding, the useEffect at the top of 
+      // this component will handle the redirection based on email verification status
     } catch (error) {
       console.error("Google login error:", error);
       toast({

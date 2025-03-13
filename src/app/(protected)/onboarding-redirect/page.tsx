@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/context/AuthContext"
 import { useOnboarding } from "@/context/OnboardingContext"
 import { Loader2 } from "lucide-react"
+import { useToast } from "@/components/ui/use-toast"
 
 /**
  * This page serves as a temporary stopping point for new Google users
@@ -15,10 +16,43 @@ export default function OnboardingRedirectPage() {
   const router = useRouter()
   const { currentUser, loading } = useAuth()
   const { hasCompletedOnboarding, showOnboarding } = useOnboarding()
+  const { toast } = useToast()
+  const [waitTime, setWaitTime] = useState(0)
+  const [maxWaitReached, setMaxWaitReached] = useState(false)
 
   console.log("Onboarding redirect page loaded")
   console.log("hasCompletedOnboarding:", hasCompletedOnboarding)
   console.log("showOnboarding:", showOnboarding)
+  
+  // Increment wait time counter to detect if we're stuck
+  useEffect(() => {
+    if (!loading && currentUser && !hasCompletedOnboarding && !showOnboarding) {
+      const timer = setTimeout(() => {
+        setWaitTime(prev => {
+          const newTime = prev + 1
+          if (newTime >= 5 && !maxWaitReached) {
+            setMaxWaitReached(true)
+          }
+          return newTime
+        })
+      }, 1000)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [loading, currentUser, hasCompletedOnboarding, showOnboarding, maxWaitReached])
+  
+  // Handle max wait time reached
+  useEffect(() => {
+    if (maxWaitReached) {
+      console.log("Max wait time reached, forcing redirect to family-tree")
+      toast({
+        title: "Welcome to Dynasty!",
+        description: "Please complete the onboarding form to get started.",
+        duration: 5000,
+      })
+      router.push("/family-tree")
+    }
+  }, [maxWaitReached, router, toast])
   
   useEffect(() => {
     // Only proceed if we're not loading
@@ -66,6 +100,16 @@ export default function OnboardingRedirectPage() {
         <p className="mt-2 text-sm text-gray-600">
           Please wait while we prepare your Dynasty experience.
         </p>
+        {waitTime > 2 && (
+          <p className="mt-4 text-sm text-amber-600">
+            This is taking longer than expected. Please be patient...
+          </p>
+        )}
+        {maxWaitReached && (
+          <p className="mt-4 text-sm text-blue-600">
+            Redirecting you to continue...
+          </p>
+        )}
       </div>
     </div>
   )

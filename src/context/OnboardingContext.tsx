@@ -3,10 +3,11 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from './AuthContext'
 import OnboardingForm from '@/components/OnboardingForm'
-import { functions } from '@/lib/firebase'
+import { functions, db } from '@/lib/firebase'
 import { usePathname } from 'next/navigation'
 import { useToast } from '@/components/ui/use-toast'
 import { httpsCallable } from 'firebase/functions'
+import { doc, getDoc } from 'firebase/firestore'
 
 type PrefillData = {
   firstName?: string
@@ -54,6 +55,9 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   // Add public pages that don't require onboarding
   const publicPaths = ['/']
   const isPublicPage = publicPaths.some(path => pathname === path)
+  
+  // Check if path is the onboarding redirect page
+  const isOnboardingRedirectPage = pathname === '/onboarding-redirect'
 
   const checkOnboardingStatus = useCallback(async () => {
     if (!currentUser || isCheckingRef.current) return
@@ -65,9 +69,79 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     
     try {
       // Add a slight delay to ensure data is ready
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise(resolve => setTimeout(resolve, 800))
       
-      // Use Cloud Function to get user data instead of direct Firestore access
+      // First try to get user data directly from Firestore
+      // This avoids potential CORS issues with Cloud Functions
+      try {
+        console.log("Attempting to fetch user data from Firestore directly");
+        const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+        
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          console.log("Received user data from Firestore:", userData);
+          
+          const onboardingCompleted = userData.onboardingCompleted || false;
+          console.log("User onboardingCompleted status:", onboardingCompleted);
+          
+          setHasCompletedOnboarding(onboardingCompleted);
+          
+          // Extract prefill data from user document
+          if (!onboardingCompleted) {
+            const dateOfBirth = userData.dateOfBirth;
+            let parsedDate = null;
+            
+            if (dateOfBirth) {
+              // Parse the date if it's a Firestore timestamp
+              if (dateOfBirth.toDate) {
+                parsedDate = dateOfBirth.toDate();
+              } else if (typeof dateOfBirth === 'string') {
+                parsedDate = new Date(dateOfBirth);
+              }
+            }
+            
+            setPrefillData({
+              firstName: userData.firstName || '',
+              lastName: userData.lastName || '',
+              dateOfBirth: parsedDate,
+              gender: userData.gender || 'unspecified',
+              phoneNumber: userData.phoneNumber || ''
+            });
+            
+            console.log("Setting prefill data:", {
+              firstName: userData.firstName || '',
+              lastName: userData.lastName || '',
+              gender: userData.gender || 'unspecified',
+            });
+          }
+          
+          // Special handling for onboarding redirect page
+          if (isOnboardingRedirectPage) {
+            console.log("On onboarding redirect page, showing onboarding regardless of path skip");
+            setShowOnboarding(!onboardingCompleted);
+            return;
+          }
+          
+          // Only show onboarding modal if onboarding is not completed
+          // and we're not on a page that should skip the onboarding check
+          if (!onboardingCompleted && !shouldSkip) {
+            console.log("Setting showOnboarding to true");
+            setShowOnboarding(true);
+          } else {
+            console.log("Setting showOnboarding to false");
+            setShowOnboarding(false);
+          }
+          
+          return;
+        }
+        
+        console.log("User document not found in Firestore, trying cloud function...");
+      } catch (firestoreError) {
+        console.error("Error fetching from Firestore directly:", firestoreError);
+        // Fall back to cloud function if direct Firestore access fails
+      }
+      
+      // Use Cloud Function to get user data as fallback
       const getUserData = httpsCallable<{ userId: string }, { 
         userData: {
           onboardingCompleted: boolean;
@@ -109,6 +183,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       
       // Check if onboarding has been completed
       const onboardingCompleted = userData.onboardingCompleted || false;
+      
       console.log("User onboardingCompleted status:", onboardingCompleted);
       
       setHasCompletedOnboarding(onboardingCompleted);
@@ -138,6 +213,13 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
         });
       }
       
+      // Special handling for onboarding redirect page
+      if (isOnboardingRedirectPage) {
+        console.log("On onboarding redirect page, showing onboarding regardless of path skip");
+        setShowOnboarding(!onboardingCompleted);
+        return;
+      }
+      
       // Only show onboarding modal if onboarding is not completed
       // and we're not on a page that should skip the onboarding check
       if (!onboardingCompleted && !shouldSkip) {
@@ -162,37 +244,38 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     } finally {
       isCheckingRef.current = false
     }
-  }, [currentUser, hasCompletedOnboarding, shouldSkip, toast]);
+  }, [currentUser, hasCompletedOnboarding, shouldSkip, toast, isOnboardingRedirectPage]);
 
   useEffect(() => {
     // Only check onboarding status if:
     // 1. User is authenticated and email is verified
     // 2. We're not already checking
-    // 3. We're not on a skip path or public page
+    // 3. We're not on a skip path or public page (unless it's the onboarding redirect page)
     // 4. We haven't checked this user already or we need to re-check
     if (
       currentUser && 
       currentUser.emailVerified && 
       !isCheckingRef.current && 
-      !shouldSkip && 
-      !isPublicPage &&
-      lastCheckedUserIdRef.current !== currentUser.uid
+      (!shouldSkip || isOnboardingRedirectPage) && 
+      (!isPublicPage || isOnboardingRedirectPage) &&
+      (lastCheckedUserIdRef.current !== currentUser.uid || isOnboardingRedirectPage)
     ) {
       console.log("Triggering onboarding check for user:", currentUser.uid);
       // Add a slight delay to ensure Firebase data is ready
       const timer = setTimeout(() => {
+        console.log("Delayed check for onboarding completed");
         checkOnboardingStatus();
-      }, 800);
+      }, 1000);
       
       return () => clearTimeout(timer);
     } else if (currentUser) {
       console.log("Skipping onboarding check for user:", currentUser.uid);
       if (isCheckingRef.current) console.log("Reason: Already checking");
-      if (shouldSkip) console.log("Reason: Should skip this path");
-      if (isPublicPage) console.log("Reason: On a public page");
-      if (lastCheckedUserIdRef.current === currentUser.uid) console.log("Reason: Already checked this user");
+      if (shouldSkip && !isOnboardingRedirectPage) console.log("Reason: Should skip this path");
+      if (isPublicPage && !isOnboardingRedirectPage) console.log("Reason: On a public page");
+      if (lastCheckedUserIdRef.current === currentUser.uid && !isOnboardingRedirectPage) console.log("Reason: Already checked this user");
     }
-  }, [currentUser, loading, pathname, checkOnboardingStatus, shouldSkip, isPublicPage]);
+  }, [currentUser, loading, pathname, checkOnboardingStatus, shouldSkip, isPublicPage, isOnboardingRedirectPage]);
 
   const handleOnboardingComplete = async (userData: {
     firstName: string

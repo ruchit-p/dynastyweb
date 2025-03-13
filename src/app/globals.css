@@ -302,4 +302,156 @@ div[style*="position: fixed"][style*="bottom: 0"] {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* MARK: - Landing Page Animations */
+/* Landing page section padding */
+.section-padding {
+  padding-top: 5rem;
+  padding-bottom: 5rem;
+}
+
+@media (min-width: 768px) {
+  .section-padding {
+    padding-top: 6rem;
+    padding-bottom: 6rem;
+  }
+}
+
+/* Animation classes */
+.animate-fade-in {
+  animation: fadeIn 0.8s ease forwards;
+}
+
+.animate-slide-up {
+  opacity: 0;
+  transform: translateY(30px);
+  animation: slideUp 0.8s ease forwards;
+}
+
+.animate-slide-down {
+  opacity: 0;
+  transform: translateY(-30px);
+  animation: slideDown 0.8s ease forwards;
+}
+
+.animate-scale-in {
+  opacity: 0;
+  transform: scale(0.90);
+  animation: scaleIn 0.6s ease forwards;
+}
+
+/* Card hover effect */
+.card-hover {
+  transition: all 0.3s ease-in-out;
+}
+
+.card-hover:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+  border-color: rgba(10, 92, 54, 0.2);
+}
+
+/* Animation keyframes */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.90);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Dynasty custom color classes */
+.text-dynasty-green {
+  color: #0A5C36;
+}
+
+.bg-dynasty-green {
+  background-color: #0A5C36;
+}
+
+.text-dynasty-gold {
+  color: #C4A55C;
+}
+
+.bg-dynasty-gold {
+  background-color: #C4A55C;
+}
+
+.text-dynasty-neutral-dark {
+  color: #4B5563;
+}
+
+.text-dynasty-neutral-light {
+  color: #E5E7EB;
+}
+
+.bg-dynasty-neutral-lightest {
+  background-color: #F9FAFB;
+}
+
+.bg-dynasty-neutral-darkest {
+  background-color: #111827;
+}
+
+.border-dynasty-neutral {
+  border-color: #E5E7EB;
+}
+
+.text-dynasty-neutral-darkest {
+  color: #111827;
+}
+
+.text-dynasty-neutral {
+  color: #9CA3AF;
+}
+
+.bg-dynasty-green-light {
+  background-color: rgba(10, 92, 54, 0.05);
+}
+
+.text-dynasty-green-dark {
+  color: #074326;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.bg-dynasty-gold-light {
+  background-color: rgba(196, 165, 92, 0.1);
+}
+
+.text-dynasty-gold-dark {
+  color: #A38449;
 } 

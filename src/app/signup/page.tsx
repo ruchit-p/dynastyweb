@@ -137,17 +137,20 @@ export default function SignupPage() {
     setIsGoogleLoading(true)
     try {
       // The result will contain information about whether this is a new user
+      // or a user who hasn't completed onboarding
       const isNewUser = await signInWithGoogle()
       toast({
         title: "Welcome!",
         description: "You have successfully signed in with Google.",
       })
       
-      // For new users, redirect to a page that will trigger the onboarding flow
-      // For existing users, go directly to family-tree
+      // For new users or users who haven't completed onboarding,
+      // redirect to the onboarding-redirect page which will ensure
+      // the onboarding flow is triggered properly
       if (isNewUser) {
+        console.log("New Google user detected, ensuring onboarding is checked")
         // This path is within the protected layout, which has the OnboardingProvider
-        router.push('/family-tree?newUser=true')
+        router.push('/onboarding-redirect')
       } else {
         router.push('/family-tree')
       }
