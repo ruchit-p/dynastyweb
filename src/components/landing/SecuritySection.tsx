@@ -78,7 +78,7 @@ const SecuritySection = () => {
             </div>
             
             <h2 className="text-3xl md:text-4xl font-bold mb-6 text-balance">
-              Your Family's Legacy Deserves the Highest Protection
+              Your Family&apos;s Legacy Deserves the Highest Protection
             </h2>
             
             <p className="text-dynasty-neutral-dark text-lg mb-8">

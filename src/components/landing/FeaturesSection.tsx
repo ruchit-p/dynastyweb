@@ -68,6 +68,7 @@ const FeaturesSection = () => {
       description: "Invite family members to contribute their memories, photos, and knowledge to build a comprehensive family story."
     },
     {
+      //eslint-disable-next-line
       icon: <Image className="h-10 w-10" />,
       title: "Media Management",
       description: "Upload, organize and share family photos and videos with smart compression and secure storage for precious memories."
@@ -88,11 +89,11 @@ const FeaturesSection = () => {
           </div>
           
           <h2 className="text-3xl md:text-4xl font-bold mb-6 text-balance">
-            Everything You Need to Preserve Your Family's Legacy
+            Everything You Need to Preserve Your Family&apos;s Legacy
           </h2>
           
           <p className="text-dynasty-neutral-dark text-lg">
-            Powerful tools designed to help you document, connect, and share your family's unique story—easily and beautifully.
+            Powerful tools designed to help you document, connect, and share your family&apos;s unique story—easily and beautifully.
           </p>
         </div>
         
@@ -100,7 +101,9 @@ const FeaturesSection = () => {
           {features.map((feature, index) => (
             <div 
               key={index} 
-              ref={el => featureRefs.current[index] = el}
+              ref={el => {
+                featureRefs.current[index] = el;
+              }}
               className="bg-white p-8 rounded-2xl shadow-sm border border-dynasty-neutral opacity-0 card-hover"
             >
               <div className="bg-dynasty-green/10 p-4 rounded-xl inline-block mb-6">
