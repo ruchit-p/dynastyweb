@@ -13,11 +13,22 @@ import {
   updatePassword as firebaseUpdatePassword,
   GoogleAuthProvider,
   signInWithPopup,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  ConfirmationResult,
 } from 'firebase/auth';
 import { auth, functions, db } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { doc, getDoc } from 'firebase/firestore';
 import type { InvitedSignupFormData } from "@/lib/validation";
+
+// Add global type declarations for window properties
+declare global {
+  interface Window {
+    recaptchaVerifier: RecaptchaVerifier;
+    confirmationResult: ConfirmationResult;
+  }
+}
 
 // MARK: - Types
 interface FirestoreUser {
@@ -28,6 +39,7 @@ interface FirestoreUser {
   firstName: string;
   lastName: string;
   phoneNumber: string | null;
+  phoneNumberVerified?: boolean;
   parentIds: string[];
   childrenIds: string[];
   spouseIds: string[];
@@ -64,6 +76,8 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<boolean>;
+  signInWithPhone: (phoneNumber: string) => Promise<{ verificationId: string }>;
+  confirmPhoneSignIn: (verificationId: string, code: string) => Promise<boolean>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updateEmail: (email: string) => Promise<void>;
@@ -92,6 +106,8 @@ const AuthContext = createContext<AuthContextType>({
   signUp: async () => {},
   signIn: async () => {},
   signInWithGoogle: async () => false,
+  signInWithPhone: async () => ({ verificationId: '' }),
+  confirmPhoneSignIn: async () => false,
   signOut: async () => {},
   resetPassword: async () => {},
   updateEmail: async () => {},
@@ -357,6 +373,55 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  // Phone authentication functions
+  const signInWithPhone = async (phoneNumber: string): Promise<{ verificationId: string }> => {
+    try {
+      // Create invisible reCAPTCHA verifier
+      if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          'size': 'invisible',
+        });
+      }
+
+      const appVerifier = window.recaptchaVerifier;
+      const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
+      
+      // Store the confirmation result for later use
+      window.confirmationResult = confirmationResult;
+      
+      // Return the verification ID
+      return { verificationId: confirmationResult.verificationId };
+    } catch (error) {
+      console.error("Error sending verification code:", error);
+      throw error;
+    }
+  };
+
+  const confirmPhoneSignIn = async (verificationId: string, code: string): Promise<boolean> => {
+    try {
+      // Sign in with the verification code
+      const result = await window.confirmationResult.confirm(code);
+      const user = result.user;
+      
+      // Call the Firebase function to handle phone sign-in
+      const handlePhoneSignIn = httpsCallable(functions, 'handlePhoneSignIn');
+      const response = await handlePhoneSignIn({
+        phoneNumber: user.phoneNumber,
+        uid: user.uid,
+      });
+      
+      // Refresh the Firestore user data
+      await refreshFirestoreUser();
+      
+      // Return whether this is a new user
+      const responseData = response.data as { isNewUser: boolean };
+      return responseData.isNewUser;
+    } catch (error) {
+      console.error("Error confirming phone sign-in:", error);
+      throw error;
+    }
+  };
+
   const value: AuthContextType = {
     currentUser: user,
     firestoreUser,
@@ -364,6 +429,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     signUp,
     signIn,
     signInWithGoogle,
+    signInWithPhone,
+    confirmPhoneSignIn,
     signOut: logout,
     resetPassword,
     updateEmail,

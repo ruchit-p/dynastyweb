@@ -34,7 +34,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true)
   const [prefillData, setPrefillData] = useState<PrefillData | null>(null)
-  const { currentUser, loading } = useAuth()
+  const { currentUser, loading, firestoreUser } = useAuth()
   const isCheckingRef = useRef(false)
   const lastCheckedUserIdRef = useRef<string | null>(null)
   const pathname = usePathname()
@@ -45,8 +45,10 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     if (currentUser) {
       console.log("OnboardingProvider initialized with user:", currentUser.uid);
       console.log("Current pathname:", pathname);
+      console.log("Email verified:", currentUser.emailVerified);
+      console.log("Phone verified:", firestoreUser?.phoneNumberVerified);
     }
-  }, [currentUser, pathname]);
+  }, [currentUser, firestoreUser, pathname]);
   
   // Skip onboarding paths
   const skipPaths = ['/login', '/signup', '/verify-email', '/reset-password']
@@ -248,19 +250,21 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     // Only check onboarding status if:
-    // 1. User is authenticated and email is verified
+    // 1. User is authenticated and either email or phone is verified
     // 2. We're not already checking
     // 3. We're not on a skip path or public page (unless it's the onboarding redirect page)
     // 4. We haven't checked this user already or we need to re-check
     if (
       currentUser && 
-      currentUser.emailVerified && 
+      (currentUser.emailVerified || firestoreUser?.phoneNumberVerified) && 
       !isCheckingRef.current && 
       (!shouldSkip || isOnboardingRedirectPage) && 
       (!isPublicPage || isOnboardingRedirectPage) &&
       (lastCheckedUserIdRef.current !== currentUser.uid || isOnboardingRedirectPage)
     ) {
       console.log("Triggering onboarding check for user:", currentUser.uid);
+      console.log("Email verified:", currentUser.emailVerified);
+      console.log("Phone verified:", firestoreUser?.phoneNumberVerified);
       // Add a slight delay to ensure Firebase data is ready
       const timer = setTimeout(() => {
         console.log("Delayed check for onboarding completed");
@@ -274,8 +278,9 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       if (shouldSkip && !isOnboardingRedirectPage) console.log("Reason: Should skip this path");
       if (isPublicPage && !isOnboardingRedirectPage) console.log("Reason: On a public page");
       if (lastCheckedUserIdRef.current === currentUser.uid && !isOnboardingRedirectPage) console.log("Reason: Already checked this user");
+      if (!currentUser.emailVerified && !firestoreUser?.phoneNumberVerified) console.log("Reason: Neither email nor phone is verified");
     }
-  }, [currentUser, loading, pathname, checkOnboardingStatus, shouldSkip, isPublicPage, isOnboardingRedirectPage]);
+  }, [currentUser, firestoreUser, loading, pathname, checkOnboardingStatus, shouldSkip, isPublicPage, isOnboardingRedirectPage]);
 
   const handleOnboardingComplete = async (userData: {
     firstName: string

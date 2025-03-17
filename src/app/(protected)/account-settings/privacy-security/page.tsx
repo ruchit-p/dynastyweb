@@ -244,6 +244,35 @@ export default function PrivacySecurityPage() {
               Change
             </Button>
           </div>
+
+          {/* Two-factor auth section */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="bg-[#F9FAFB] p-2 rounded-lg">
+                <Shield className="h-5 w-5 text-[#0A5C36]" />
+              </div>
+              <div>
+                <Label className="text-base">Phone Verification</Label>
+                <p className="text-xs text-gray-500 mt-1">
+                  {firestoreUser?.phoneNumber 
+                    ? firestoreUser?.phoneNumberVerified
+                      ? `Your phone number ${firestoreUser.phoneNumber} is verified`
+                      : "Verify your phone number to enhance account security" 
+                    : "Add a phone number to enable verification"}
+                </p>
+              </div>
+            </div>
+            <Button 
+              variant={firestoreUser?.phoneNumberVerified ? "outline" : "gold"}
+              onClick={() => router.push("/account-settings/personal-information")}
+            >
+              {firestoreUser?.phoneNumberVerified 
+                ? "Manage" 
+                : firestoreUser?.phoneNumber 
+                  ? "Verify Now" 
+                  : "Add Number"}
+            </Button>
+          </div>
         </div>
 
         {/* Danger Zone section */}

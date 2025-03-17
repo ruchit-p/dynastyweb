@@ -7,7 +7,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useOnboarding } from '@/context/OnboardingContext';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { currentUser, loading } = useAuth();
+  const { currentUser, loading, firestoreUser } = useAuth();
   const { hasCompletedOnboarding } = useOnboarding();
   const router = useRouter();
   const { toast } = useToast();
@@ -17,17 +17,18 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     if (!loading) {
       if (!currentUser) {
         router.push('/login');
-      } else if (!currentUser.emailVerified && !notificationShown.current) {
+      } else if (!currentUser.emailVerified && !firestoreUser?.phoneNumberVerified && !notificationShown.current) {
+        // Only require email verification if phone is not verified
         notificationShown.current = true;
         toast({
-          title: "Email verification required",
+          title: "Verification required",
           description: "Please verify your email address to access this page.",
           variant: "destructive",
         });
         router.push('/verify-email');
       }
     }
-  }, [currentUser, loading, router, toast]);
+  }, [currentUser, firestoreUser, loading, router, toast]);
 
   // Show loading spinner while loading
   if (loading) {
@@ -38,8 +39,8 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     );
   }
 
-  // Don't render children if user is not authenticated or email is not verified
-  if (!currentUser || !currentUser.emailVerified) {
+  // Don't render children if user is not authenticated or not verified (email or phone)
+  if (!currentUser || (!currentUser.emailVerified && !firestoreUser?.phoneNumberVerified)) {
     return null;
   }
 

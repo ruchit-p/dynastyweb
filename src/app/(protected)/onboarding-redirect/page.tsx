@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/use-toast"
  */
 export default function OnboardingRedirectPage() {
   const router = useRouter()
-  const { currentUser, loading } = useAuth()
+  const { currentUser, loading, firestoreUser } = useAuth()
   const { hasCompletedOnboarding, showOnboarding } = useOnboarding()
   const { toast } = useToast()
   const [waitTime, setWaitTime] = useState(0)
@@ -68,10 +68,11 @@ export default function OnboardingRedirectPage() {
 
       console.log("Current user:", currentUser.uid)
       console.log("Email verified:", currentUser.emailVerified)
+      console.log("Phone verified:", firestoreUser?.phoneNumberVerified)
 
-      // If user has not verified email (unlikely for Google users), redirect to verify email
-      if (!currentUser.emailVerified) {
-        console.log("Email not verified, redirecting to verify-email")
+      // If user has not verified either email or phone, redirect to verify email
+      if (!currentUser.emailVerified && !firestoreUser?.phoneNumberVerified) {
+        console.log("Neither email nor phone verified, redirecting to verify-email")
         router.push("/verify-email")
         return
       }
@@ -88,7 +89,7 @@ export default function OnboardingRedirectPage() {
         // We stay on this page while OnboardingContext initializes
       }
     }
-  }, [currentUser, loading, router, hasCompletedOnboarding, showOnboarding])
+  }, [currentUser, firestoreUser, loading, router, hasCompletedOnboarding, showOnboarding])
 
   return (
     <div className="min-h-screen flex items-center justify-center">

@@ -63,7 +63,7 @@ export const loginFormSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
-// Signup form schema
+// Signup form schema (full version for onboarding)
 export const signupFormSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
@@ -72,6 +72,12 @@ export const signupFormSchema = z.object({
   phone: phoneSchema,
   dateOfBirth: dateOfBirthSchema,
   gender: genderSchema,
+});
+
+// Simplified signup form schema for initial registration
+export const initialSignupFormSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
 });
 
 // Invited signup form schema
@@ -85,6 +91,7 @@ export const invitedSignupFormSchema = z.object({
 // Types
 export type LoginFormData = z.infer<typeof loginFormSchema>;
 export type SignupFormData = z.infer<typeof signupFormSchema>;
+export type InitialSignupFormData = z.infer<typeof initialSignupFormSchema>;
 export type InvitedSignupFormData = z.infer<typeof invitedSignupFormSchema>;
 
 // Helper function to format validation errors

@@ -293,6 +293,13 @@ export default function PersonalInformationPage() {
     return `${monthName} ${dobData.day}, ${dobData.year}`;
   };
 
+  // Format phone number for display
+  const formatPhoneNumber = (phone: string | null | undefined) => {
+    if (!phone) return "";
+    // Simple formatting for international phone numbers
+    return phone;
+  };
+
   return (
     <>
       <h1 className="text-2xl font-bold mb-6 text-[#0A5C36]">Personal Information</h1>
@@ -361,7 +368,13 @@ export default function PersonalInformationPage() {
             <h2 className="text-xl font-semibold mb-1">
               {firestoreUser.firstName} {firestoreUser.lastName}
             </h2>
-            <p className="text-gray-500 mb-4">{firestoreUser.email}</p>
+            {firestoreUser.email ? (
+              <p className="text-gray-500 mb-4">{firestoreUser.email}</p>
+            ) : firestoreUser.phoneNumber ? (
+              <p className="text-gray-500 mb-4">{formatPhoneNumber(firestoreUser.phoneNumber)}</p>
+            ) : (
+              <p className="text-gray-500 mb-4">No contact information</p>
+            )}
             <p className="text-sm text-gray-600">
               Your profile picture and personal details will be visible to family members.
             </p>
@@ -392,26 +405,59 @@ export default function PersonalInformationPage() {
               />
             </div>
           </div>
+          
+          {/* Email field - only show if user has an email */}
+          {firestoreUser.email !== undefined && (
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                value={firestoreUser.email || ""}
+                disabled={true} // Email cannot be changed
+                className="bg-gray-50"
+              />
+              {firestoreUser.emailVerified && firestoreUser.email ? (
+                <span className="text-xs text-emerald-600 mt-1 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Verified
+                </span>
+              ) : firestoreUser.email ? (
+                <span className="text-xs text-amber-600 mt-1 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  Not verified
+                </span>
+              ) : null}
+            </div>
+          )}
+          
+          {/* Phone number field - always show, but make it more prominent when there's no email */}
           <div>
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              value={firestoreUser.email}
-              disabled={true} // Email cannot be changed
-              className="bg-gray-50"
-            />
-          </div>
-          <div>
-            <Label htmlFor="phoneNumber">Phone Number</Label>
+            <Label htmlFor="phoneNumber" className={!firestoreUser.email ? "font-semibold text-[#0A5C36]" : ""}>
+              Phone Number {!firestoreUser.email && "(Primary Contact)"}
+            </Label>
             <Input
               id="phoneNumber"
               name="phoneNumber"
-              value={formData.phoneNumber}
+              type="tel"
+              value={formData.phoneNumber || ""}
               onChange={handleInputChange}
               disabled={!isEditing}
+              className={!firestoreUser.email ? "border-[#0A5C36]" : ""}
             />
+            {firestoreUser.phoneNumberVerified && firestoreUser.phoneNumber ? (
+              <span className="text-xs text-emerald-600 mt-1 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Verified
+              </span>
+            ) : null}
           </div>
           
           {/* Date of Birth - three dropdown fields */}
