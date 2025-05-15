@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, MouseEvent, useRef } from 'react';
 import { Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -13,6 +13,28 @@ const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { currentUser } = useAuth();
   const router = useRouter();
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+
+  // MARK: Mouse Hover Effect State
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [isHovering, setIsHovering] = useState(false);
+  // END MARK: Mouse Hover Effect State
+
+  // Close mobile menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    if (isMobileMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside as unknown as EventListener);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside as unknown as EventListener);
+    };
+  }, [isMobileMenuOpen]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -26,6 +48,13 @@ const Navbar = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // MARK: Mouse Move Handler for Shine Effect
+  const handleMouseMove = (event: MouseEvent<HTMLElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setMousePosition({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+  };
+  // END MARK: Mouse Move Handler for Shine Effect
 
   // Handle navigation based on auth state
   const handleStartClick = () => {
@@ -42,11 +71,25 @@ const Navbar = () => {
 
   return (
     <nav 
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled ? 'bg-white/90 backdrop-blur-md shadow-sm py-3' : 'bg-transparent py-5'
-      }`}
+      onMouseMove={handleMouseMove}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
+      className={`fixed top-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-6xl z-50 transition-all duration-300 
+                  bg-white/50 backdrop-blur-lg shadow-xl rounded-xl 
+                  ${isScrolled ? 'py-3' : 'py-4'}`}
     >
-      <div className="container mx-auto px-6 flex items-center justify-between">
+      {/* Shine Effect Element */}
+      <div
+        className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none transition-opacity duration-300"
+        style={{
+          background: isHovering 
+            ? `radial-gradient(circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 25%)`
+            : 'transparent',
+          opacity: isHovering ? 1 : 0,
+        }}
+      />
+
+      <div className="container mx-auto px-6 flex items-center justify-between relative z-10"> {/* Added relative z-10 for content to be above shine */}
         <div className="flex items-center">
           <Link href="/" className="flex items-center">
             <Image 
@@ -92,6 +135,7 @@ const Navbar = () => {
             size="icon"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label="Toggle menu"
+            className="text-dynasty-green hover:text-dynasty-green-dark"
           >
             {isMobileMenuOpen ? <X /> : <Menu />}
           </Button>
@@ -100,8 +144,25 @@ const Navbar = () => {
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
-        <div className="absolute top-full left-0 right-0 bg-white border-t border-dynasty-neutral animate-fade-in">
-          <div className="container mx-auto px-6 py-4 flex flex-col space-y-4">
+        <div 
+          ref={mobileMenuRef}
+          className="absolute top-full left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] mt-2 bg-white/90 backdrop-blur-lg rounded-xl border border-white/20 shadow-xl animate-fade-in overflow-hidden transition-all duration-300"
+          onMouseMove={handleMouseMove}
+          onMouseEnter={() => setIsHovering(true)}
+          onMouseLeave={() => setIsHovering(false)}
+        >
+          {/* Shine Effect for Mobile Menu */}
+          <div
+            className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none transition-opacity duration-300"
+            style={{
+              background: isHovering 
+                ? `radial-gradient(circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 25%)`
+                : 'transparent',
+              opacity: isHovering ? 1 : 0,
+            }}
+          />
+          
+          <div className="px-6 py-5 flex flex-col space-y-5 relative z-10">
             <MobileNavLink 
               href="#features" 
               onClick={() => setIsMobileMenuOpen(false)}
@@ -175,7 +236,7 @@ const MobileNavLink = ({
     <Link
       href={href}
       onClick={onClick}
-      className="block py-2 text-dynasty-neutral-darkest font-medium hover:text-dynasty-green transition-colors"
+      className="block py-2 text-lg text-center text-dynasty-neutral-darkest font-medium hover:text-dynasty-green transition-colors"
     >
       {children}
     </Link>

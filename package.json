@@ -5,12 +5,12 @@
   "scripts": {
     "dev": "next dev ",
     "dev:prod": "NODE_ENV=production next dev --turbopack",
-    "dev:emulator": "concurrently \"cd ../dynastyfirebase/functions && npm run build:watch\" \"cd ../dynastyfirebase && firebase emulators:start --import=./emulator-data --export-on-exit\" \"next dev --turbopack\" --rules",
+    "dev:emulator": "concurrently \"cd ../../firebase/functions && npm run build:watch\" \"cd ../../firebase && firebase emulators:start --import=./emulator-data --export-on-exit\" \"next dev --turbopack\" --rules",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "emulator:export": "cd ../dynastyfirebase && firebase emulators:export ./emulator-data",
-    "emulator:start": "cd ../dynastyfirebase && firebase emulators:start --import=./emulator-data --export-on-exit"
+    "emulator:export": "cd ../../firebase && firebase emulators:export ./emulator-data",
+    "emulator:start": "cd ../../firebase && firebase emulators:start --import=./emulator-data --export-on-exit"
   },
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^4.6.1",
@@ -53,6 +53,7 @@
     "react-dom": "^19.0.0",
     "react-family-tree": "^3.2.0",
     "react-image-crop": "^11.0.7",
+    "react-native-web": "^0.19.12",
     "react-responsive-carousel": "^3.2.23",
     "relatives-tree": "^3.2.1",
     "tailwind-merge": "^3.0.1",
