@@ -193,7 +193,11 @@ const HeroSection = () => {
           >
             Your Family&apos;s Story, Beautifully Preserved with <span 
               className="text-dynasty-green "
+<<<<<<< HEAD
                           style={
+=======
+              style={
+>>>>>>> origin/main
                 currentTextTheme === 'light'
                   ? {
                       WebkitTextStrokeWidth: '3px',
