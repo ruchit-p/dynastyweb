@@ -28,8 +28,6 @@ export default function RootLayout({
         <EmulatorProvider>
           <AuthProvider>
             <NotificationProvider>
-              {/* // MARK: Global Components */}
-              {/* Display cookie consent banner across the entire site */}
               <CookieConsentBanner />
               {children}
               <Toaster />
