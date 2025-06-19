@@ -265,4 +265,106 @@ export async function getEventsForFeed(userId: string, familyTreeId: string) {
     // This prevents the feed from breaking if event fetching fails
     return { events: [] };
   }
-} 
+}
+
+// MARK: - Family Management Utilities (Added to satisfy build imports)
+
+/**
+ * Adds a family member to the specified family tree.
+ * Mirrors the expected parameters from the app/(protected)/family-management/add-member page.
+ * Falls back to the backend callable "addFamilyMember".
+ */
+export const addFamilyMember = async (payload: {
+  firstName: string;
+  lastName: string;
+  email?: string;
+  dateOfBirth?: string; // ISO string expected by backend
+  gender?: 'male' | 'female' | 'other';
+  phoneNumber?: string;
+  relationshipType: 'parent' | 'child' | 'spouse' | 'sibling' | '';
+  relationshipTo: string; // user id of the relative
+  sendInvite: boolean;
+}) => {
+  const functionRef = httpsCallable(functions, 'addFamilyMember');
+  const result = await functionRef(payload);
+  return result.data as { success: boolean; memberId: string };
+};
+
+/**
+ * Retrieves members of a family tree.
+ */
+export const getFamilyTreeMembers = async (payload: { familyTreeId: string }) => {
+  const functionRef = httpsCallable(functions, 'getFamilyTreeMembers');
+  const result = await functionRef(payload);
+  return result.data as {
+    members: Array<{
+      id: string;
+      displayName: string;
+      email?: string;
+      profilePicture?: string | null;
+      role: 'owner' | 'admin' | 'member';
+      joinedAt: string | Date;
+      status: 'active' | 'invited' | 'inactive';
+    }>;
+  };
+};
+
+/**
+ * Retrieves pending invitations for a family tree.
+ */
+export const getPendingInvitations = async (payload: { familyTreeId: string }) => {
+  const functionRef = httpsCallable(functions, 'getPendingInvitations');
+  const result = await functionRef(payload);
+  return result.data as {
+    invitations: Array<{
+      id: string;
+      email: string;
+      invitedBy: string;
+      invitedAt: string | Date;
+      status: 'pending' | 'accepted' | 'expired';
+    }>;
+  };
+};
+
+/**
+ * Sends a family invitation email / link to the specified recipient.
+ */
+export const sendFamilyInvitation = async (payload: {
+  email: string;
+  firstName: string;
+  lastName: string;
+  relationship: string;
+}) => {
+  const functionRef = httpsCallable(functions, 'sendFamilyInvitation');
+  const result = await functionRef(payload);
+  return result.data as { success: boolean; invitationId: string };
+};
+
+/**
+ * Removes (deletes) a family member. This is an alias for the existing deleteFamilyMember util so that
+ * pages can import using either name without breaking.
+ */
+export const removeFamilyMember = deleteFamilyMember;
+
+/**
+ * Updates a member's role (admin/member) in the family tree.
+ */
+export const updateFamilyMemberRole = async (payload: {
+  memberId: string;
+  role: 'admin' | 'member';
+  familyTreeId: string;
+  currentUserId?: string; // optional; backend can infer from auth context
+}) => {
+  const functionRef = httpsCallable(functions, 'updateFamilyMemberRole');
+  const result = await functionRef(payload);
+  return result.data as { success: boolean; message?: string };
+};
+
+/**
+ * Cancels a previously-sent family invitation.
+ */
+export const cancelFamilyInvitation = async (payload: { invitationId: string }) => {
+  const functionRef = httpsCallable(functions, 'cancelFamilyInvitation');
+  const result = await functionRef(payload);
+  return result.data as { success: boolean };
+}; 
