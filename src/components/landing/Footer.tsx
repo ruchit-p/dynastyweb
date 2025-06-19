@@ -71,18 +71,18 @@ const Footer = () => {
             <ul className="space-y-3">
               <FooterLink href="#">About Us</FooterLink>
               <FooterLink href="#">Contact</FooterLink>
-              <FooterLink href="#">Privacy Policy</FooterLink>
-              <FooterLink href="#">Terms of Service</FooterLink>
+              <FooterLink href="/privacy">Privacy Policy</FooterLink>
+              <FooterLink href="/terms">Terms of Service</FooterLink>
             </ul>
           </div>
           
           <div>
             <h4 className="font-medium text-white mb-4">Resources</h4>
             <ul className="space-y-3">
-              <FooterLink href="#">Help Center</FooterLink>
-              <FooterLink href="#">Family History Tips</FooterLink>
-              <FooterLink href="#">Genealogy Resources</FooterLink>
-              <FooterLink href="#">Community</FooterLink>
+              <FooterLink href="/cookie-policy">Cookie Policy</FooterLink>
+              <FooterLink href="/dmca">DMCA</FooterLink>
+              <FooterLink href="/do-not-sell">Do Not Sell</FooterLink>
+              <FooterLink href="/email-preferences">Email Preferences</FooterLink>
             </ul>
           </div>
         </div>
