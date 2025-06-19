@@ -56,7 +56,7 @@ interface FamilyMember {
   id: string;
   displayName: string;
   email?: string;
-  profilePicture?: string;
+  profilePicture?: string | null;
   role: 'owner' | 'admin' | 'member';
   joinedAt: string | Date;
   status: 'active' | 'invited' | 'inactive';
