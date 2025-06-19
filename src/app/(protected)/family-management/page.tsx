@@ -74,10 +74,10 @@ interface FamilyMember {
 interface PendingInvitation {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
+  firstName?: string;
+  lastName?: string;
   invitedBy: string;
-  invitedAt: string;
+  invitedAt: string | Date;
   status: 'pending' | 'accepted' | 'expired';
   inviteeEmail?: string;
   inviteeName?: string;
