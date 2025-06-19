@@ -55,10 +55,10 @@ import { Pencil } from 'lucide-react';
 interface FamilyMember {
   id: string;
   displayName: string;
-  email: string;
+  email?: string;
   profilePicture?: string;
   role: 'owner' | 'admin' | 'member';
-  joinedAt: string;
+  joinedAt: string | Date;
   status: 'active' | 'invited' | 'inactive';
   canAddMembers?: boolean;
   canEdit?: boolean;
@@ -257,7 +257,7 @@ export default function FamilyManagementPage() {
   const filteredMembers = members.filter(
     (member) =>
       member.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      member.email.toLowerCase().includes(searchQuery.toLowerCase())
+      member.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredInvitations = invitations.filter(
@@ -435,7 +435,12 @@ export default function FamilyManagementPage() {
                     )}
                   </div>
                   <div className="mt-3 text-xs text-gray-500">
-                    Joined {format(member.joinedAt, 'MMM d, yyyy')}
+                    Joined {format(
+                      typeof member.joinedAt === 'string'
+                        ? new Date(member.joinedAt)
+                        : member.joinedAt,
+                      'MMM d, yyyy'
+                    )}
                   </div>
                 </Card>
               ))}
