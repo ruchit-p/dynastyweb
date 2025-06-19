@@ -341,10 +341,25 @@ export const sendFamilyInvitation = async (payload: {
 };
 
 /**
- * Removes (deletes) a family member. This is an alias for the existing deleteFamilyMember util so that
- * pages can import using either name without breaking.
+ * Removes (deletes) a family member. Accepts a payload object to align with client usage and internally
+ * delegates to the positional `deleteFamilyMember` util.
  */
-export const removeFamilyMember = deleteFamilyMember;
+export const removeFamilyMember = async (payload: {
+  memberId: string;
+  familyTreeId: string;
+  currentUserId?: string;
+}) => {
+  const { memberId, familyTreeId, currentUserId } = payload;
+
+  // Fallback to empty string if currentUserId not provided – backend may derive it from auth context
+  const result = await deleteFamilyMember(
+    memberId,
+    familyTreeId,
+    currentUserId ?? ''
+  );
+
+  return result;
+};
 
 /**
  * Updates a member's role (admin/member) in the family tree.

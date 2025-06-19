@@ -18,7 +18,6 @@ export function useErrorHandler(options: Options = {}) {
   ): (...args: Parameters<F>) => Promise<ReturnType<F> | void> {
     return async (...args: Parameters<F>) => {
       try {
-        // @ts-expect-error -- we know fn returns promise
         return await fn(...args);
       } catch (err) {
         console.error(err);
