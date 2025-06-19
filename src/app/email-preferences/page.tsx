@@ -1,19 +1,12 @@
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
-import type { PageProps } from 'next';
 
-// MARK: Types
-interface EmailPreferencesSearchParams {
-  token?: string;
-}
-
-// Extend the built-in PageProps so our component matches Next expectations
-interface EmailPreferencesPageProps extends PageProps {
-  searchParams: EmailPreferencesSearchParams;
-}
-
-export default function EmailPreferencesPage({ searchParams }: EmailPreferencesPageProps) {
-  const { token } = searchParams;
+export default async function EmailPreferencesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ token?: string }>;
+}) {
+  const { token } = await searchParams;
 
   if (!token) {
     notFound();
