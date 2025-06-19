@@ -4,6 +4,7 @@ import { AuthProvider } from '@/context/AuthContext'
 import { EmulatorProvider } from '@/context/EmulatorContext'
 import { NotificationProvider } from '@/context/NotificationContext'
 import { Toaster } from '@/components/ui/toaster'
+import CookieConsentBanner from '@/components/CookieConsentBanner'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -27,6 +28,9 @@ export default function RootLayout({
         <EmulatorProvider>
           <AuthProvider>
             <NotificationProvider>
+              {/* // MARK: Global Components */}
+              {/* Display cookie consent banner across the entire site */}
+              <CookieConsentBanner />
               {children}
               <Toaster />
             </NotificationProvider>

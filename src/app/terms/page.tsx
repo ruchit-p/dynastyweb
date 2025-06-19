@@ -1,5 +1,6 @@
 import React from 'react';
 import { Metadata } from 'next';
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Terms of Service | Dynasty',
@@ -43,9 +44,9 @@ export default function TermsOfServicePage() {
                 <ul className="list-disc pl-6 text-gray-700 space-y-2">
                   <li><strong>Family Tree Management:</strong> Create, maintain, and expand family tree connections with invitation-based member addition</li>
                   <li><strong>History Book:</strong> Create multimedia stories with text, images, videos, audio, titles, subtitles, dates, cover photos, and location data</li>
-                  <li><strong>Event Management:</strong> Create and manage family events with detailed information, guest lists, RSVP tracking, itineraries, and shared vault integration</li>
-                  <li><strong>Vault Storage:</strong> Secure, encrypted cloud storage for photos, videos, documents, and folders with advanced organizational features</li>
-                  <li><strong>Encrypted Messaging:</strong> End-to-end encrypted one-on-one and group family communications</li>
+                  <li><strong>Event Management:</strong> Create and manage family events with detailed information, guest lists, itineraries, and shared vault integration (RSVP tracking coming soon)</li>
+                  <li><strong>Vault Storage:</strong> Secure cloud storage for photos, videos, documents, and folders with organizational features</li>
+                  <li><strong>Encrypted Messaging (upcoming):</strong> Planned end-to-end encrypted family communications</li>
                   <li><strong>Feed:</strong> Centralized timeline for viewing and interacting with family stories and events</li>
                 </ul>
               </section>
@@ -79,7 +80,8 @@ export default function TermsOfServicePage() {
               <section className="mb-8">
                 <h2 className="text-2xl font-semibold text-gray-900 mb-4">4. PRIVACY AND DATA PROTECTION</h2>
                 <p className="text-gray-700 leading-relaxed mb-4">
-                  Your privacy is paramount. Our data practices are governed by our <a href="/privacy" className="text-blue-600 hover:text-blue-800 underline">Privacy Policy</a>, which is incorporated by reference into these Terms.
+                  Your privacy is paramount. Our data practices are governed by our{' '}
+                  <Link href="/privacy" className="text-blue-600 hover:text-blue-800 underline">Privacy Policy</Link>, which is incorporated by reference into these Terms.
                 </p>
 
                 <h3 className="text-xl font-medium text-gray-900 mb-3">4.1 End-to-End Encryption</h3>
@@ -123,7 +125,7 @@ export default function TermsOfServicePage() {
                     <li>Advanced story templates and editing tools</li>
                     <li>Priority customer support</li>
                     <li>Premium event features with advanced itinerary tools</li>
-                    <li>Extended message history retention</li>
+                    <li>Extended message history retention (when messaging feature launches)</li>
                   </ul>
                 </div>
               </section>

@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -70,16 +71,15 @@ export default function PrivacyPolicyPage() {
               </section>
 
               <section className="mb-8">
-                <h2 className="text-2xl font-semibold text-gray-900 mb-4">3. END-TO-END ENCRYPTION AND SECURITY</h2>
+                <h2 className="text-2xl font-semibold text-gray-900 mb-4">3. SECURITY MEASURES (Upcoming)</h2>
                 
-                <h3 className="text-xl font-medium text-gray-900 mb-3">3.1 Message Encryption</h3>
+                <h3 className="text-xl font-medium text-gray-900 mb-3">3.1 Planned Message Encryption</h3>
                 <div className="bg-blue-50 p-6 rounded-lg mb-4">
                   <h4 className="font-semibold text-blue-900 mb-2">Encryption Protocol:</h4>
                   <ul className="list-disc pl-6 text-blue-800 space-y-1">
-                    <li>Messages are encrypted using AES-256-GCM encryption</li>
-                    <li>Key exchange utilizes ECDH (Elliptic Curve Diffie-Hellman)</li>
-                    <li>Forward secrecy ensures past messages remain secure</li>
-                    <li>Authentication tags prevent message tampering</li>
+                    <li>When our messaging feature launches, messages will be protected with industry-standard encryption (e.g., AES-256-GCM)</li>
+                    <li>Key exchange will use modern elliptic-curve techniques</li>
+                    <li>Forward secrecy and authentication tags are planned</li>
                   </ul>
                 </div>
 
@@ -116,18 +116,16 @@ export default function PrivacyPolicyPage() {
                 </ul>
 
                 <div className="bg-blue-50 border-l-4 border-blue-400 p-6 rounded mt-4">
-                  <h4 className="font-semibold text-blue-900 mb-2">SMS Consent:</h4>
+                  <h4 className="font-semibold text-blue-900 mb-2">SMS Consent (Planned):</h4>
                   <p className="text-blue-800 mb-2">
                     By providing your phone number during registration, you consent to receive SMS messages from Dynasty for:
                   </p>
                   <ul className="list-disc pl-6 text-blue-800 space-y-1">
-                    <li>Account verification and security codes</li>
-                    <li>Two-factor authentication</li>
-                    <li>Family member invitation notifications</li>
-                    <li>Important security alerts</li>
+                    <li>Account verification and security codes (future)</li>
+                    <li>Two-factor authentication (future)</li>
                   </ul>
                   <p className="text-blue-800 mt-2">
-                    <strong>You can opt-out at any time by replying STOP to any SMS message.</strong> Message and data rates may apply.
+                    <strong>SMS delivery is not yet active.</strong> You will be notified when this channel is available.
                   </p>
                 </div>
               </section>
@@ -164,7 +162,7 @@ export default function PrivacyPolicyPage() {
                 <h3 className="text-xl font-medium text-gray-900 mb-3">6.1 Active Account Data</h3>
                 <ul className="list-disc pl-6 text-gray-700 space-y-2 mb-4">
                   <li><strong>Stories, events, and vault files:</strong> Retained while your account is active</li>
-                  <li><strong>Messages:</strong> Retained according to your subscription tier (30 days to unlimited)</li>
+                  <li><strong>Messages:</strong> When messaging launches, retention will depend on subscription tier</li>
                   <li><strong>Family tree data:</strong> Maintained for family network integrity</li>
                   <li><strong>Analytics data:</strong> Aggregated and anonymized after 24 months</li>
                 </ul>
