@@ -46,7 +46,7 @@ if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
 
 // Initialize Analytics and catch if not supported (e.g. in SSR)
 let analytics = null;
-if (typeof window !== 'undefined') {
+if (process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === 'true' && typeof window !== 'undefined') {
   isSupported().then(supported => {
     if (supported) {
       analytics = getAnalytics(app);
