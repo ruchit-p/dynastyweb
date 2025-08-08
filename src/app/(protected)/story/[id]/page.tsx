@@ -54,8 +54,9 @@ const getImageUrl = (url: string) => {
   
   try {
     // Check if this is a Firebase Storage URL
-    const isFirebaseStorageUrl = url.includes('firebasestorage.googleapis.com') || 
-                               url.includes('dynasty-eba63.firebasestorage.app');
+    const isFirebaseStorageUrl =
+      url.includes('firebasestorage.googleapis.com') ||
+      /(^|\.)firebasestorage\.app/.test(url);
     
     // For Firebase Storage URLs, ensure they have the download token
     if (isFirebaseStorageUrl) {
@@ -79,7 +80,7 @@ const getImageUrl = (url: string) => {
     if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true' && 
         url.includes('127.0.0.1:9199')) {
       const replaced = url.replace(
-        'http://127.0.0.1:9199/v0/b/dynasty-eba63.firebasestorage.app', 
+        /http:\/\/127\.0\.0\.1:9199\/v0\/b\/[A-Za-z0-9-_.]+\.firebasestorage\.app/g,
         'https://firebasestorage.googleapis.com'
       );
       

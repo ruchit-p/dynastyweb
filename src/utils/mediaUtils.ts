@@ -369,7 +369,11 @@ export const ensureAccessibleStorageUrl = (url: string): string => {
   if (!url) return url;
   
   // If it's not a Storage URL, return as is
-  if (!url.includes('storage.googleapis.com') && !url.includes('firebasestorage.googleapis.com')) {
+  if (
+    !url.includes('storage.googleapis.com') &&
+    !url.includes('firebasestorage.googleapis.com') &&
+    !/^[^.]+\.firebasestorage\.app/.test(url)
+  ) {
     return url;
   }
   

@@ -166,8 +166,8 @@ export default function Navbar({ user }: NavbarProps) {
                   priority={true}
                   unoptimized={Boolean(
                     profilePicture && (
-                      profilePicture.includes('firebasestorage.googleapis.com') || 
-                      profilePicture.includes('dynasty-eba63.firebasestorage.app')
+                      profilePicture.includes('firebasestorage.googleapis.com') ||
+                      /(^|\.)firebasestorage\.app/.test(profilePicture)
                     )
                   )}
                 />
@@ -185,8 +185,8 @@ export default function Navbar({ user }: NavbarProps) {
                     priority={true}
                     unoptimized={Boolean(
                       profilePicture && (
-                        profilePicture.includes('firebasestorage.googleapis.com') || 
-                        profilePicture.includes('dynasty-eba63.firebasestorage.app')
+                        profilePicture.includes('firebasestorage.googleapis.com') ||
+                        /(^|\.)firebasestorage\.app/.test(profilePicture)
                       )
                     )}
                   />

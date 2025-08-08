@@ -141,8 +141,8 @@ const fetchFirestoreUser = async (userId: string): Promise<FirestoreUser | null>
       // Add cache-busting parameter for Firebase Storage URLs
       let pictureUrl = userData.profilePicture;
       if (
-        (pictureUrl.includes('firebasestorage.googleapis.com') || 
-         pictureUrl.includes('dynasty-eba63.firebasestorage.app'))
+        pictureUrl.includes('firebasestorage.googleapis.com') ||
+        /(^|\.)firebasestorage\.app/.test(pictureUrl)
       ) {
         // Add alt=media parameter if it doesn't exist
         if (!pictureUrl.includes('alt=media')) {

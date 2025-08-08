@@ -88,7 +88,7 @@ export const initializeMessaging = async () => {
         return existingToken;
       }
       
-      // Register service worker explicitly
+      // Register service worker explicitly (served dynamically by Next.js route)
       const serviceWorkerRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
       console.log('Service Worker registered successfully', serviceWorkerRegistration);
       

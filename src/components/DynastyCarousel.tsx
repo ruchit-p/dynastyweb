@@ -85,9 +85,11 @@ const getMediaType = (item: MediaItem, providedType?: MediaType): MediaType => {
     }
     
     // Check for common image hosting patterns
-    if (item.includes('firebasestorage.googleapis.com') || 
-        item.includes('storage.googleapis.com') || 
-        item.includes('dynasty-eba63.firebasestorage.app')) {
+    if (
+      item.includes('firebasestorage.googleapis.com') ||
+      item.includes('storage.googleapis.com') ||
+      /(^|\.)firebasestorage\.app/.test(item)
+    ) {
       // For Firebase storage URLs, check for image extensions in the full path
       if (item.match(/\.(jpg|jpeg|png|gif|webp)/i)) {
         console.log(`[DynastyCarousel] Firebase URL detected as image`);

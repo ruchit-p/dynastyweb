@@ -130,7 +130,7 @@ yarn build
 
 ## 📄 License
 
-Copyright © 2024 Dynasty. All rights reserved.
+This project is open-sourced under the MIT License. See `LICENSE` for details.
 
 ## Learn More
 

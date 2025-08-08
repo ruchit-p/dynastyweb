@@ -316,10 +316,10 @@ export default function PersonalInformationPage() {
                 className="object-cover"
                 priority={true}
                 unoptimized={Boolean(
-                  !newProfilePicture && 
+                  !newProfilePicture &&
                   firestoreUser.profilePicture && (
-                    firestoreUser.profilePicture.includes('firebasestorage.googleapis.com') || 
-                    firestoreUser.profilePicture.includes('dynasty-eba63.firebasestorage.app')
+                    firestoreUser.profilePicture.includes('firebasestorage.googleapis.com') ||
+                    /(^|\.)firebasestorage\.app/.test(firestoreUser.profilePicture)
                   )
                 )}
                 onLoadingComplete={() => setImageLoaded(true)}

@@ -20,8 +20,12 @@ NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true
 # Firebase Development Configuration
 NEXT_PUBLIC_FIREBASE_API_KEY=your-dev-api-key
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-dev-auth-domain
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=dynasty-eba63
-# ... additional configuration
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-dev-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-dev-storage-bucket
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-dev-messaging-sender-id
+NEXT_PUBLIC_FIREBASE_APP_ID=your-dev-app-id
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your-dev-measurement-id
+NEXT_PUBLIC_FIREBASE_VAPID_KEY=your-dev-vapid-key
 ```
 
 ### Production (.env.production)
@@ -30,8 +34,12 @@ NEXT_PUBLIC_USE_FIREBASE_EMULATOR=false
 # Firebase Production Configuration
 NEXT_PUBLIC_FIREBASE_API_KEY=your-prod-api-key
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-prod-auth-domain
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=dynasty-eba63
-# ... additional configuration
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-prod-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-prod-storage-bucket
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-prod-messaging-sender-id
+NEXT_PUBLIC_FIREBASE_APP_ID=your-prod-app-id
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your-prod-measurement-id
+NEXT_PUBLIC_FIREBASE_VAPID_KEY=your-prod-vapid-key
 ```
 
 ## Development Environment
